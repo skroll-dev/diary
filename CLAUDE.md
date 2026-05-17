@@ -2,9 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Style
+
+- **When writing or editing code:** Communicate like **Captain Jean-Luc Picard** — decisive, precise, authoritative. Short commands. "Make it so." No hedging. Confidence in every line.
+- **When giving advice, recommendations, or discussing trade-offs:** Communicate like **Counselor Deanna Troi** — empathetic, thoughtful, attuned to the bigger picture. Help the user feel the implications of a decision, not just the technical facts.
+
 ## Project Overview
 
-**AI Tagebuch** (codename: Mathias) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini. All data stays in the EU.
+**AI Tagebuch** (codename: Mathias) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini 2.0 Flash. All data stays in the EU.
+
+- **Firebase project:** `diary-6fa61`
+- **Bundle ID:** `com.diary.app`
+- **Target platforms:** iOS, Android, Web (web = layout/review only; audio recording is blocked on web with a user-facing hint)
 
 ## Commands
 
@@ -12,26 +21,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 cd flutter
-flutter pub get          # Install dependencies
-flutter run              # Run on connected device/emulator
-flutter analyze          # Static analysis (dart analyze under the hood)
-flutter test             # Run all tests
-flutter test test/path/to/test.dart  # Run a single test file
-flutter build apk        # Android release build
-flutter build ios        # iOS release build
+flutter pub get
+flutter run                                  # iOS/Android on connected device
+flutter run -d chrome                        # Web (layout verification)
+flutter analyze
+flutter test
+flutter test test/path/to/test.dart
+flutter build apk
+flutter build ios
 ```
 
-### Backend Services (ai-proxy / gdpr-export / cron-cleanup)
+### Backend Services
+
+Each service has its own Python 3.12 venv. Use `/opt/homebrew/bin/python3.12` to create them.
 
 ```bash
-cd ai-proxy              # or gdpr-export / cron-cleanup
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8080   # Dev server (ai-proxy / gdpr-export)
-python -m app.main                          # One-shot job (cron-cleanup)
+cd ai-proxy              # or gdpr-export
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-# Deploy to Cloud Run (europe-west3)
+.venv/bin/uvicorn app.main:app --reload --port 8080   # ai-proxy dev server
+.venv/bin/uvicorn app.main:app --reload --port 8081   # gdpr-export dev server
+
+# Deploy to Cloud Run (always europe-west3)
 docker build -t <service>:latest .
 gcloud run deploy <service> --image <service>:latest --region europe-west3
+```
+
+### Firebase
+
+```bash
+# Regenerate firebase_options.dart after Firebase project changes
+cd flutter && flutterfire configure --project=diary-6fa61 --platforms=android,ios,web
 ```
 
 ## Architecture
@@ -39,58 +59,66 @@ gcloud run deploy <service> --image <service>:latest --region europe-west3
 ### System Design
 
 ```
-Flutter App (iOS/Android)
+Flutter App (iOS/Android/Web)
   └─► Firebase Auth (user identity)
-  └─► ai-proxy (Cloud Run) ──► Cloud Speech-to-Text v2 (Chirp, German)
-  │                         └─► Vertex AI Gemini 2.0 Flash (entry generation)
+  └─► ai-proxy (Cloud Run) ──► Cloud Speech-to-Text v2 (Chirp, de-DE)
+  │     audio bytes in RAM  └─► Vertex AI Gemini 2.0 Flash (entry generation)
+  │     never persisted
   └─► Cloud Firestore (eu-eur3, entries per user)
-  └─► Firebase Storage (europe-west3, audio files — auto-deleted)
 
-gdpr-export (Cloud Run)   ──► Firestore + Storage (ZIP export / account deletion)
-cron-cleanup (Cloud Run Job, daily) ──► Storage (delete audio > retention threshold)
+gdpr-export (Cloud Run) ──► Firestore (JSON export / account deletion)
 ```
 
 ### Flutter App (`flutter/lib/`)
 
-Clean layered architecture with **Riverpod** for state management:
+Riverpod 3 + GoRouter 17, Material Design 3 (seed `#4A90D9`), offline-first via Drift (SQLite).
 
-- `core/router/app_router.dart` — GoRouter with 3 routes: `/` (recording), `/entry/:date`, `/history`
-- `core/theme/app_theme.dart` — Material Design 3, seed color `#4A90D9`, light + dark
-- `features/<name>/presentation/` — one screen per feature (recording, entry, history, settings)
-- `shared/models/entry.dart` — canonical data models: `Entry`, `Transcript`, `Mood` enum
-- `shared/services/` — shared service classes (auth, Dio HTTP client, Drift DB)
+**Routes:** `/` → `RecordingScreen`, `/entry/:date` → `EntryScreen`, `/history` → `HistoryScreen`
 
-Key architectural rules:
-- **One entry per calendar day** — multiple voice recordings merge into a single entry via Prompt B
-- **Offline-first:** Drift (SQLite) is the local source of truth; Firestore syncs in background
-- Audio is uploaded to Firebase Storage, transcribed via ai-proxy, then auto-deleted
+**Data model** (`shared/models/entry.dart`):
+- `Entry` — one per calendar day; fields: `bodyMarkdown`, `rawTranscripts`, `followUpQuestions`, `mood` (enum), `moodScore` (-1.0…+1.0), `durationSeconds`, `language`, `version`
+- `Transcript` — raw audio-to-text result attached to an Entry
+- Multiple voice recordings on the same day are merged via Prompt B (not appended as separate entries)
 
-### AI Proxy Service (`ai-proxy/app/`)
+**Key architectural rules:**
+- Drift (SQLite) is the local source of truth; Firestore syncs in background
+- Audio → Firebase Storage → ai-proxy transcription → auto-delete from Storage
+- `kIsWeb` guards all audio recording paths; web shows an "App only" hint instead
 
-FastAPI service; all AI logic lives in `services/`:
+**Current state:** Feature screens are skeleton stubs with `// TODO` providers. The `settings/` feature folder exists but has no route yet.
 
-- `services/speech.py` — Cloud Speech-to-Text v2 Chirp, German (`de-DE`), supports m4a/wav/AAC, 10 MB limit
-- `services/gemini.py` — Two prompts on Gemini 2.0 Flash (temp 0.7, JSON output):
-  - **Prompt A** (`generate_entry`) — transcript → diary entry with `mood`, `summary`, `follow_up_questions`
-  - **Prompt B** (`merge_entry`) — existing entry + new transcript → organically merged entry
-- `services/auth.py` — Firebase App Check token verification (middleware on all routes)
+### ai-proxy (`ai-proxy/app/`)
 
-Routes: `POST /transcribe`, `POST /entries/generate`, `POST /entries/merge`, `GET /health`
+FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `services/auth.py`).
+
+| Route | Description |
+|---|---|
+| `POST /transcribe` | Audio file (m4a/aac/wav, max 10 MB) → raw transcript via Cloud Speech-to-Text Chirp |
+| `POST /entries/generate` | Transcript → diary entry JSON (Prompt A) |
+| `POST /entries/merge` | Existing entry + new transcript → merged entry JSON (Prompt B) |
+| `GET /health` | Liveness check |
+
+Gemini model: `gemini-2.0-flash-001`, `temperature=0.7`, JSON output mode. The AI persona is named **Mathias** — warm, restrained, writes in first person using the user's own words, adds no invented content.
+
+### gdpr-export (`gdpr-export/app/`)
+
+FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON ZIP, or deletes the account and all associated Firestore documents.
 
 ### Agent Skills
 
-31 Open Agent Skills are installed in `.agents/skills/`. **Before writing code for a relevant domain, read the matching `SKILL.md` first** — skills contain verified patterns, anti-patterns, and exit criteria.
+31 Open Agent Skills in `.agents/skills/`. **Before writing code for a relevant domain, read the matching `SKILL.md` first.**
 
-See `AGENTS.md` for the full skill matrix and the mandatory workflow rule (identify skill → read SKILL.md → write code).
-
-Key skills to reach for:
+Key skills:
 - `firebase-firestore` — mandatory for any Firestore work (security rules, queries, indexes)
 - `flutter-apply-architecture-best-practices` — Riverpod + layered architecture patterns
 - `cloud-run-basics` — deploying/updating Cloud Run services
 - `gemini-api` — Vertex AI / Gemini SDK patterns
 
+See `AGENTS.md` for the full skill matrix and workflow rule.
+
 ## Key Constraints
 
-- **GDPR / DSGVO:** All GCP resources must stay in `europe-west3` or `eu-eur3`. Audio files must be deleted after transcription (retention configured via `AUDIO_RETENTION_HOURS`).
+- **GDPR / DSGVO:** All GCP resources must stay in `europe-west3` or `eu-eur3`. Audio files must be deleted after transcription (retention via `AUDIO_RETENTION_HOURS`).
 - **Firebase App Check** is required on all ai-proxy routes — the Flutter client must attach an App Check token to every request.
-- **No web MVP** — Flutter target platforms are iOS and Android only.
+- **Web audio:** `kIsWeb` must gate any `record` / `local_auth` usage. Never import these packages unconditionally — they will fail to compile for web.
+- **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.

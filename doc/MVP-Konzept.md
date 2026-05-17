@@ -129,8 +129,7 @@ type Entry = {
 
 type Transcript = {
   id: string;
-  audioUrl?: string;             // optional, nur wenn Nutzer Audio behalten will
-  text: string;                  // Roh-Transkript
+  text: string;                  // Roh-Transkript (Audio wird nie persistiert)
   createdAt: ISODateString;
 };
 ```
@@ -159,7 +158,7 @@ Verbindlich gesetzt: **Flutter** im Frontend, **Firebase** als Managed-Backend-P
 |---|---|---|
 | **Auth** | Firebase Authentication | E-Mail Magic Link + Apple/Google SSO; Standort EU |
 | **Datenbank** | Cloud Firestore (Region `eur3`) | NoSQL, Offline-Sync, Security Rules pro Nutzer |
-| **Object Storage** | Cloud Storage for Firebase (`europe-west3`) | Audio-Files vor automatischer Löschung nach Transkription |
+| **Object Storage** | Cloud Storage for Firebase (`europe-west3`) | GDPR-Export ZIP-Dateien (temporär); kein Audio-Storage |
 | **Push Notifications** | Firebase Cloud Messaging | Optionale tägliche Erinnerung „Zeit für deinen Eintrag" |
 | **App-Schutz** | Firebase App Check (App Attest / Play Integrity) | Nur echte App-Installationen dürfen Cloud Run aufrufen |
 | **Crash Reports** | Firebase Crashlytics | Native Integration, kostenlos |
@@ -171,9 +170,8 @@ Sämtliche Logik, die nicht direkt von Firebase abgedeckt wird, läuft als **sta
 
 | Service | Stack | Zweck |
 |---|---|---|
-| **`ai-proxy`** | Python 3.12 + FastAPI, Docker | Orchestriert Whisper + LLM, hält API-Keys serverseitig (Secret Manager), erzwingt App-Check-Token, Rate Limiting, Logging |
-| **`gdpr-export`** | Python 3.12 + FastAPI, Docker | Auf Nutzer-Anfrage: Firestore-Daten + Audio-URLs als JSON.zip an die hinterlegte Mail |
-| **`cron-cleanup`** *(Cloud Run Job)* | Python, Docker | Täglicher Job: löscht Audio-Files älter als X Stunden aus Cloud Storage |
+| **`ai-proxy`** | Python 3.12 + FastAPI, Docker | Empfängt Audio per HTTP-Multipart, verarbeitet es **ausschließlich im RAM** (Cloud Speech-to-Text → Gemini), hält API-Keys serverseitig (Secret Manager), erzwingt App-Check-Token, Rate Limiting, Logging |
+| **`gdpr-export`** | Python 3.12 + FastAPI, Docker | Auf Nutzer-Anfrage: Firestore-Daten als JSON.zip exportieren oder Account + alle Firestore-Dokumente löschen |
 
 **Build & Deploy:**
 - **CI/CD:** GitHub Actions → Cloud Build → Artifact Registry → Cloud Run
@@ -195,10 +193,15 @@ Sämtliche Logik, die nicht direkt von Firebase abgedeckt wird, läuft als **sta
 ### Pipeline
 
 ```
-Audio (m4a, 16kHz)
-   │
+Flutter (Record-Button)
+   │  multipart/form-data  (audio bytes, max 10 MB)
    ▼
-[Cloud Speech-to-Text v2 (Chirp)] ──► Roh-Transkript (string, Deutsch)
+[ai-proxy – Cloud Run RAM]
+   │
+   ├─► Cloud Speech-to-Text v2 (Chirp, de-DE) ──► Roh-Transkript (string)
+   │                                                         │
+   │   Audio-Bytes werden nach Antwort verworfen ◄───────────┘
+   │   (niemals in Storage persistiert)
    │
    ▼
 [Gemini 2.0 Flash via Vertex AI – Prompt A: Entry-Generation]
@@ -207,8 +210,9 @@ Audio (m4a, 16kHz)
 { bodyMarkdown, mood, moodScore, followUpQuestions[] }
    │
    ▼
-In DB speichern  ◄── Bei "Ergänzen" geht's wieder hier rein,
-                     aber mit Prompt B: Entry-Merge
+In Firestore + lokalem Drift-Cache speichern
+   │
+   └── Bei "Ergänzen": neues Audio → selber RAM-Flow → Prompt B: Entry-Merge
 ```
 
 ### Prompt A – Eintrags-Erstellung (erstes Diktat)
@@ -284,7 +288,7 @@ Der MVP geht **nicht** schon mit lokaler LLM-Inferenz live (das ist Phase 3). Ab
 | TLS 1.3 in transit | ✅ | ✅ | ✅ |
 | AES-256 at rest (Firestore / Cloud Storage) | ✅ | ✅ | ✅ |
 | Hosting EU-Frankfurt | ✅ | ✅ | ✅ |
-| Audio-Files standardmäßig gelöscht nach Transkription | ✅ | ✅ | ✅ |
+| Audio nur im RAM verarbeitet, niemals persistiert | ✅ | ✅ | ✅ |
 | GDPR Datenexport (JSON) & Account-Löschung | ✅ | ✅ | ✅ |
 | Biometrischer App-Lock | ✅ | ✅ | ✅ |
 | Pseudonymisierung an OpenAI/Anthropic (Zero Data Retention Vertrag) | ✅ | ✅ | ✅ |
@@ -325,12 +329,11 @@ Geschlossene Beta mit 50–100 Nutzern. Ziel: Validierung des Kern-Flows und der
 
 Folgende Punkte müssen wir noch klären, bevor die Implementierung beginnt:
 
-1. **Audio-Daten:** Nach Transkription sofort löschen (Privacy-Default) oder dem Nutzer als Option lassen?
-2. **„Ein Eintrag pro Tag" vs. mehrere:** Was ist die Definition eines „Tages" – Kalendertag oder 04:00-bis-04:00-Fenster (für Nachteulen)?
-3. **Onboarding-Anmeldung:** Magic Link per E-Mail, oder erst Beta-Code, oder Apple/Google Sign-In?
-4. **Beta-Distribution:** TestFlight + Google Play Internal Testing, oder Expo-Go für maximale Geschwindigkeit?
-5. **Name:** Bleibt es bei „Mathias" als KI-Persönlichkeit oder soll der Nutzer den Namen wählen können?
-6. **Pre-Build-Validierung:** Wollen wir vorher noch eine Landingpage + Warteliste bauen, um die Nachfrage zu testen?
+1. **„Ein Eintrag pro Tag" vs. mehrere:** Was ist die Definition eines „Tages" – Kalendertag oder 04:00-bis-04:00-Fenster (für Nachteulen)?
+2. **Onboarding-Anmeldung:** Magic Link per E-Mail, oder erst Beta-Code, oder Apple/Google Sign-In?
+3. **Beta-Distribution:** TestFlight + Google Play Internal Testing, oder Expo-Go für maximale Geschwindigkeit?
+4. **Name:** Bleibt es bei „Mathias" als KI-Persönlichkeit oder soll der Nutzer den Namen wählen können?
+5. **Pre-Build-Validierung:** Wollen wir vorher noch eine Landingpage + Warteliste bauen, um die Nachfrage zu testen?
 
 ---
 

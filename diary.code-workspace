@@ -3,8 +3,7 @@
     { "path": ".", "name": "diary (root)" },
     { "path": "flutter", "name": "flutter" },
     { "path": "ai-proxy", "name": "ai-proxy" },
-    { "path": "gdpr-export", "name": "gdpr-export" },
-    { "path": "cron-cleanup", "name": "cron-cleanup" }
+    { "path": "gdpr-export", "name": "gdpr-export" }
   ],
   "settings": {
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
@@ -81,16 +80,6 @@
         "envFile": "${workspaceFolder:gdpr-export}/.env",
         "justMyCode": false
       },
-      {
-        "name": "cron-cleanup – Run Job",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "app.main",
-        "cwd": "${workspaceFolder:cron-cleanup}",
-        "python": "${workspaceFolder:cron-cleanup}/.venv/bin/python",
-        "envFile": "${workspaceFolder:cron-cleanup}/.env",
-        "justMyCode": false
-      }
     ]
   }
 }
