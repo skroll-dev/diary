@@ -1,0 +1,96 @@
+{
+  "folders": [
+    { "path": ".", "name": "diary (root)" },
+    { "path": "flutter", "name": "flutter" },
+    { "path": "ai-proxy", "name": "ai-proxy" },
+    { "path": "gdpr-export", "name": "gdpr-export" },
+    { "path": "cron-cleanup", "name": "cron-cleanup" }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.analysis.extraPaths": [],
+    "dart.flutterSdkPath": null,
+    "editor.formatOnSave": true,
+    "[dart]": {
+      "editor.defaultFormatter": "Dart-Code.dart-code"
+    },
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      "flutter/build": true,
+      "flutter/.dart_tool": true,
+      "flutter/.flutter-plugins": true,
+      "flutter/.flutter-plugins-dependencies": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "Dart-Code.flutter",
+      "Dart-Code.dart-code",
+      "ms-python.python",
+      "ms-python.pylance",
+      "ms-python.black-formatter",
+      "ms-python.isort"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Flutter – Run",
+        "type": "dart",
+        "request": "launch",
+        "program": "${workspaceFolder:flutter}/lib/main.dart"
+      },
+      {
+        "name": "Flutter – Web (Chrome)",
+        "type": "dart",
+        "request": "launch",
+        "program": "${workspaceFolder:flutter}/lib/main.dart",
+        "deviceId": "chrome"
+      },
+      {
+        "name": "Flutter – Profile",
+        "type": "dart",
+        "request": "launch",
+        "program": "${workspaceFolder:flutter}/lib/main.dart",
+        "flutterMode": "profile"
+      },
+      {
+        "name": "ai-proxy – Dev Server",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": ["app.main:app", "--reload", "--port", "8080"],
+        "cwd": "${workspaceFolder:ai-proxy}",
+        "python": "${workspaceFolder:ai-proxy}/.venv/bin/python",
+        "envFile": "${workspaceFolder:ai-proxy}/.env",
+        "justMyCode": false
+      },
+      {
+        "name": "gdpr-export – Dev Server",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": ["app.main:app", "--reload", "--port", "8081"],
+        "cwd": "${workspaceFolder:gdpr-export}",
+        "python": "${workspaceFolder:gdpr-export}/.venv/bin/python",
+        "envFile": "${workspaceFolder:gdpr-export}/.env",
+        "justMyCode": false
+      },
+      {
+        "name": "cron-cleanup – Run Job",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "app.main",
+        "cwd": "${workspaceFolder:cron-cleanup}",
+        "python": "${workspaceFolder:cron-cleanup}/.venv/bin/python",
+        "envFile": "${workspaceFolder:cron-cleanup}/.env",
+        "justMyCode": false
+      }
+    ]
+  }
+}

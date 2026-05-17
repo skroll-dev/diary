@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,32 +27,52 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 48),
-            GestureDetector(
-              onTap: _toggleRecording,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: _isRecording ? 140 : 120,
-                height: _isRecording ? 140 : 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _isRecording
-                      ? colorScheme.error
-                      : colorScheme.primary,
-                ),
-                child: Icon(
-                  _isRecording ? Icons.stop : Icons.mic,
-                  color: colorScheme.onPrimary,
-                  size: 48,
+            if (kIsWeb) ...[
+              Icon(Icons.mic_off, size: 80, color: colorScheme.outline),
+              const SizedBox(height: 24),
+              Text(
+                'Sprachaufnahme nur in der App verfügbar',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Lade die iOS- oder Android-App,\num Einträge per Sprache zu diktieren.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ] else ...[
+              GestureDetector(
+                onTap: _toggleRecording,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: _isRecording ? 140 : 120,
+                  height: _isRecording ? 140 : 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isRecording
+                        ? colorScheme.error
+                        : colorScheme.primary,
+                  ),
+                  child: Icon(
+                    _isRecording ? Icons.stop : Icons.mic,
+                    color: colorScheme.onPrimary,
+                    size: 48,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              _isRecording
-                  ? 'Aufnahme läuft…'
-                  : 'Tagebucheintrag erstellen',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
+              const SizedBox(height: 24),
+              Text(
+                _isRecording
+                    ? 'Aufnahme läuft…'
+                    : 'Tagebucheintrag erstellen',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
           ],
         ),
       ),
