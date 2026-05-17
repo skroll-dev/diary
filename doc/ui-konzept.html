@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mathias · AI Tagebuch — UI/UX Konzept</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --brand: #4A90D9;
+    --brand-light: #EBF4FF;
+    --brand-mid: #B8D8F8;
+    --text-primary: #1A1A2E;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --bg: #F8F9FA;
+    --surface: #FFFFFF;
+    --border: #E5E7EB;
+    --mood-great: #22C55E;
+    --mood-good: #84CC16;
+    --mood-neutral: #EAB308;
+    --mood-low: #F97316;
+    --mood-hard: #EF4444;
+    --radius: 20px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    --shadow-lg: 0 12px 48px rgba(0,0,0,0.12);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+    background: #F0F2F5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── HEADER BAR ── */
+  .presentation-header {
+    width: 100%;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .presentation-header .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 18px; font-weight: 700; color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+  .presentation-header .logo span { color: var(--brand); }
+  .presentation-header .subtitle {
+    font-size: 13px; color: var(--text-muted);
+    font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .nav-pills {
+    display: flex; gap: 6px;
+  }
+  .nav-pill {
+    padding: 8px 18px;
+    border-radius: 50px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-pill:hover { background: var(--bg); color: var(--text-primary); }
+  .nav-pill.active { background: var(--brand); color: white; }
+
+  /* ── MAIN STAGE ── */
+  .stage {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 24px;
+    gap: 48px;
+  }
+
+  /* ── PHONE FRAME ── */
+  .phone-wrap {
+    position: sticky;
+    top: 100px;
+    flex-shrink: 0;
+  }
+  .phone-frame {
+    width: 375px;
+    height: 812px;
+    background: var(--text-primary);
+    border-radius: 54px;
+    padding: 12px;
+    box-shadow:
+      0 0 0 2px #3A3A4E,
+      var(--shadow-lg),
+      inset 0 0 0 2px rgba(255,255,255,0.05);
+    position: relative;
+  }
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 44px;
+    overflow: hidden;
+    background: var(--surface);
+    position: relative;
+  }
+  .notch {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 126px; height: 34px;
+    background: var(--text-primary);
+    border-radius: 0 0 20px 20px;
+    z-index: 10;
+  }
+  .status-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 44px;
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    font-size: 13px; font-weight: 600;
+    color: var(--text-primary);
+    z-index: 5;
+  }
+  .status-icons { display: flex; align-items: center; gap: 5px; }
+
+  /* ── SCREENS ── */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .screen.active { display: flex; }
+
+  /* ── ONBOARDING SCREEN ── */
+  .screen-onboarding {
+    background: white;
+    padding: 44px 28px 36px;
+    align-items: stretch;
+  }
+  .onb-progress {
+    display: flex; gap: 6px; justify-content: center; padding-top: 12px;
+  }
+  .onb-dot {
+    width: 28px; height: 4px;
+    border-radius: 2px; background: var(--border);
+    transition: background 0.3s;
+  }
+  .onb-dot.active { background: var(--brand); }
+  .onb-illustration {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 24px 0;
+  }
+  .onb-card-stack {
+    position: relative; width: 200px; height: 220px;
+  }
+  .onb-card {
+    position: absolute;
+    width: 180px; height: 200px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: flex-end;
+    padding: 20px;
+    transition: transform 0.4s cubic-bezier(.34,1.56,.64,1);
+  }
+  .onb-card:nth-child(1) { transform: rotate(-6deg) translate(-12px, 8px); background: var(--brand-light); }
+  .onb-card:nth-child(2) { transform: rotate(-2deg) translate(-4px, 3px); }
+  .onb-card:nth-child(3) { transform: rotate(0deg); z-index: 3; }
+  .onb-card-label { font-size: 12px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.3px; }
+  .onb-card-text { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-top: 4px; line-height: 1.4; }
+  .onb-card-mood {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--mood-great); margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .onb-content { padding: 0 4px 0; }
+  .onb-tag {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.8px; text-transform: uppercase;
+    color: var(--brand); background: var(--brand-light);
+    padding: 4px 10px; border-radius: 20px; margin-bottom: 12px;
+  }
+  .onb-headline {
+    font-size: 28px; font-weight: 800; color: var(--text-primary);
+    line-height: 1.2; letter-spacing: -0.5px; margin-bottom: 12px;
+  }
+  .onb-body {
+    font-size: 15px; color: var(--text-secondary); line-height: 1.6;
+    margin-bottom: 24px;
+  }
+  .onb-features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+  .onb-feature {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .onb-feature-icon {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--brand-light);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .onb-feature-text { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+  .onb-cta {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .btn-primary {
+    width: 100%; padding: 16px;
+    background: var(--brand); color: white;
+    border: none; border-radius: 16px;
+    font-size: 16px; font-weight: 700;
+    cursor: pointer; letter-spacing: -0.2px;
+    transition: all 0.15s;
+  }
+  .btn-primary:hover { background: #3A7BC8; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(74,144,217,0.4); }
+  .btn-secondary {
+    width: 100%; padding: 14px;
+    background: transparent; color: var(--text-muted);
+    border: none; border-radius: 16px;
+    font-size: 14px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-secondary:hover { color: var(--text-primary); }
+
+  /* ── RECORDING SCREEN ── */
+  .screen-recording {
+    background: white;
+    padding: 44px 0 0;
+  }
+  .rec-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px 0;
+  }
+  .rec-date {
+    font-size: 13px; color: var(--text-muted); font-weight: 500;
+  }
+  .rec-settings-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--text-secondary);
+  }
+
+  .rec-greeting {
+    padding: 32px 28px 0;
+  }
+  .rec-greeting-sub {
+    font-size: 13px; color: var(--brand); font-weight: 600;
+    letter-spacing: 0.3px; margin-bottom: 6px;
+  }
+  .rec-greeting-main {
+    font-size: 26px; font-weight: 800; color: var(--text-primary);
+    line-height: 1.2; letter-spacing: -0.5px;
+  }
+
+  .rec-question-card {
+    margin: 20px 24px;
+    background: var(--brand-light);
+    border-radius: 18px; padding: 16px 18px;
+    border-left: 3px solid var(--brand);
+  }
+  .rec-question-label {
+    font-size: 11px; font-weight: 700; color: var(--brand);
+    letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px;
+  }
+  .rec-question-text {
+    font-size: 14px; color: var(--text-primary); line-height: 1.5; font-weight: 500;
+  }
+
+  .rec-waveform-area {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 28px;
+    gap: 16px;
+  }
+  .rec-waveform {
+    width: 100%; height: 80px;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+  }
+  .wave-bar {
+    width: 3px; border-radius: 2px;
+    background: var(--brand);
+    opacity: 0.35;
+    transition: height 0.1s;
+  }
+  .wave-bar.active { opacity: 1; animation: wavePulse 0.8s ease-in-out infinite alternate; }
+  @keyframes wavePulse {
+    from { height: 8px; } to { height: 48px; }
+  }
+
+  .rec-timer {
+    font-size: 22px; font-weight: 300; color: var(--text-secondary);
+    font-variant-numeric: tabular-nums; letter-spacing: 2px;
+  }
+  .rec-timer.recording { color: var(--brand); }
+
+  .rec-main-btn-wrap {
+    position: relative; width: 88px; height: 88px;
+  }
+  .rec-main-btn {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: var(--brand); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 20px rgba(74,144,217,0.45);
+    transition: all 0.2s;
+    font-size: 28px; color: white; position: relative; z-index: 1;
+  }
+  .rec-main-btn:hover { transform: scale(1.05); box-shadow: 0 6px 28px rgba(74,144,217,0.55); }
+  .rec-pulse {
+    position: absolute; inset: -8px; border-radius: 50%;
+    border: 2px solid var(--brand); opacity: 0;
+    animation: recPulse 2s ease-out infinite;
+  }
+  .rec-pulse:nth-child(2) { animation-delay: 0.7s; inset: -16px; }
+  @keyframes recPulse {
+    0% { transform: scale(0.9); opacity: 0.5; }
+    100% { transform: scale(1.15); opacity: 0; }
+  }
+
+  .rec-status-text {
+    font-size: 13px; color: var(--text-muted); font-weight: 500;
+  }
+
+  .rec-bottom {
+    padding: 16px 28px 32px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .rec-mood-quick {
+    display: flex; gap: 8px;
+  }
+  .mood-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    cursor: pointer; font-size: 18px;
+    background: var(--bg); transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mood-btn:hover { transform: scale(1.15); }
+  .mood-btn.selected { background: var(--brand-light); box-shadow: 0 0 0 2px var(--brand); }
+  .rec-history-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 50px;
+    background: var(--bg); border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .rec-history-btn:hover { background: var(--brand-light); color: var(--brand); }
+
+  /* ── ENTRY SCREEN ── */
+  .screen-entry {
+    background: var(--bg);
+  }
+  .entry-header {
+    background: white;
+    padding: 54px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .entry-nav {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  }
+  .back-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer;
+    font-size: 15px; font-weight: 600; color: var(--brand);
+  }
+  .entry-share-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--bg); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: var(--text-secondary);
+  }
+  .entry-meta {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .entry-date-label {
+    font-size: 13px; color: var(--text-muted); font-weight: 500;
+  }
+  .entry-mood-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 50px;
+    background: #ECFDF5; font-size: 13px; font-weight: 600; color: #059669;
+  }
+  .entry-mood-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #22C55E;
+  }
+
+  .entry-scroll {
+    flex: 1; overflow-y: auto; padding: 20px 20px 32px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .entry-title {
+    font-size: 24px; font-weight: 800; color: var(--text-primary);
+    line-height: 1.2; letter-spacing: -0.4px; padding: 0 4px;
+  }
+
+  .entry-body-card {
+    background: white; border-radius: 20px; padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .entry-body-text {
+    font-size: 15px; color: var(--text-primary); line-height: 1.75;
+  }
+  .entry-body-text em { color: var(--brand); font-style: normal; font-weight: 500; }
+
+  .entry-tags {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 0 4px;
+  }
+  .entry-tag {
+    padding: 5px 12px; border-radius: 50px;
+    background: white; border: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .entry-tag:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+
+  .followup-card {
+    background: white; border-radius: 20px; padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .followup-title {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .followup-q {
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .followup-q:first-of-type { border-top: none; padding-top: 0; }
+  .followup-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--brand-light); color: var(--brand);
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .followup-text {
+    font-size: 14px; color: var(--text-primary); line-height: 1.5; font-weight: 500;
+  }
+
+  .entry-add-btn {
+    background: var(--brand); color: white;
+    border: none; border-radius: 16px;
+    padding: 16px; font-size: 15px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center; gap: 8px;
+    transition: all 0.15s;
+    box-shadow: 0 4px 16px rgba(74,144,217,0.3);
+  }
+  .entry-add-btn:hover { background: #3A7BC8; transform: translateY(-1px); }
+
+  /* ── HISTORY SCREEN ── */
+  .screen-history {
+    background: var(--bg);
+  }
+  .hist-header {
+    background: white;
+    padding: 54px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hist-title {
+    font-size: 22px; font-weight: 800; color: var(--text-primary);
+    letter-spacing: -0.4px; margin-bottom: 16px;
+  }
+  .hist-filter {
+    display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
+  }
+  .hist-filter::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    flex-shrink: 0; padding: 7px 16px; border-radius: 50px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .filter-chip.active {
+    background: var(--brand); color: white; border-color: var(--brand);
+  }
+
+  .hist-scroll {
+    flex: 1; overflow-y: auto; padding: 16px 16px 32px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .mood-bar-chart {
+    background: white; border-radius: 20px; padding: 16px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05); margin-bottom: 4px;
+  }
+  .mood-chart-title {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .mood-sparkline {
+    display: flex; align-items: flex-end; gap: 5px; height: 40px;
+  }
+  .spark-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .spark-bar {
+    width: 100%; border-radius: 4px 4px 0 0;
+    background: var(--brand-mid);
+    transition: background 0.2s;
+  }
+  .spark-bar.high { background: var(--mood-great); }
+  .spark-bar.mid { background: var(--mood-good); }
+  .spark-bar.low { background: var(--mood-low); }
+  .spark-label { font-size: 9px; color: var(--text-muted); font-weight: 500; }
+
+  .month-label {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 4px 8px;
+  }
+
+  .entry-card {
+    background: white; border-radius: 18px; padding: 16px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    cursor: pointer; transition: all 0.15s;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .entry-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .entry-card-mood {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0; margin-top: 2px;
+  }
+  .entry-card-content { flex: 1; min-width: 0; }
+  .entry-card-date {
+    font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 3px;
+  }
+  .entry-card-title {
+    font-size: 15px; font-weight: 700; color: var(--text-primary);
+    line-height: 1.3; margin-bottom: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .entry-card-preview {
+    font-size: 13px; color: var(--text-secondary); line-height: 1.5;
+    overflow: hidden; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .entry-card-tags { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+  .entry-card-tag {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    background: var(--bg); padding: 2px 8px; border-radius: 50px;
+  }
+  .entry-card-arrow {
+    color: var(--text-muted); font-size: 18px;
+    flex-shrink: 0; margin-top: 6px; transition: transform 0.15s;
+  }
+  .entry-card:hover .entry-card-arrow { transform: translateX(3px); color: var(--brand); }
+
+  /* ── ANNOTATIONS PANEL ── */
+  .annotations {
+    width: 280px;
+    position: sticky;
+    top: 100px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .annotation-group { }
+  .annotation-group-title {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; padding: 0 4px;
+  }
+  .annotation {
+    background: white; border-radius: 14px; padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .annotation-icon { font-size: 18px; margin-bottom: 6px; }
+  .annotation-title {
+    font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;
+  }
+  .annotation-text {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+  }
+  .annotation-highlight {
+    display: inline-block; margin-top: 6px;
+    font-size: 11px; font-weight: 700; color: var(--brand);
+    background: var(--brand-light); padding: 2px 8px; border-radius: 20px;
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex; background: white; border-top: 1px solid var(--border);
+    padding: 8px 0 20px;
+  }
+  .tab-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; padding: 6px 0; cursor: pointer;
+    font-size: 10px; font-weight: 600; color: var(--text-muted);
+    transition: color 0.15s;
+    border: none; background: none;
+  }
+  .tab-item.active { color: var(--brand); }
+  .tab-item .tab-icon { font-size: 22px; }
+
+  /* Slide transition */
+  .screen { animation: slideIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── CALLOUT BADGE ── */
+  .screen-badge {
+    position: absolute; top: 16px; right: 16px;
+    background: var(--brand); color: white;
+    font-size: 11px; font-weight: 700; padding: 4px 10px;
+    border-radius: 20px; letter-spacing: 0.3px;
+    z-index: 20;
+  }
+
+  /* scrollbar */
+  .entry-scroll::-webkit-scrollbar,
+  .hist-scroll::-webkit-scrollbar { width: 0; }
+
+  @media (max-width: 800px) {
+    .annotations { display: none; }
+    .stage { padding: 24px 16px; }
+    .presentation-header .subtitle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="presentation-header">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="8" fill="#4A90D9"/>
+      <path d="M9 14.5C9 12.5 10 10 14 10C18 10 19 12.5 19 14.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <path d="M6 14.5C6 14.5 6 20 14 20C22 20 22 14.5 22 14.5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="14" cy="14.5" r="2" fill="white"/>
+    </svg>
+    <span>Mathias<span style="color:#9CA3AF;font-weight:400"> · AI Tagebuch</span></span>
+  </div>
+  <div class="subtitle">UI/UX Konzept · Mai 2026</div>
+  <nav class="nav-pills">
+    <button class="nav-pill active" onclick="showScreen('onboarding', this)">Onboarding</button>
+    <button class="nav-pill" onclick="showScreen('recording', this)">Recording</button>
+    <button class="nav-pill" onclick="showScreen('entry', this)">Eintrag</button>
+    <button class="nav-pill" onclick="showScreen('history', this)">History</button>
+  </nav>
+</header>
+
+<!-- ── STAGE ── -->
+<main class="stage">
+  <!-- PHONE -->
+  <div class="phone-wrap">
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-icons">
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor" opacity="0.8">
+              <rect x="0" y="6" width="3" height="6" rx="1"/>
+              <rect x="4.5" y="4" width="3" height="8" rx="1"/>
+              <rect x="9" y="1.5" width="3" height="10.5" rx="1"/>
+              <rect x="13.5" y="0" width="2.5" height="12" rx="1" opacity="0.3"/>
+            </svg>
+            <svg width="14" height="11" viewBox="0 0 14 11" fill="currentColor" opacity="0.8">
+              <path d="M7 3C4.5 3 2.3 4.2 1 6.1L2.5 7.6C3.4 6.3 5.1 5.5 7 5.5C8.9 5.5 10.6 6.3 11.5 7.6L13 6.1C11.7 4.2 9.5 3 7 3Z"/>
+              <path d="M7 0C3.1 0 0.6 1.9 0 3.7L1.5 5.2C2 3.9 4.3 2.5 7 2.5C9.7 2.5 12 3.9 12.5 5.2L14 3.7C13.4 1.9 10.9 0 7 0Z" opacity="0.5"/>
+              <circle cx="7" cy="10" r="1.5"/>
+            </svg>
+            <span style="font-size:12px;font-weight:600;">100%</span>
+          </div>
+        </div>
+
+        <!-- ── ONBOARDING ── -->
+        <div class="screen screen-onboarding active" id="screen-onboarding">
+          <div style="padding-top:44px;">
+            <div class="onb-progress">
+              <div class="onb-dot active"></div>
+              <div class="onb-dot"></div>
+              <div class="onb-dot"></div>
+            </div>
+          </div>
+
+          <div class="onb-illustration">
+            <div class="onb-card-stack">
+              <div class="onb-card">
+                <div class="onb-card-label">Mo, 13. Mai</div>
+                <div class="onb-card-text">Ein guter Tag</div>
+              </div>
+              <div class="onb-card">
+                <div class="onb-card-label">Di, 14. Mai</div>
+                <div class="onb-card-text">Heute war Gespräch mit Tom interessant…</div>
+              </div>
+              <div class="onb-card">
+                <div class="onb-card-mood">😊</div>
+                <div class="onb-card-label">Mi, 15. Mai</div>
+                <div class="onb-card-text">Durchbruch im Projekt heute Nachmittag</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="onb-content">
+            <div class="onb-tag">Neu</div>
+            <div class="onb-headline">Dein KI-Tagebuch.<br>Deine Stimme.</div>
+            <div class="onb-body">Einfach einspre&shy;chen — Mathias macht einen schönen Eintrag daraus. Privat, sicher, auf Deutsch.</div>
+            <div class="onb-features">
+              <div class="onb-feature">
+                <div class="onb-feature-icon">🔒</div>
+                <div class="onb-feature-text">Alle Daten bleiben in der EU (DSGVO)</div>
+              </div>
+              <div class="onb-feature">
+                <div class="onb-feature-icon">🎙️</div>
+                <div class="onb-feature-text">Einfach sprechen, Mathias schreibt mit</div>
+              </div>
+              <div class="onb-feature">
+                <div class="onb-feature-icon">💛</div>
+                <div class="onb-feature-text">Stimmungs-Tracking über die Zeit</div>
+              </div>
+            </div>
+            <div class="onb-cta">
+              <button class="btn-primary" onclick="showScreen('recording', document.querySelectorAll('.nav-pill')[1])">Jetzt starten</button>
+              <button class="btn-secondary">Ich habe bereits ein Konto</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── RECORDING ── -->
+        <div class="screen screen-recording" id="screen-recording" style="display:none; flex-direction:column;">
+          <div class="rec-header">
+            <div class="rec-date">Sonntag, 17. Mai 2026</div>
+            <button class="rec-settings-btn">⚙️</button>
+          </div>
+          <div class="rec-greeting">
+            <div class="rec-greeting-sub">Guten Abend, Sebastian</div>
+            <div class="rec-greeting-main">Wie war dein Tag?</div>
+          </div>
+
+          <div class="rec-question-card">
+            <div class="rec-question-label">📌 Mathias fragt</div>
+            <div class="rec-question-text">Du hast gestern über deinen Business Angel Meeting gesprochen — wie ist es heute weitergegangen?</div>
+          </div>
+
+          <div class="rec-waveform-area">
+            <div class="rec-waveform" id="waveform">
+              <!-- Generated by JS -->
+            </div>
+
+            <div class="rec-timer" id="rec-timer">0:00</div>
+
+            <div class="rec-main-btn-wrap">
+              <div class="rec-pulse"></div>
+              <div class="rec-pulse"></div>
+              <button class="rec-main-btn" id="rec-btn" onclick="toggleRecording()">🎙️</button>
+            </div>
+
+            <div class="rec-status-text" id="rec-status">Tippe zum Aufnehmen</div>
+          </div>
+
+          <div class="rec-bottom">
+            <div class="rec-mood-quick">
+              <button class="mood-btn" onclick="selectMood(this)" title="Toll">😄</button>
+              <button class="mood-btn" onclick="selectMood(this)" title="Gut">🙂</button>
+              <button class="mood-btn" onclick="selectMood(this)" title="Okay">😐</button>
+              <button class="mood-btn" onclick="selectMood(this)" title="Schwer">😔</button>
+            </div>
+            <button class="rec-history-btn" onclick="showScreen('history', document.querySelectorAll('.nav-pill')[3])">
+              📖 Einträge
+            </button>
+          </div>
+
+          <div class="tab-bar">
+            <button class="tab-item active" onclick="showScreen('recording', document.querySelectorAll('.nav-pill')[1])">
+              <span class="tab-icon">🎙️</span>Heute
+            </button>
+            <button class="tab-item" onclick="showScreen('history', document.querySelectorAll('.nav-pill')[3])">
+              <span class="tab-icon">📖</span>Verlauf
+            </button>
+            <button class="tab-item">
+              <span class="tab-icon">📊</span>Trends
+            </button>
+            <button class="tab-item">
+              <span class="tab-icon">👤</span>Profil
+            </button>
+          </div>
+        </div>
+
+        <!-- ── ENTRY ── -->
+        <div class="screen screen-entry" id="screen-entry" style="display:none; flex-direction:column;">
+          <div class="entry-header">
+            <div class="entry-nav">
+              <button class="back-btn" onclick="showScreen('history', document.querySelectorAll('.nav-pill')[3])">← Verlauf</button>
+              <button class="entry-share-btn">↗️</button>
+            </div>
+            <div class="entry-meta">
+              <div class="entry-date-label">Samstag, 16. Mai 2026 · 2 min</div>
+              <div class="entry-mood-chip">
+                <div class="entry-mood-dot"></div>
+                Gut
+              </div>
+            </div>
+          </div>
+
+          <div class="entry-scroll">
+            <div class="entry-title">Ein produktiver Tag mit neuem Durchblick</div>
+
+            <div class="entry-tags">
+              <div class="entry-tag">#Arbeit</div>
+              <div class="entry-tag">#Motivation</div>
+              <div class="entry-tag">#Startup</div>
+              <div class="entry-tag">#Team</div>
+            </div>
+
+            <div class="entry-body-card">
+              <div class="entry-body-text">
+                Heute Morgen hat sich alles etwas anders angefühlt. <em>Das Meeting mit dem Team</em> lief besser als erwartet — wir haben endlich den Knoten beim UI-Konzept gelöst. Ich merkte, wie viel klarer mein Kopf ist, wenn ich abends kurz spazieren gehe.
+                <br><br>
+                <em>Das Gespräch mit Lisa</em> hat mir Mut gemacht. Sie sieht das Potenzial des Projekts genauso wie ich — das ist selten und wertvoll.
+                <br><br>
+                Abends hatte ich noch Zeit, die Präsentation fertigzustellen. Ein gutes Gefühl, etwas abzuhaken.
+              </div>
+            </div>
+
+            <div class="followup-card">
+              <div class="followup-title">
+                <span>💬</span> Mathias fragt dich
+              </div>
+              <div class="followup-q">
+                <div class="followup-num">1</div>
+                <div class="followup-text">Du hast erwähnt, dass der Spaziergang deinen Kopf klärt — machst du das regelmäßig?</div>
+              </div>
+              <div class="followup-q">
+                <div class="followup-num">2</div>
+                <div class="followup-text">Was genau hat Lisa gesagt, das dich so ermutigt hat?</div>
+              </div>
+              <div class="followup-q">
+                <div class="followup-num">3</div>
+                <div class="followup-text">Wie fühlst du dich bezüglich der Präsentation für morgen?</div>
+              </div>
+            </div>
+
+            <button class="entry-add-btn" onclick="showScreen('recording', document.querySelectorAll('.nav-pill')[1])">
+              🎙️ Weitersprechen
+            </button>
+          </div>
+        </div>
+
+        <!-- ── HISTORY ── -->
+        <div class="screen screen-history" id="screen-history" style="display:none; flex-direction:column;">
+          <div class="hist-header">
+            <div class="hist-title">Dein Verlauf</div>
+            <div class="hist-filter">
+              <div class="filter-chip active">Alle</div>
+              <div class="filter-chip">Diese Woche</div>
+              <div class="filter-chip">😊 Gut</div>
+              <div class="filter-chip">😔 Schwer</div>
+            </div>
+          </div>
+
+          <div class="hist-scroll">
+            <!-- Mood chart -->
+            <div class="mood-bar-chart">
+              <div class="mood-chart-title">Stimmung · Mai 2026</div>
+              <div class="mood-sparkline">
+                <div class="spark-col"><div class="spark-bar mid" style="height:24px"></div><div class="spark-label">9</div></div>
+                <div class="spark-col"><div class="spark-bar high" style="height:38px"></div><div class="spark-label">10</div></div>
+                <div class="spark-col"><div class="spark-bar low" style="height:14px"></div><div class="spark-label">11</div></div>
+                <div class="spark-col"><div class="spark-bar mid" style="height:28px"></div><div class="spark-label">12</div></div>
+                <div class="spark-col"><div class="spark-bar high" style="height:36px"></div><div class="spark-label">13</div></div>
+                <div class="spark-col"><div class="spark-bar" style="height:20px;background:var(--brand-mid)"></div><div class="spark-label">14</div></div>
+                <div class="spark-col"><div class="spark-bar high" style="height:34px"></div><div class="spark-label">15</div></div>
+                <div class="spark-col"><div class="spark-bar high" style="height:38px"></div><div class="spark-label">16</div></div>
+                <div class="spark-col"><div class="spark-bar" style="height:12px;background:var(--border)"></div><div class="spark-label" style="color:var(--brand);font-weight:700;">17</div></div>
+              </div>
+            </div>
+
+            <div class="month-label">Diese Woche</div>
+
+            <div class="entry-card" onclick="showScreen('entry', document.querySelectorAll('.nav-pill')[2])">
+              <div class="entry-card-mood" style="background:#ECFDF5;">😊</div>
+              <div class="entry-card-content">
+                <div class="entry-card-date">Fr, 16. Mai · 2 min</div>
+                <div class="entry-card-title">Ein produktiver Tag mit neuem Durchblick</div>
+                <div class="entry-card-preview">Das Meeting mit dem Team lief besser als erwartet. Lisa hat mir Mut gemacht…</div>
+                <div class="entry-card-tags">
+                  <span class="entry-card-tag">#Arbeit</span>
+                  <span class="entry-card-tag">#Startup</span>
+                </div>
+              </div>
+              <div class="entry-card-arrow">›</div>
+            </div>
+
+            <div class="entry-card">
+              <div class="entry-card-mood" style="background:#EEF2FF;">🤔</div>
+              <div class="entry-card-content">
+                <div class="entry-card-date">Do, 15. Mai · 4 min</div>
+                <div class="entry-card-title">Zweifel und Klarheit liegen nah beieinander</div>
+                <div class="entry-card-preview">Heute viel nachgedacht. Die Frage, ob der Pivot wirklich richtig ist, ließ mich nicht los…</div>
+                <div class="entry-card-tags">
+                  <span class="entry-card-tag">#Reflexion</span>
+                  <span class="entry-card-tag">#Entscheidung</span>
+                </div>
+              </div>
+              <div class="entry-card-arrow">›</div>
+            </div>
+
+            <div class="entry-card">
+              <div class="entry-card-mood" style="background:#FFF7ED;">😄</div>
+              <div class="entry-card-content">
+                <div class="entry-card-date">Mi, 14. Mai · 3 min</div>
+                <div class="entry-card-title">Erster Investorenkontakt — aufgeregt!</div>
+                <div class="entry-card-preview">Das Gespräch mit dem Business Angel war kürzer als erwartet, aber die Energie war da…</div>
+                <div class="entry-card-tags">
+                  <span class="entry-card-tag">#Investor</span>
+                  <span class="entry-card-tag">#Meilenstein</span>
+                </div>
+              </div>
+              <div class="entry-card-arrow">›</div>
+            </div>
+
+            <div class="month-label">Letzte Woche</div>
+
+            <div class="entry-card">
+              <div class="entry-card-mood" style="background:#F0F9FF;">🙂</div>
+              <div class="entry-card-content">
+                <div class="entry-card-date">Di, 13. Mai · 1 min</div>
+                <div class="entry-card-title">Ruhiger Start in die Woche</div>
+                <div class="entry-card-preview">Morgenroutine eingehalten, kurz gesprochen über die Wochenziele…</div>
+                <div class="entry-card-tags">
+                  <span class="entry-card-tag">#Routine</span>
+                </div>
+              </div>
+              <div class="entry-card-arrow">›</div>
+            </div>
+          </div>
+
+          <div class="tab-bar">
+            <button class="tab-item" onclick="showScreen('recording', document.querySelectorAll('.nav-pill')[1])">
+              <span class="tab-icon">🎙️</span>Heute
+            </button>
+            <button class="tab-item active">
+              <span class="tab-icon">📖</span>Verlauf
+            </button>
+            <button class="tab-item">
+              <span class="tab-icon">📊</span>Trends
+            </button>
+            <button class="tab-item">
+              <span class="tab-icon">👤</span>Profil
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /phone-screen -->
+    </div><!-- /phone-frame -->
+  </div><!-- /phone-wrap -->
+
+  <!-- ── ANNOTATIONS ── -->
+  <div class="annotations" id="annotations-panel">
+    <!-- Populated by JS -->
+  </div>
+</main>
+
+<script>
+const ANNOTATIONS = {
+  onboarding: [
+    {
+      icon: '🎯',
+      title: 'Value Prop im ersten Fold',
+      text: 'Der Karten-Stack visualisiert das Produkt sofort — kein leeres Feature-Versprechen. Der User versteht das Konzept, bevor er liest.',
+      highlight: 'Show, don\'t tell'
+    },
+    {
+      icon: '🔒',
+      title: 'Privacy as Feature',
+      text: 'DSGVO-Compliance wird nicht versteckt, sondern als Differenziator an erster Stelle kommuniziert. Kritisch im DACH-Markt.',
+      highlight: 'EU-Daten, DSGVO-First'
+    },
+    {
+      icon: '✍️',
+      title: 'Persona: Mathias',
+      text: 'Die KI hat einen Namen und ein Charakter. Das baut Vertrauen auf und differenziert von generischen KI-Tools.',
+      highlight: 'Emotional Branding'
+    },
+    {
+      icon: '📱',
+      title: 'Minimaler Onboarding-Aufwand',
+      text: 'Kein Formular, kein Fragenkatalog. Der User klickt einmal und ist im Flow. Reduktion von Drop-Off.',
+      highlight: '1-Click to Value'
+    }
+  ],
+  recording: [
+    {
+      icon: '🎙️',
+      title: 'Dominant One-Action UI',
+      text: 'Ein einziger, prominenter Button. Keine kognitive Last. Der User weiß sofort, was zu tun ist.',
+      highlight: 'Radikale Reduktion'
+    },
+    {
+      icon: '💬',
+      title: 'Mathias-Follow-up',
+      text: 'KI stellt eine kontextuelle Frage basierend auf dem Vortag — schafft Kontinuität und Engagement. User kommt täglich zurück.',
+      highlight: 'Retention durch Kontext'
+    },
+    {
+      icon: '😊',
+      title: 'Quick-Mood Tap',
+      text: 'Optionale 1-Tap Stimmungserfassung vor der Aufnahme — senkt die Hürde für tägliche Nutzung drastisch.',
+      highlight: 'Habitualisierung'
+    },
+    {
+      icon: '🌊',
+      title: 'Waveform Feedback',
+      text: 'Echtzeit-Visualisierung der Stimme gibt Bestätigung: "Die App hört zu". Reduziert Unsicherheit bei der Aufnahme.',
+      highlight: 'Visuelles Vertrauen'
+    }
+  ],
+  entry: [
+    {
+      icon: '✨',
+      title: 'AI-generierter Titel',
+      text: 'Mathias destilliert den Kerngedanken des Tages in einen literarischen Titel. Schafft Stolz und Lesemotivation.',
+      highlight: 'Narrative AI'
+    },
+    {
+      icon: '🏷️',
+      title: 'Auto-Tagging',
+      text: 'Themen werden automatisch erkannt und als Tags markiert — ermöglicht spätere Suche und Muster-Erkennung.',
+      highlight: 'Intelligente Struktur'
+    },
+    {
+      icon: '💛',
+      title: 'Eigene Worte, schöner Text',
+      text: 'Mathias schreibt in der Ich-Perspektive mit den Worten des Users — kein fremdes KI-Rauschen. Das ist die Kern-Differenzierung.',
+      highlight: 'No AI Voice Pollution'
+    },
+    {
+      icon: '💬',
+      title: 'Follow-up Fragen',
+      text: '3 personalisierte Fragen motivieren zu tieferen Reflexionen — und liefern Gesprächsthemen für das nächste Recording.',
+      highlight: 'Engagement Loop'
+    }
+  ],
+  history: [
+    {
+      icon: '📊',
+      title: 'Mood Sparkline',
+      text: 'Kompaktes Stimmungsdiagramm auf einen Blick. Kein separater "Analytics"-Screen nötig — Insights dort, wo der User sie erwartet.',
+      highlight: 'Inline Analytics'
+    },
+    {
+      icon: '📖',
+      title: 'Card-basierter Feed',
+      text: 'Jeder Eintrag zeigt Mood-Emoji, Titel-Preview und Tags. User erkennt auf einen Blick, worum es ging.',
+      highlight: 'Scannable Design'
+    },
+    {
+      icon: '🔍',
+      title: 'Filterbar nach Mood',
+      text: 'User kann gezielt gute oder schwierige Tage filtern — hilft bei Reflexion und Mustererkennung.',
+      highlight: 'Emotional Navigation'
+    },
+    {
+      icon: '🔄',
+      title: 'Continuity: Weitersprechen',
+      text: 'Direkt aus dem Eintrag heraus kann weiter aufgenommen werden. Kein Verlust des Kontexts, keine Navigationsbrüche.',
+      highlight: 'Nahtloser Flow'
+    }
+  ]
+};
+
+let currentScreen = 'onboarding';
+let recInterval = null;
+let recSeconds = 0;
+let isRecording = false;
+
+function showScreen(name, navEl) {
+  // Hide all screens
+  document.querySelectorAll('.screen').forEach(s => {
+    s.style.display = 'none';
+    s.classList.remove('active');
+  });
+  // Show target
+  const target = document.getElementById('screen-' + name);
+  if (target) {
+    target.style.display = 'flex';
+    target.classList.add('active');
+  }
+  // Update nav pills
+  document.querySelectorAll('.nav-pill').forEach(p => p.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+
+  currentScreen = name;
+  updateAnnotations(name);
+
+  // Stop recording if switching away
+  if (name !== 'recording' && isRecording) stopRecording();
+}
+
+function updateAnnotations(screen) {
+  const panel = document.getElementById('annotations-panel');
+  const items = ANNOTATIONS[screen] || [];
+  panel.innerHTML = `<div class="annotation-group-title">UX-Rationale · ${screen.charAt(0).toUpperCase() + screen.slice(1)}</div>` +
+    items.map(a => `
+      <div class="annotation">
+        <div class="annotation-icon">${a.icon}</div>
+        <div class="annotation-title">${a.title}</div>
+        <div class="annotation-text">${a.text}</div>
+        <div class="annotation-highlight">${a.highlight}</div>
+      </div>
+    `).join('');
+}
+
+// Generate waveform bars
+function generateWaveform() {
+  const container = document.getElementById('waveform');
+  if (!container) return;
+  container.innerHTML = '';
+  for (let i = 0; i < 40; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'wave-bar';
+    const h = Math.random() * 20 + 6;
+    bar.style.height = h + 'px';
+    if (Math.random() > 0.5) bar.style.animationDelay = (Math.random() * 0.8) + 's';
+    container.appendChild(bar);
+  }
+}
+
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+    // Transition to entry after short delay
+    setTimeout(() => showScreen('entry', document.querySelectorAll('.nav-pill')[2]), 600);
+  } else {
+    startRecording();
+  }
+}
+
+function startRecording() {
+  isRecording = true;
+  recSeconds = 0;
+  const btn = document.getElementById('rec-btn');
+  const status = document.getElementById('rec-status');
+  const timer = document.getElementById('rec-timer');
+  btn.style.background = '#EF4444';
+  btn.style.boxShadow = '0 4px 20px rgba(239,68,68,0.45)';
+  btn.textContent = '⏹';
+  status.textContent = 'Aufnahme läuft…';
+  timer.classList.add('recording');
+
+  // Animate bars
+  document.querySelectorAll('.wave-bar').forEach((b, i) => {
+    b.classList.add('active');
+    b.style.animationDelay = (i * 0.05) + 's';
+    b.style.animationDuration = (0.4 + Math.random() * 0.6) + 's';
+  });
+
+  recInterval = setInterval(() => {
+    recSeconds++;
+    const m = Math.floor(recSeconds / 60);
+    const s = recSeconds % 60;
+    timer.textContent = m + ':' + String(s).padStart(2, '0');
+  }, 1000);
+}
+
+function stopRecording() {
+  isRecording = false;
+  clearInterval(recInterval);
+  const btn = document.getElementById('rec-btn');
+  const status = document.getElementById('rec-status');
+  const timer = document.getElementById('rec-timer');
+  btn.style.background = 'var(--brand)';
+  btn.style.boxShadow = '0 4px 20px rgba(74,144,217,0.45)';
+  btn.textContent = '🎙️';
+  status.textContent = 'Mathias schreibt deinen Eintrag…';
+  timer.classList.remove('recording');
+  document.querySelectorAll('.wave-bar').forEach(b => {
+    b.classList.remove('active');
+    b.style.height = (Math.random() * 20 + 6) + 'px';
+  });
+}
+
+function selectMood(el) {
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// Init
+generateWaveform();
+updateAnnotations('onboarding');
+</script>
+</body>
+</html>
