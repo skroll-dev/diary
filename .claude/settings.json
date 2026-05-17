@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary status)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .)"
+    ]
+  }
+}
