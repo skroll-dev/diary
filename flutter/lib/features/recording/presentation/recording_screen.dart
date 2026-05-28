@@ -3,11 +3,19 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../recording_context.dart';
 
 enum _RecordingState { idle, recording, processing }
 
 class RecordingScreen extends ConsumerStatefulWidget {
-  const RecordingScreen({super.key});
+  const RecordingScreen({
+    super.key,
+    this.recordingContext = const FreshRecording(),
+  });
+
+  final RecordingContext recordingContext;
 
   @override
   ConsumerState<RecordingScreen> createState() => _RecordingScreenState();
@@ -66,13 +74,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     _pulseController.stop();
     _pulseController.reset();
     setState(() => _state = _RecordingState.processing);
+    // Capture before async gap — _seconds is frozen by cancel above
+    final date = _dateLabel;
+    final duration = _timerLabel;
     Future.delayed(const Duration(milliseconds: 3200), () {
       if (mounted) {
-        setState(() {
-          _state = _RecordingState.idle;
-          _seconds = 0;
-        });
-        // TODO: navigate to entry screen
+        context.go('/topics', extra: (date: date, duration: duration));
       }
     });
   }
@@ -154,6 +161,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       _RecordingState.processing => 'Einen Moment …',
     };
 
+    // Context chip only shown when not processing
+    final ctx = widget.recordingContext;
+    final showChip = _state != _RecordingState.processing && ctx is! FreshRecording;
+
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
       transitionBuilder: (child, animation) => FadeTransition(
@@ -167,7 +178,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         ),
       ),
       child: Column(
-        key: ValueKey(title),
+        key: ValueKey('$title-${ctx.runtimeType}'),
         children: [
           Text(
             _dateLabel,
@@ -182,9 +193,68 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             ),
             textAlign: TextAlign.center,
           ),
+          if (showChip) ...[
+            const SizedBox(height: 12),
+            _buildContextChip(context),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _buildContextChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final ctx = widget.recordingContext;
+
+    final (IconData icon, String label, Color color, Color bg) = switch (ctx) {
+      ExtendingTopic(:final topicTitle) => (
+          Icons.edit_note_rounded,
+          'Ergänzt · $topicTitle',
+          const Color(0xFF5E35B1),
+          const Color(0xFFEDE9FF),
+        ),
+      AddingTopic() => (
+          Icons.add_rounded,
+          'Neues Thema',
+          cs.primary,
+          cs.primaryContainer,
+        ),
+      _ => (Icons.circle, '', cs.outline, cs.surfaceContainerHighest),
+    };
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: tt.labelMedium?.copyWith(color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _subtitleText {
+    return switch (widget.recordingContext) {
+      ExtendingTopic(:final followUpHint) when followUpHint != null =>
+        followUpHint,
+      ExtendingTopic(:final topicTitle) =>
+        'Was möchtest du zu\n„$topicTitle" ergänzen?',
+      AddingTopic() =>
+        'Worum geht es beim neuen Thema?\nErzähl, was dir wichtig ist.',
+      _ => 'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
+    };
   }
 
   Widget _buildCenterContent(BuildContext context) {
@@ -193,7 +263,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     return Column(
       children: [
-        // Subtitle or processing indicator — always anchored near the header
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, animation) =>
@@ -217,8 +286,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                   ],
                 )
               : Text(
-                  key: const ValueKey('subtitle'),
-                  'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
+                  key: ValueKey(_subtitleText),
+                  _subtitleText,
                   style: tt.bodyLarge?.copyWith(
                     color: cs.onSurface.withValues(alpha: 0.38),
                     height: 1.65,
@@ -226,7 +295,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                   textAlign: TextAlign.center,
                 ),
         ),
-        // Waveform + timer — expand in below the subtitle when recording starts
         AnimatedSize(
           duration: const Duration(milliseconds: 420),
           curve: Curves.easeInOut,
@@ -281,7 +349,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         Stack(
           alignment: Alignment.center,
           children: [
-            // Pulsing halo ring — only during recording
             AnimatedBuilder(
               animation: _pulseController,
               builder: (_, __) {
@@ -300,7 +367,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                 );
               },
             ),
-            // Main button
             GestureDetector(
               onTap: isRecording ? _stopRecording : _startRecording,
               child: AnimatedContainer(
@@ -375,7 +441,6 @@ class _WaveformPainter extends CustomPainter {
 
     for (int i = 0; i < _count; i++) {
       final phase = (i / _count) * 2 * pi;
-      // Organic movement from layered sin waves
       final wave = sin(value * 2 * pi + phase) * 0.5 +
           sin(value * 2 * pi * 1.7 + phase * 1.3 + 0.9) * 0.3 +
           sin(value * 2 * pi * 0.5 + phase * 0.7) * 0.2;
