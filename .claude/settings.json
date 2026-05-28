@@ -38,7 +38,16 @@
       "Bash(xargs cat)",
       "Bash(grep -v \"^--$\")",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add -A)",
-      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add README.md)"
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add README.md)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"voice diary journaling personal minimal calm intimate\" --design-system -p \"Mathias AI Tagebuch\" -f markdown)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"audio waveform animation recording voice\" --domain ux -n 5)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary log --oneline -5)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff flutter/ios/Podfile flutter/ios/Runner.xcodeproj/project.pbxproj flutter/ios/Runner.xcworkspace/contents.xcworkspacedata)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff skills-lock.json .claude/settings.json)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add flutter/ios/Podfile flutter/ios/Runner.xcodeproj/project.pbxproj flutter/ios/Runner.xcworkspace/contents.xcworkspacedata flutter/ios/Podfile.lock)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .agents/skills/ui-ux-pro-max/ .claude/skills/ skills-lock.json)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .claude/settings.json)"
     ]
   }
 }
