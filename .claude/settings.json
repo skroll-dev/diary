@@ -47,7 +47,9 @@
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff skills-lock.json .claude/settings.json)",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add flutter/ios/Podfile flutter/ios/Runner.xcodeproj/project.pbxproj flutter/ios/Runner.xcworkspace/contents.xcworkspacedata flutter/ios/Podfile.lock)",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .agents/skills/ui-ux-pro-max/ .claude/skills/ skills-lock.json)",
-      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .claude/settings.json)"
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .claude/settings.json)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add doc/recording_flow_clean_then_topics_review.html)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff .claude/settings.json)"
     ]
   }
 }
