@@ -2,10 +2,10 @@
 
 > *"Sprich 60 Sekunden – bekomme einen Eintrag, den du selbst niemals so geschrieben hättest."*
 
-A privacy-first, AI-powered voice diary for the DACH market. Users dictate freely; Mathias — the AI persona — shapes their words into a coherent diary entry, preserves their voice, and proposes three follow-up questions that go deeper, not wider.
+A privacy-first, AI-powered voice diary for the DACH market. Users dictate freely; Mathias — the AI persona — shapes their words into a coherent diary entry, preserves their voice, and proposes follow-up questions that go deeper, not wider.
 
-**Status:** MVP — closed beta  
-**Platforms:** iOS · Android · Web (layout/review only)  
+**Status:** UI prototype in progress — recording and topics screens complete, entry/history screens pending  
+**Platforms:** iOS (15.0+) · Android · Web (layout/review only)  
 **All data stays in Frankfurt, EU.**
 
 ---
@@ -17,10 +17,26 @@ Most journaling apps are either passive archives (Day One) or exhausting AI coac
 1. **One tap** — start recording
 2. **Speak freely** — 30–120 seconds, no structure needed
 3. **Mathias writes** — a first-person diary entry in your words, your tone
-4. **Three questions** — concrete, non-therapeutic, drawn from what you actually said
+4. **Review topics** — Mathias identifies the themes it heard; deepen any of them or add a new one
 5. **Optional: dictate again** — Mathias merges the new thoughts organically into the existing entry
 
 One entry per calendar day. Multiple recordings merge, not stack.
+
+---
+
+## Screen Flow
+
+```
+RecordingScreen (/)
+  │  tap record → speak → tap stop
+  ▼
+TopicsReviewScreen (/topics)
+  │  "Ergänzen" on a topic → back to RecordingScreen with topic context
+  │  "Neues Thema" → back to RecordingScreen in add-topic mode
+  │  "Eintrag erstellen" →
+  ▼
+EntryScreen (/entry/:date)          ← skeleton, pending
+```
 
 ---
 

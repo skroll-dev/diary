@@ -49,7 +49,11 @@
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .agents/skills/ui-ux-pro-max/ .claude/skills/ skills-lock.json)",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add .claude/settings.json)",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary add doc/recording_flow_clean_then_topics_review.html)",
-      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff .claude/settings.json)"
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff .claude/settings.json)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"journal review topics list cards contextual actions minimal calm\" --design-system -p \"Mathias Topics Review\" -f markdown)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"confirmation dialog destructive action delete\" --domain ux -n 6)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff --stat)",
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary log --oneline -3)"
     ]
   }
 }

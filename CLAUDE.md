@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Firebase project:** `diary-6fa61`
 - **Bundle ID:** `com.diary.app`
-- **Target platforms:** iOS, Android, Web (web = layout/review only; audio recording is blocked on web with a user-facing hint)
+- **Target platforms:** iOS (min 15.0), Android, Web (web = layout/review only; audio recording is blocked on web with a user-facing hint)
 
 ## Commands
 
@@ -73,19 +73,47 @@ gdpr-export (Cloud Run) ──► Firestore (JSON export / account deletion)
 
 Riverpod 3 + GoRouter 17, Material Design 3 (seed `#4A90D9`), offline-first via Drift (SQLite).
 
-**Routes:** `/` → `RecordingScreen`, `/entry/:date` → `EntryScreen`, `/history` → `HistoryScreen`
+#### Routes
 
-**Data model** (`shared/models/entry.dart`):
+| Path | Screen | GoRouter `extra` |
+|---|---|---|
+| `/` | `RecordingScreen` | `RecordingContext?` (defaults to `FreshRecording`) |
+| `/topics` | `TopicsReviewScreen` | `({String date, String duration})?` |
+| `/entry/:date` | `EntryScreen` | — |
+| `/history` | `HistoryScreen` | — |
+
+#### Recording Flow
+
+The primary user journey is `/` → `/topics` → `/entry/:date`.
+
+**`RecordingContext`** (`features/recording/recording_context.dart`) is a sealed class passed as GoRouter `extra` to `/`:
+- `FreshRecording` — default, new entry
+- `ExtendingTopic({topicTitle, followUpHint?})` — returning from Topics to add to a specific topic; subtitle on RecordingScreen shows the topic-specific follow-up question
+- `AddingTopic` — returning from Topics to record a new topic
+
+When recording stops, `RecordingScreen` captures `_dateLabel` and `_timerLabel` **before** the async processing delay, then navigates: `context.go('/topics', extra: (date: date, duration: duration))`. The router unwraps this record and passes it to `TopicsReviewScreen` as constructor params.
+
+**`TopicsReviewScreen`** holds a mutable `_topics` list (copy of sample data). Supports per-topic deletion (with confirmation dialog), global "Von vorne anfangen" (wipes all → navigates to `/` with `FreshRecording`), and "Ergänzen" (→ `/` with `ExtendingTopic`).
+
+#### Data model (`shared/models/entry.dart`)
 - `Entry` — one per calendar day; fields: `bodyMarkdown`, `rawTranscripts`, `followUpQuestions`, `mood` (enum), `moodScore` (-1.0…+1.0), `durationSeconds`, `language`, `version`
 - `Transcript` — raw audio-to-text result attached to an Entry
 - Multiple voice recordings on the same day are merged via Prompt B (not appended as separate entries)
 
-**Key architectural rules:**
+#### Key architectural rules
 - Drift (SQLite) is the local source of truth; Firestore syncs in background
 - Audio → Firebase Storage → ai-proxy transcription → auto-delete from Storage
 - `kIsWeb` guards all audio recording paths; web shows an "App only" hint instead
 
-**Current state:** Feature screens are skeleton stubs with `// TODO` providers. The `settings/` feature folder exists but has no route yet.
+#### Current implementation state
+
+| Screen | State |
+|---|---|
+| `RecordingScreen` | UI complete — animated waveform, 3 states (idle/recording/processing), context-aware subtitles. No real audio yet. |
+| `TopicsReviewScreen` | UI complete — topic cards, per-topic delete, "Von vorne anfangen", sticky CTA. Sample data only. |
+| `EntryScreen` | Skeleton ("IN PROGRESS") |
+| `HistoryScreen` | Skeleton |
+| `settings/` | Folder exists, no route wired yet |
 
 ### ai-proxy (`ai-proxy/app/`)
 
@@ -113,6 +141,7 @@ Key skills:
 - `flutter-apply-architecture-best-practices` — Riverpod + layered architecture patterns
 - `cloud-run-basics` — deploying/updating Cloud Run services
 - `gemini-api` — Vertex AI / Gemini SDK patterns
+- `ui-ux-pro-max` — design system, color/typography, UX patterns (invoke via `/ui-ux-pro-max` skill)
 
 See `AGENTS.md` for the full skill matrix and workflow rule.
 
