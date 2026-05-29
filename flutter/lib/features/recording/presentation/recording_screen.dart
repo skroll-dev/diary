@@ -33,6 +33,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   Timer? _timer;
   int _seconds = 0;
+  // True after the first recording has been sent to TopicsReviewScreen.
+  // Popping back from there means "add more" — not "start fresh".
+  bool _hasExistingEntry = false;
 
   @override
   void initState() {
@@ -79,7 +82,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final duration = _timerLabel;
     Future.delayed(const Duration(milliseconds: 3200), () {
       if (mounted) {
-        context.go('/topics', extra: (date: date, duration: duration));
+        setState(() {
+          _state = _RecordingState.idle;
+          _seconds = 0;
+          _hasExistingEntry = true;
+        });
+        context.push('/topics', extra: (date: date, duration: duration));
       }
     });
   }
@@ -163,7 +171,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     // Context chip only shown when not processing
     final ctx = widget.recordingContext;
-    final showChip = _state != _RecordingState.processing && ctx is! FreshRecording;
+    final showChip = _state != _RecordingState.processing &&
+        (ctx is! FreshRecording || _hasExistingEntry);
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
@@ -220,6 +229,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           cs.primary,
           cs.primaryContainer,
         ),
+      FreshRecording() when _hasExistingEntry => (
+          Icons.post_add_rounded,
+          'Wird zum Eintrag ergänzt',
+          cs.primary,
+          cs.primaryContainer,
+        ),
       _ => (Icons.circle, '', cs.outline, cs.surfaceContainerHighest),
     };
 
@@ -253,6 +268,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         'Was möchtest du zu\n„$topicTitle" ergänzen?',
       AddingTopic() =>
         'Worum geht es beim neuen Thema?\nErzähl, was dir wichtig ist.',
+      FreshRecording() when _hasExistingEntry =>
+        'Was möchtest du noch hinzufügen?\nMathias ergänzt deinen Eintrag.',
       _ => 'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
     };
   }
@@ -409,6 +426,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             style: tt.bodyMedium?.copyWith(color: cs.outline),
           ),
         ),
+        if (!isRecording && _hasExistingEntry) ...[
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => context.pop(),
+            style: TextButton.styleFrom(
+              foregroundColor: cs.outline,
+              textStyle: tt.bodySmall,
+            ),
+            child: const Text('Nichts hinzufügen · Zurück zu den Themen'),
+          ),
+        ],
       ],
     );
   }

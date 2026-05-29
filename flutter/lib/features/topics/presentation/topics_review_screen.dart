@@ -20,6 +20,30 @@ class _TopicData {
   });
 }
 
+// ── Transcript data ───────────────────────────────────────────────────────────
+
+class _TranscriptEntry {
+  const _TranscriptEntry({required this.timestamp, required this.text});
+  final DateTime timestamp;
+  final String text;
+}
+
+// Two recordings on the same day — the second was added after reviewing topics
+final _sampleTranscripts = [
+  _TranscriptEntry(
+    timestamp: DateTime(2026, 5, 17, 14, 23),
+    text:
+        'Also, heute hatte ich das Meeting mit Tim. Wir haben über den Marketingplan gesprochen, aber ich hab meine Bedenken irgendwie nicht richtig rausgebracht. Er hat das so schnell abgehakt und ich hab einfach nichts gesagt. Das ärgert mich eigentlich.',
+  ),
+  _TranscriptEntry(
+    timestamp: DateTime(2026, 5, 17, 20, 47),
+    text:
+        'Bin dann abends noch spazieren gegangen um den Kopf frei zu kriegen. Hat wirklich geholfen. Und ich mach mir Sorgen wegen morgen – das Team muss entscheiden ob wir mit dem neuen Ansatz weitermachen oder doch beim alten bleiben.',
+  ),
+];
+
+// ── Topic data ────────────────────────────────────────────────────────────────
+
 const _sampleTopics = [
   _TopicData(
     title: 'Meeting mit Tim',
@@ -62,6 +86,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _entrance;
   late List<_TopicData> _topics;
+  bool _isTranscriptExpanded = false;
 
   String get _headerDateLine {
     final d = widget.date;
@@ -169,6 +194,74 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     );
   }
 
+  // ── Transcript section ───────────────────────────────────────────────────────
+
+  Widget _buildTranscriptSection(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final count = _sampleTranscripts.length;
+    final countLabel = '$count ${count == 1 ? 'Aufnahme' : 'Aufnahmen'}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Toggle row
+        GestureDetector(
+          onTap: () =>
+              setState(() => _isTranscriptExpanded = !_isTranscriptExpanded),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Icon(Icons.mic_none_rounded, size: 15, color: cs.outline),
+                const SizedBox(width: 6),
+                Text(
+                  'Originaltext',
+                  style: tt.labelMedium?.copyWith(color: cs.onSurface),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  countLabel,
+                  style: tt.labelSmall?.copyWith(color: cs.outline),
+                ),
+                const Spacer(),
+                AnimatedRotation(
+                  turns: _isTranscriptExpanded ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: cs.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Expandable bubbles
+        AnimatedSize(
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOut,
+          child: _isTranscriptExpanded
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 10),
+                    for (final entry in _sampleTranscripts)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _TranscriptBubble(entry: entry),
+                      ),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
@@ -181,23 +274,48 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       body: SafeArea(
         child: Stack(
           children: [
-            // ── Scrollable content ─────────────────────────────────────────────
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 28, 20, 116),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+            // ── Column: nav bar in flow + scrollable content ───────────────────
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Nav bar — in layout flow, never overlaps scroll content
+                SizedBox(
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned(
+                        left: 4,
+                        child: IconButton(
+                          onPressed: () => context.pop(),
+                          icon: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 20,
+                            color: cs.onSurface,
+                          ),
+                          tooltip: 'Zurück',
+                        ),
+                      ),
+                      if (_headerDateLine.isNotEmpty)
+                        Text(
+                          _headerDateLine,
+                          style: tt.bodyMedium?.copyWith(color: cs.outline),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 116),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                   // Header
                   _animated(
                     0,
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          _headerDateLine,
-                          style: tt.bodyMedium?.copyWith(color: cs.outline),
-                        ),
-                        const SizedBox(height: 10),
                         Text(
                           _topics.isEmpty
                               ? 'Keine Themen mehr.\nMöchtest du von vorne anfangen?'
@@ -212,6 +330,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                       ],
                     ),
                   ),
+
+                  // Transcript section
+                  _buildTranscriptSection(context),
+                  const SizedBox(height: 20),
 
                   // Topic cards
                   for (int i = 0; i < _topics.length; i++)
@@ -275,6 +397,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 ],
               ),
             ),
+                ),
+              ],
+            ),
 
             // ── Sticky bottom CTA ──────────────────────────────────────────────
             Positioned(
@@ -293,7 +418,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 ),
                 child: FilledButton(
                   onPressed:
-                      _topics.isNotEmpty ? () => context.go('/entry/today') : null,
+                      _topics.isNotEmpty ? () => context.push('/entry/today') : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF3730A3),
                     disabledBackgroundColor:
@@ -391,6 +516,68 @@ class _TopicCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Transcript bubble ──────────────────────────────────────────────────────────
+
+class _TranscriptBubble extends StatelessWidget {
+  const _TranscriptBubble({required this.entry});
+  final _TranscriptEntry entry;
+
+  static String _formatTime(DateTime dt) {
+    const weekdays = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const months = [
+      '', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
+    ];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${weekdays[dt.weekday]}, ${dt.day}. ${months[dt.month]} · $h:$m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Timestamp row
+        Row(
+          children: [
+            Icon(Icons.mic_rounded, size: 12, color: cs.outline),
+            const SizedBox(width: 4),
+            Text(
+              _formatTime(entry.timestamp),
+              style: tt.labelSmall?.copyWith(color: cs.outline),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        // Chat bubble — flat top-left corner signals "first in thread" origin
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(14),
+              bottomLeft: Radius.circular(14),
+              bottomRight: Radius.circular(14),
+            ),
+          ),
+          child: Text(
+            entry.text,
+            style: tt.bodyMedium?.copyWith(
+              color: cs.onSurface,
+              height: 1.55,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
