@@ -37,6 +37,9 @@ dependencies:
   # HTTP (KI-Proxy)
   dio: ^5.6.0
 
+  # Utilities
+  uuid: ^4.5.1
+
   # Biometric Lock
   local_auth: ^3.0.1
 

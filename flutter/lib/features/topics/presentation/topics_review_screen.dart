@@ -123,6 +123,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     );
     if (confirmed && mounted) {
       setState(() => _topics.removeAt(index));
+      if (mounted && _topics.isEmpty) context.go('/');
     }
   }
 
@@ -287,7 +288,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                       Positioned(
                         left: 4,
                         child: IconButton(
-                          onPressed: () => context.pop(),
+                          onPressed: () => _topics.isEmpty
+                              ? context.go('/')
+                              : context.pop(),
                           icon: Icon(
                             Icons.arrow_back_ios_new_rounded,
                             size: 20,

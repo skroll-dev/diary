@@ -8,8 +8,50 @@ Endpunkte:
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import structlog
 from fastapi import FastAPI, Request
+
+class _TeeLogger:
+    """Writes structlog output to stdout and optionally a file."""
+    def __init__(self, file_path: str | None = None) -> None:
+        self._file = open(file_path, "a", encoding="utf-8") if file_path else None
+
+    def _write(self, message: str) -> None:
+        print(message, flush=True)
+        if self._file:
+            print(message, file=self._file, flush=True)
+
+    def __getattr__(self, name: str):
+        return self._write
+
+
+class _TeeLoggerFactory:
+    def __init__(self, file_path: str | None = None) -> None:
+        self._logger = _TeeLogger(file_path)
+
+    def __call__(self, *args: object) -> _TeeLogger:
+        return self._logger
+
+
+def _configure_logging() -> None:
+    log_file = os.environ.get("LOG_FILE")
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.ExceptionRenderer(),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        logger_factory=_TeeLoggerFactory(log_file),
+        cache_logger_on_first_use=True,
+    )
+
+
+_configure_logging()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 

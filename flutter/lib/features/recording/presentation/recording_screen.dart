@@ -4,7 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/proxy_client.dart';
+import '../../../shared/services/recording_service.dart';
 import '../recording_context.dart';
 
 enum _RecordingState { idle, recording, processing }
@@ -36,6 +40,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   // True after the first recording has been sent to TopicsReviewScreen.
   // Popping back from there means "add more" — not "start fresh".
   bool _hasExistingEntry = false;
+  String _lastDate = '';
+  String _lastDuration = '';
 
   @override
   void initState() {
@@ -59,7 +65,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     super.dispose();
   }
 
-  void _startRecording() {
+  Future<void> _startRecording() async {
+    await ref.read(recordingServiceProvider).start();
     setState(() {
       _state = _RecordingState.recording;
       _seconds = 0;
@@ -71,25 +78,46 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     });
   }
 
-  void _stopRecording() {
+  Future<void> _stopRecording() async {
     _timer?.cancel();
     _waveController.stop();
     _pulseController.stop();
     _pulseController.reset();
     setState(() => _state = _RecordingState.processing);
-    // Capture before async gap — _seconds is frozen by cancel above
+
     final date = _dateLabel;
     final duration = _timerLabel;
-    Future.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted) {
-        setState(() {
-          _state = _RecordingState.idle;
-          _seconds = 0;
-          _hasExistingEntry = true;
-        });
-        context.push('/topics', extra: (date: date, duration: duration));
-      }
-    });
+    final durationSec = _seconds;
+    final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    try {
+      final audioBytes =
+          await ref.read(recordingServiceProvider).stopAndRead();
+      final rawTranscript =
+          await ref.read(proxyClientProvider).transcribe(audioBytes);
+      final normalizedText =
+          await ref.read(proxyClientProvider).normalize(rawTranscript);
+      await ref.read(entryRepositoryProvider).saveEntry(
+            date: isoDate,
+            rawTranscript: rawTranscript,
+            normalizedText: normalizedText,
+            durationSeconds: durationSec,
+          );
+    } catch (e) {
+      debugPrint('[RecordingScreen] pipeline error: $e');
+      // TODO: show error snackbar
+    }
+
+    if (mounted) {
+      setState(() {
+        _state = _RecordingState.idle;
+        _seconds = 0;
+        _hasExistingEntry = true;
+        _lastDate = date;
+        _lastDuration = duration;
+      });
+      context.push('/topics', extra: (date: date, duration: duration));
+    }
   }
 
   String get _timerLabel {
@@ -142,12 +170,41 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   Widget _appView(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final showBackToTopics =
+        _hasExistingEntry && _state == _RecordingState.idle;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 52),
+          if (showBackToTopics) ...[
+            SizedBox(
+              height: 44,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => context.push(
+                    '/topics',
+                    extra: (date: _lastDate, duration: _lastDuration),
+                  ),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
+                  label: const Text('Themen'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: cs.primary,
+                    textStyle: tt.bodyMedium,
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ] else
+            const SizedBox(height: 52),
           _buildHeader(context),
           const SizedBox(height: 28),
           _buildCenterContent(context),
@@ -426,17 +483,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             style: tt.bodyMedium?.copyWith(color: cs.outline),
           ),
         ),
-        if (!isRecording && _hasExistingEntry) ...[
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: () => context.pop(),
-            style: TextButton.styleFrom(
-              foregroundColor: cs.outline,
-              textStyle: tt.bodySmall,
-            ),
-            child: const Text('Nichts hinzufügen · Zurück zu den Themen'),
-          ),
-        ],
       ],
     );
   }

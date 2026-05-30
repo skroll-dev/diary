@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from app.services.gemini import generate_entry, merge_entry
+from app.services.gemini import generate_entry, merge_entry, normalize_transcript
 from app.services.auth import verify_app_check
 
 log = structlog.get_logger()
@@ -18,6 +18,14 @@ MoodType = Literal["happy", "calm", "neutral", "tense", "sad", "mixed"]
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
+
+class NormalizeRequest(BaseModel):
+    transcript: str = Field(..., min_length=5, max_length=8_000)
+
+
+class NormalizeResponse(BaseModel):
+    normalized_text: str
+
 
 class GenerateRequest(BaseModel):
     transcript: str = Field(..., min_length=10, max_length=8_000)
@@ -39,6 +47,16 @@ class EntryResponse(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.post("/normalize", response_model=NormalizeResponse)
+async def normalize(
+    req: NormalizeRequest,
+    _: None = Depends(verify_app_check),
+):
+    log.info("normalize_request", transcript_len=len(req.transcript))
+    text = await normalize_transcript(req.transcript)
+    return NormalizeResponse(normalized_text=text)
+
 
 @router.post("/generate", response_model=EntryResponse)
 async def generate(

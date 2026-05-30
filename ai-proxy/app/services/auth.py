@@ -18,12 +18,14 @@ def _get_firebase_app():
 
 
 async def verify_app_check(
-    x_firebase_appcheck: str = Header(..., alias="X-Firebase-AppCheck"),
+    x_firebase_appcheck: str | None = Header(None, alias="X-Firebase-AppCheck"),
 ) -> None:
     """FastAPI Dependency – wirft 401 wenn der App-Check-Token ungültig ist."""
     if os.environ.get("ENV") == "development":
-        # In der lokalen Entwicklung App-Check überspringen
         return
+
+    if not x_firebase_appcheck:
+        raise HTTPException(status_code=401, detail="App-Check-Token fehlt")
 
     try:
         app_check.verify_token(x_firebase_appcheck, app=_get_firebase_app())

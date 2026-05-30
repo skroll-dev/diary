@@ -19,3 +19,7 @@ venv/
 *service-account*.json
 *credentials*.json
 firebase-adminsdk*.json
+doc/key/
+
+# Logs
+log/
