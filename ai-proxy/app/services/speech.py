@@ -1,28 +1,25 @@
 """
-Google Cloud Speech-to-Text v2 (Chirp)
-Region: europe-west3 (Frankfurt)
+Google Cloud Speech-to-Text v2 — Chirp 3
+Multi-region: eu (eu-speech.googleapis.com)
 """
 import os
+from google.api_core.client_options import ClientOptions
 from google.cloud.speech_v2 import SpeechAsyncClient
 from google.cloud.speech_v2.types import cloud_speech
 
 GCP_PROJECT = os.environ["GCP_PROJECT"]
-RECOGNIZER = f"projects/{GCP_PROJECT}/locations/europe-west3/recognizers/_"
+RECOGNIZER = f"projects/{GCP_PROJECT}/locations/eu/recognizers/_"
 
 
-async def transcribe_audio(audio_bytes: bytes, content_type: str) -> dict:
-    client = SpeechAsyncClient()
-
-    audio_encoding = (
-        cloud_speech.RecognitionConfig.AudioEncoding.MP3
-        if "mpeg" in content_type or "m4a" in content_type
-        else cloud_speech.RecognitionConfig.AudioEncoding.LINEAR16
+async def transcribe_audio(audio_bytes: bytes) -> dict:
+    client = SpeechAsyncClient(
+        client_options=ClientOptions(api_endpoint="eu-speech.googleapis.com")
     )
 
     config = cloud_speech.RecognitionConfig(
         auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
         language_codes=["de-DE"],
-        model="chirp",
+        model="chirp_3",
     )
 
     request = cloud_speech.RecognizeRequest(

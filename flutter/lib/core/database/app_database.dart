@@ -1,9 +1,8 @@
-import 'dart:io';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import 'database_connection_web.dart'
+    if (dart.library.io) 'database_connection_native.dart';
 
 part 'app_database.g.dart';
 
@@ -37,18 +36,10 @@ class RawTranscripts extends Table {
 
 @DriftDatabase(tables: [Entries, RawTranscripts])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase() : super(LazyDatabase(() => openDatabaseConnection()));
 
   @override
   int get schemaVersion => 1;
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'mathias.db'));
-    return NativeDatabase.createInBackground(file);
-  });
 }
 
 @Riverpod(keepAlive: true)

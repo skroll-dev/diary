@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,7 +19,7 @@ class AiTagebuchApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(authServiceProvider); // warm up anonymous auth on startup
+    if (!kIsWeb) ref.watch(authServiceProvider); // warm up anonymous auth on startup
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'AI Tagebuch',

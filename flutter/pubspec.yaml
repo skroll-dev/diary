@@ -1,10 +1,10 @@
 name: ai_tagebuch
 description: AI-gestütztes Sprach-Tagebuch – Codename Mathias
-publish_to: 'none'
+publish_to: "none"
 version: 0.1.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -15,7 +15,7 @@ dependencies:
   riverpod_annotation: ^4.0.2
 
   # Audio
-  record: ^6.2.0
+  record: ^7.0.0
   audio_session: ^0.2.3
 
   # Lokale Datenbank (Offline-First)

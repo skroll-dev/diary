@@ -33,5 +33,5 @@ async def transcribe(
 
     log.info("transcribe_request", size_bytes=len(audio_bytes), content_type=audio.content_type)
 
-    result = await transcribe_audio(audio_bytes, audio.content_type)
+    result = await transcribe_audio(audio_bytes)
     return TranscribeResponse(**result)

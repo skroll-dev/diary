@@ -60,11 +60,13 @@ cd flutter && flutterfire configure --project=diary-6fa61 --platforms=android,io
 
 ```
 Flutter App (iOS/Android/Web)
-  └─► Firebase Auth (user identity)
-  └─► ai-proxy (Cloud Run) ──► Cloud Speech-to-Text v2 (Chirp, de-DE)
-  │     audio bytes in RAM  └─► Vertex AI Gemini 2.0 Flash (entry generation)
-  │     never persisted
+  └─► Firebase Auth (anonymous, user identity)
+  └─► ai-proxy (Cloud Run)
+  │     POST /transcribe  ──► Cloud Speech-to-Text v2 Chirp 3 (eu, de-DE)
+  │     POST /entries/normalize ──► Vertex AI Gemini 2.0 Flash
+  │     audio bytes processed in RAM, never persisted
   └─► Cloud Firestore (eu-eur3, entries per user)
+  └─► Drift (SQLite, local source of truth)
 
 gdpr-export (Cloud Run) ──► Firestore (JSON export / account deletion)
 ```
@@ -88,12 +90,26 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 
 **`RecordingContext`** (`features/recording/recording_context.dart`) is a sealed class passed as GoRouter `extra` to `/`:
 - `FreshRecording` — default, new entry
-- `ExtendingTopic({topicTitle, followUpHint?})` — returning from Topics to add to a specific topic; subtitle on RecordingScreen shows the topic-specific follow-up question
+- `ExtendingTopic({topicTitle, followUpHint?})` — returning from Topics to add to a specific topic
 - `AddingTopic` — returning from Topics to record a new topic
 
-When recording stops, `RecordingScreen` captures `_dateLabel` and `_timerLabel` **before** the async processing delay, then navigates: `context.go('/topics', extra: (date: date, duration: duration))`. The router unwraps this record and passes it to `TopicsReviewScreen` as constructor params.
+**Navigation stack rules — critical:**
+- `context.push()` for: recording→topics, topics→entry. These stack screens so back works.
+- `context.go('/')` for: "Von vorne anfangen", "Ergänzen", "Neues Thema" — these intentionally reset the stack.
+- `TopicsReviewScreen` back button: `context.pop()` when topics exist; `context.go('/')` when `_topics.isEmpty` (no orphaned back button on RecordingScreen after full delete).
+- Deleting the last topic auto-calls `context.go('/')` — no empty-state limbo.
 
-**`TopicsReviewScreen`** holds a mutable `_topics` list (copy of sample data). Supports per-topic deletion (with confirmation dialog), global "Von vorne anfangen" (wipes all → navigates to `/` with `FreshRecording`), and "Ergänzen" (→ `/` with `ExtendingTopic`).
+**`RecordingScreen` continuation state:**
+- `_hasExistingEntry` flag: set to `true` when first recording pushes to `/topics`. Survives the user popping back.
+- When `_hasExistingEntry && state == idle`: shows `< Themen` nav button (top-left), a "Wird zum Eintrag ergänzt" chip, and adapted subtitle. The button re-pushes `/topics` using stored `_lastDate`/`_lastDuration`.
+- When `_hasExistingEntry` is false: no back button (fresh session or after "Von vorne anfangen").
+
+**Recording pipeline** (`_stopRecording` in `recording_screen.dart`):
+1. `RecordingService.stopAndRead()` → raw `AudioData` (WAV on web/iOS, M4A on Android)
+2. `ProxyClient.transcribe(audio)` → raw transcript string
+3. `ProxyClient.normalize(transcript)` → normalized text
+4. `EntryRepository.saveEntry(...)` → persisted to Drift + queued for Firestore sync
+5. State reset to idle + `context.push('/topics')`
 
 #### Data model (`shared/models/entry.dart`)
 - `Entry` — one per calendar day; fields: `bodyMarkdown`, `rawTranscripts`, `followUpQuestions`, `mood` (enum), `moodScore` (-1.0…+1.0), `durationSeconds`, `language`, `version`
@@ -102,31 +118,35 @@ When recording stops, `RecordingScreen` captures `_dateLabel` and `_timerLabel` 
 
 #### Key architectural rules
 - Drift (SQLite) is the local source of truth; Firestore syncs in background
-- Audio → Firebase Storage → ai-proxy transcription → auto-delete from Storage
 - `kIsWeb` guards all audio recording paths; web shows an "App only" hint instead
+- `authServiceProvider` warmup is guarded with `if (!kIsWeb)` in `main.dart` — Firebase Auth is not initialised on web
+- `ProxyClient` skips the `Authorization` header when `_baseUrl` contains `localhost` — no auth needed for local dev
 
 #### Current implementation state
 
 | Screen | State |
 |---|---|
-| `RecordingScreen` | UI complete — animated waveform, 3 states (idle/recording/processing), context-aware subtitles. No real audio yet. |
-| `TopicsReviewScreen` | UI complete — topic cards, per-topic delete, "Von vorne anfangen", sticky CTA. Sample data only. |
+| `RecordingScreen` | UI complete + real audio pipeline connected |
+| `TopicsReviewScreen` | UI complete — topic cards, collapsible transcript, per-topic delete, "Von vorne anfangen", sticky CTA. Sample data only. |
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
 | `HistoryScreen` | Skeleton |
 | `settings/` | Folder exists, no route wired yet |
 
 ### ai-proxy (`ai-proxy/app/`)
 
-FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `services/auth.py`).
+FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `services/auth.py`). Auth is skipped automatically for `localhost` by the Flutter client.
 
 | Route | Description |
 |---|---|
-| `POST /transcribe` | Audio file (m4a/aac/wav, max 10 MB) → raw transcript via Cloud Speech-to-Text Chirp |
+| `POST /transcribe` | Audio (m4a/aac/wav, max 10 MB) → raw transcript via Chirp 3 |
+| `POST /entries/normalize` | Raw transcript → cleaned text via Gemini |
 | `POST /entries/generate` | Transcript → diary entry JSON (Prompt A) |
 | `POST /entries/merge` | Existing entry + new transcript → merged entry JSON (Prompt B) |
 | `GET /health` | Liveness check |
 
-Gemini model: `gemini-2.0-flash-001`, `temperature=0.7`, JSON output mode. The AI persona is named **Mathias** — warm, restrained, writes in first person using the user's own words, adds no invented content.
+**Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` for Chirp 3 — regional paths (`europe-west3`, `europe-west4`) and `global` are rejected.
+
+**Gemini model:** `gemini-2.0-flash-001`, `temperature=0.7`, JSON output mode. The AI persona is named **Mathias** — warm, restrained, writes in first person using the user's own words, adds no invented content.
 
 ### gdpr-export (`gdpr-export/app/`)
 
@@ -134,7 +154,7 @@ FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON 
 
 ### Agent Skills
 
-31 Open Agent Skills in `.agents/skills/`. **Before writing code for a relevant domain, read the matching `SKILL.md` first.**
+Skills in `.claude/skills/`. **Before writing code for a relevant domain, read the matching `SKILL.md` first.**
 
 Key skills:
 - `firebase-firestore` — mandatory for any Firestore work (security rules, queries, indexes)
@@ -143,11 +163,9 @@ Key skills:
 - `gemini-api` — Vertex AI / Gemini SDK patterns
 - `ui-ux-pro-max` — design system, color/typography, UX patterns (invoke via `/ui-ux-pro-max` skill)
 
-See `AGENTS.md` for the full skill matrix and workflow rule.
-
 ## Key Constraints
 
-- **GDPR / DSGVO:** All GCP resources must stay in `europe-west3` or `eu-eur3`. Audio files must be deleted after transcription (retention via `AUDIO_RETENTION_HOURS`).
-- **Firebase App Check** is required on all ai-proxy routes — the Flutter client must attach an App Check token to every request.
+- **GDPR / DSGVO:** Speech-to-Text uses Chirp 3 at `eu-speech.googleapis.com` (EU multi-region). All other GCP resources must stay in `europe-west3` or `eu-eur3`. Audio is processed in RAM only — never written to disk or object storage.
+- **Firebase App Check** is required on all ai-proxy routes in production. Anonymous auth must be enabled in the Firebase console (`diary-6fa61` → Authentication → Sign-in method).
 - **Web audio:** `kIsWeb` must gate any `record` / `local_auth` usage. Never import these packages unconditionally — they will fail to compile for web.
 - **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.

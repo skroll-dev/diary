@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'auth_service.dart';
+import 'recording_service.dart' show AudioData;
 
 part 'proxy_client.g.dart';
 
@@ -16,10 +17,16 @@ class ProxyClient {
   final Ref _ref;
 
   Future<Dio> _dio() async {
-    final token = await _ref.read(authServiceProvider.notifier).getIdToken();
+    // Skip auth for local dev — Firebase anonymous auth is not required on localhost
+    final isLocal = _baseUrl.contains('localhost') || _baseUrl.contains('127.0.0.1');
+    final headers = <String, dynamic>{};
+    if (!isLocal) {
+      final token = await _ref.read(authServiceProvider.notifier).getIdToken();
+      headers['Authorization'] = 'Bearer $token';
+    }
     final dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
-      headers: {'Authorization': 'Bearer $token'},
+      headers: headers,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 60),
     ));
@@ -34,13 +41,14 @@ class ProxyClient {
     return dio;
   }
 
-  Future<String> transcribe(Uint8List audioBytes) async {
+  Future<String> transcribe(AudioData audio) async {
     final dio = await _dio();
+    final parts = audio.contentType.split('/');
     final form = FormData.fromMap({
       'audio': MultipartFile.fromBytes(
-        audioBytes,
-        filename: 'recording.m4a',
-        contentType: DioMediaType('audio', 'm4a'),
+        audio.bytes,
+        filename: 'recording.${parts.last}',
+        contentType: DioMediaType(parts.first, parts.last),
       ),
     });
     final resp = await dio.post('/transcribe/', data: form);

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -91,10 +90,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
-      final audioBytes =
-          await ref.read(recordingServiceProvider).stopAndRead();
+      final audio = await ref.read(recordingServiceProvider).stopAndRead();
       final rawTranscript =
-          await ref.read(proxyClientProvider).transcribe(audioBytes);
+          await ref.read(proxyClientProvider).transcribe(audio);
       final normalizedText =
           await ref.read(proxyClientProvider).normalize(rawTranscript);
       await ref.read(entryRepositoryProvider).saveEntry(
@@ -137,35 +135,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(child: kIsWeb ? _webView(context) : _appView(context)),
-    );
-  }
-
-  Widget _webView(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mic_off_outlined, size: 56, color: cs.outlineVariant),
-            const SizedBox(height: 20),
-            Text(
-              'Sprachaufnahme nur in der App',
-              style: tt.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Lade die iOS- oder Android-App,\num Einträge per Sprache zu diktieren.',
-              style: tt.bodyMedium?.copyWith(color: cs.outline),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+      body: SafeArea(child: _appView(context)),
     );
   }
 
