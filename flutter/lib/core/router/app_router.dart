@@ -6,6 +6,14 @@ import '../../features/recording/recording_context.dart';
 import '../../features/topics/presentation/topics_review_screen.dart';
 import '../../features/entry/presentation/entry_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
+import '../../shared/services/proxy_client.dart' show TopicDto;
+
+typedef TopicsArgs = ({
+  String date,
+  String duration,
+  List<TopicDto> topics,
+  String transcript,
+});
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -21,10 +29,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/topics',
         builder: (context, state) {
-          final args = state.extra as ({String date, String duration})?;
+          final args = state.extra as TopicsArgs?;
           return TopicsReviewScreen(
             date: args?.date ?? '',
             duration: args?.duration ?? '',
+            topics: args?.topics ?? [],
+            transcript: args?.transcript ?? '',
           );
         },
       ),

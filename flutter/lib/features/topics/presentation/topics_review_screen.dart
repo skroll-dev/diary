@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../recording/recording_context.dart';
+import '../../../shared/services/proxy_client.dart' show TopicDto;
 
 class _TopicData {
   final String title;
@@ -28,44 +29,14 @@ class _TranscriptEntry {
   final String text;
 }
 
-// Two recordings on the same day — the second was added after reviewing topics
-final _sampleTranscripts = [
-  _TranscriptEntry(
-    timestamp: DateTime(2026, 5, 17, 14, 23),
-    text:
-        'Also, heute hatte ich das Meeting mit Tim. Wir haben über den Marketingplan gesprochen, aber ich hab meine Bedenken irgendwie nicht richtig rausgebracht. Er hat das so schnell abgehakt und ich hab einfach nichts gesagt. Das ärgert mich eigentlich.',
-  ),
-  _TranscriptEntry(
-    timestamp: DateTime(2026, 5, 17, 20, 47),
-    text:
-        'Bin dann abends noch spazieren gegangen um den Kopf frei zu kriegen. Hat wirklich geholfen. Und ich mach mir Sorgen wegen morgen – das Team muss entscheiden ob wir mit dem neuen Ansatz weitermachen oder doch beim alten bleiben.',
-  ),
-];
+// ── Color palette cycled per topic ────────────────────────────────────────────
 
-// ── Topic data ────────────────────────────────────────────────────────────────
-
-const _sampleTopics = [
-  _TopicData(
-    title: 'Meeting mit Tim',
-    summary: 'Marketing-Plan, Bedenken zurückgehalten',
-    cardColor: Color(0xFFEDE9FF),
-    accentColor: Color(0xFF5E35B1),
-    followUpHint: 'Was hättest du Tim gerne gesagt?\nWas hat dich daran gehindert?',
-  ),
-  _TopicData(
-    title: 'Spaziergang am Abend',
-    summary: 'Kopf klar bekommen',
-    cardColor: Color(0xFFE8F5E9),
-    accentColor: Color(0xFF2E7D32),
-    followUpHint: 'Was hat sich nach dem Spaziergang\nanders angefühlt?',
-  ),
-  _TopicData(
-    title: 'Sorgen wegen morgen',
-    summary: 'Entscheidung im Team',
-    cardColor: Color(0xFFFFF3E0),
-    accentColor: Color(0xFFBF360C),
-    followUpHint: 'Was besorgt dich am meisten?\nWas erhoffst du dir von morgen?',
-  ),
+const _topicPalette = [
+  (Color(0xFFEDE9FF), Color(0xFF5E35B1)),
+  (Color(0xFFE8F5E9), Color(0xFF2E7D32)),
+  (Color(0xFFFFF3E0), Color(0xFFBF360C)),
+  (Color(0xFFE3F2FD), Color(0xFF1565C0)),
+  (Color(0xFFFCE4EC), Color(0xFFC62828)),
 ];
 
 class TopicsReviewScreen extends ConsumerStatefulWidget {
@@ -73,10 +44,14 @@ class TopicsReviewScreen extends ConsumerStatefulWidget {
     super.key,
     this.date = '',
     this.duration = '',
+    this.topics = const [],
+    this.transcript = '',
   });
 
   final String date;
   final String duration;
+  final List<TopicDto> topics;
+  final String transcript;
 
   @override
   ConsumerState<TopicsReviewScreen> createState() => _TopicsReviewScreenState();
@@ -99,7 +74,17 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   @override
   void initState() {
     super.initState();
-    _topics = List.of(_sampleTopics);
+    _topics = widget.topics.indexed.map((e) {
+      final (i, dto) = e;
+      final (cardColor, accentColor) = _topicPalette[i % _topicPalette.length];
+      return _TopicData(
+        title: dto.title,
+        summary: dto.summary,
+        cardColor: cardColor,
+        accentColor: accentColor,
+        followUpHint: dto.followUpHint,
+      );
+    }).toList();
     _entrance = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -198,15 +183,15 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   // ── Transcript section ───────────────────────────────────────────────────────
 
   Widget _buildTranscriptSection(BuildContext context) {
+    if (widget.transcript.isEmpty) return const SizedBox.shrink();
+
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final count = _sampleTranscripts.length;
-    final countLabel = '$count ${count == 1 ? 'Aufnahme' : 'Aufnahmen'}';
+    final entry = _TranscriptEntry(timestamp: DateTime.now(), text: widget.transcript);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Toggle row
         GestureDetector(
           onTap: () =>
               setState(() => _isTranscriptExpanded = !_isTranscriptExpanded),
@@ -217,45 +202,30 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               children: [
                 Icon(Icons.mic_none_rounded, size: 15, color: cs.outline),
                 const SizedBox(width: 6),
-                Text(
-                  'Originaltext',
-                  style: tt.labelMedium?.copyWith(color: cs.onSurface),
-                ),
+                Text('Originaltext',
+                    style: tt.labelMedium?.copyWith(color: cs.onSurface)),
                 const SizedBox(width: 8),
-                Text(
-                  countLabel,
-                  style: tt.labelSmall?.copyWith(color: cs.outline),
-                ),
+                Text('1 Aufnahme',
+                    style: tt.labelSmall?.copyWith(color: cs.outline)),
                 const Spacer(),
                 AnimatedRotation(
                   turns: _isTranscriptExpanded ? 0.5 : 0.0,
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 20,
-                    color: cs.outline,
-                  ),
+                  child: Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 20, color: cs.outline),
                 ),
               ],
             ),
           ),
         ),
-        // Expandable bubbles
         AnimatedSize(
           duration: const Duration(milliseconds: 320),
           curve: Curves.easeInOut,
           child: _isTranscriptExpanded
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 10),
-                    for (final entry in _sampleTranscripts)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _TranscriptBubble(entry: entry),
-                      ),
-                  ],
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 10),
+                  child: _TranscriptBubble(entry: entry),
                 )
               : const SizedBox.shrink(),
         ),

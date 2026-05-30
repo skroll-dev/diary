@@ -22,6 +22,10 @@ class EntryRepository {
     required String rawTranscript,
     required String normalizedText,
     required int durationSeconds,
+    required String bodyMarkdown,
+    required String mood,
+    required double moodScore,
+    required List<String> followUpQuestions,
   }) async {
     final user = await _auth.getUser();
     final now = DateTime.now().toIso8601String();
@@ -34,7 +38,7 @@ class EntryRepository {
               id: entryId,
               userId: user.uid,
               date: date,
-              bodyMarkdown: normalizedText,
+              bodyMarkdown: bodyMarkdown,
               durationSeconds: durationSeconds,
               createdAt: now,
               updatedAt: now,
@@ -54,7 +58,10 @@ class EntryRepository {
       uid: user.uid,
       entryId: entryId,
       date: date,
-      normalizedText: normalizedText,
+      bodyMarkdown: bodyMarkdown,
+      mood: mood,
+      moodScore: moodScore,
+      followUpQuestions: followUpQuestions,
       rawTranscript: rawTranscript,
       transcriptId: transcriptId,
       durationSeconds: durationSeconds,
@@ -66,7 +73,10 @@ class EntryRepository {
     required String uid,
     required String entryId,
     required String date,
-    required String normalizedText,
+    required String bodyMarkdown,
+    required String mood,
+    required double moodScore,
+    required List<String> followUpQuestions,
     required String rawTranscript,
     required String transcriptId,
     required int durationSeconds,
@@ -82,10 +92,10 @@ class EntryRepository {
         'id': entryId,
         'userId': uid,
         'date': date,
-        'bodyMarkdown': normalizedText,
-        'mood': 'neutral',
-        'moodScore': 0.0,
-        'followUpQuestions': [],
+        'bodyMarkdown': bodyMarkdown,
+        'mood': mood,
+        'moodScore': moodScore,
+        'followUpQuestions': followUpQuestions,
         'durationSeconds': durationSeconds,
         'language': 'de',
         'version': 1,
@@ -99,7 +109,7 @@ class EntryRepository {
       await (_db.update(_db.entries)
             ..where((e) => e.id.equals(entryId)))
           .write(const EntriesCompanion(synced: Value(true)));
-    } catch (_) {
+    } catch (e) {
       // Best-effort — will remain unsynced until next save
     }
   }

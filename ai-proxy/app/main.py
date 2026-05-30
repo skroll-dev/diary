@@ -38,6 +38,7 @@ class _TeeLoggerFactory:
 
 def _configure_logging() -> None:
     log_file = os.environ.get("LOG_FILE")
+    min_level = os.environ.get("LOG_LEVEL", "info").lower()
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
@@ -46,6 +47,9 @@ def _configure_logging() -> None:
             structlog.processors.ExceptionRenderer(),
             structlog.dev.ConsoleRenderer(),
         ],
+        wrapper_class=structlog.make_filtering_bound_logger(
+            {"debug": 10, "info": 20, "warning": 30, "error": 40}.get(min_level, 20)
+        ),
         logger_factory=_TeeLoggerFactory(log_file),
         cache_logger_on_first_use=True,
     )
@@ -81,8 +85,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # TODO: auf Firebase Hosting Domain einschränken
-    allow_methods=["POST"],
-    allow_headers=["Authorization", "X-Firebase-AppCheck"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(transcribe_router, prefix="/transcribe", tags=["STT"])

@@ -6,8 +6,12 @@ Prompts A + B aus MVP-Konzept §9
 
 import json
 import os
+import re
+import structlog
 import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
+
+log = structlog.get_logger()
 
 GCP_PROJECT = os.environ["GCP_PROJECT"]
 GCP_REGION = os.environ.get("GCP_REGION", "europe-west3")
@@ -15,10 +19,25 @@ MODEL = "gemini-2.5-flash"
 
 vertexai.init(project=GCP_PROJECT, location=GCP_REGION)
 
+
+def _extract_json(text: str) -> dict:
+    """Parse JSON from Gemini response, stripping markdown fences if present."""
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", text.strip())
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start != -1 and end != -1:
+        cleaned = cleaned[start : end + 1]
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        log.error("gemini_json_parse_error", error=str(e), raw_response=text)
+        raise
+
+
 _GENERATION_CONFIG = GenerationConfig(
     response_mime_type="application/json",
     temperature=0.7,
-    max_output_tokens=1024,
+    max_output_tokens=8192,
 )
 
 _SYSTEM_PROMPT_GENERATE = """Du bist Mathias, ein zurückhaltender, warmherziger Tagebuch-Assistent.
@@ -36,10 +55,23 @@ Gib AUSSCHLIESSLICH valides JSON zurück:
     "Genau eine offene Frage, keine Ja/Nein-Frage",
     "Bezieht sich auf etwas Konkretes aus dem Eintrag",
     "Dritte Frage geht in die Tiefe, nicht in die Breite"
+  ],
+  "topics": [
+    {
+      "title": "Thema in 2-4 Wörtern",
+      "summary": "Was passiert ist, 5-8 Wörter, kein Subjekt",
+      "follow_up_hint": "Eine spezifische Vertiefungsfrage für genau dieses Thema, max. 15 Wörter"
+    }
   ]
 }
 
-Regeln für die Fragen:
+Regeln für topics:
+- Ein Topic pro erkennbarem Thema oder Ereignis im Transkript (min. 1, max. 5)
+- title: prägnant, keine Verben (z.B. \"Meeting mit Tim\", \"Spaziergang abends\")
+- summary: beschreibend, kein \"Ich\" (z.B. \"Bedenken nicht ausgesprochen\")
+- follow_up_hint: konkret auf dieses Thema bezogen, nicht allgemein
+
+Regeln für die follow_up_questions:
 - Keine Ratschläge, keine Therapie-Phrasen
 - Keine Frage darf mit \"Wie fühlst du dich?\" beginnen
 - Greife konkrete Wörter aus dem Eintrag auf
@@ -55,12 +87,20 @@ Gib JSON in der gleichen Struktur wie zuvor zurück."""
 
 
 async def generate_entry(transcript: str, language: str = "de") -> dict:
+    log.info("gemini_call", fn="generate_entry", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_GENERATE)
     response = await model.generate_content_async(
         transcript,
         generation_config=_GENERATION_CONFIG,
     )
-    return json.loads(response.text)
+    candidate = response.candidates[0]
+    finish_reason = candidate.finish_reason.name if candidate.finish_reason else "UNKNOWN"
+    usage = response.usage_metadata
+    log.info("gemini_response", fn="generate_entry", finish_reason=finish_reason,
+             output_tokens=usage.candidates_token_count,
+             total_tokens=usage.total_token_count,
+             output=response.text)
+    return _extract_json(response.text)
 
 
 _SYSTEM_PROMPT_NORMALIZE = """Du bearbeitest ein rohes Sprachtranskript leicht:
@@ -76,9 +116,11 @@ Gib ausschließlich den bereinigten Text zurück — kein JSON, keine Erklärung
 
 
 async def normalize_transcript(transcript: str) -> str:
+    log.info("gemini_call", fn="normalize_transcript", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_NORMALIZE)
     config = GenerationConfig(temperature=0.2, max_output_tokens=2048)
     response = await model.generate_content_async(transcript, generation_config=config)
+    log.info("gemini_response", fn="normalize_transcript", output=response.text)
     return response.text.strip()
 
 
@@ -88,6 +130,7 @@ async def merge_entry(
     previous_questions: list[str],
     language: str = "de",
 ) -> dict:
+    log.info("gemini_call", fn="merge_entry", existing_len=len(existing_entry), new_transcript=new_transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_MERGE)
     user_message = f"""BESTEHENDER EINTRAG:
 {existing_entry}
@@ -102,4 +145,5 @@ BISHERIGE FOLGEFRAGEN (nicht wiederholen):
         user_message,
         generation_config=_GENERATION_CONFIG,
     )
-    return json.loads(response.text)
+    log.info("gemini_response", fn="merge_entry", output=response.text)
+    return _extract_json(response.text)

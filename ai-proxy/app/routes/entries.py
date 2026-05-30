@@ -39,11 +39,18 @@ class MergeRequest(BaseModel):
     language: str = Field(default="de")
 
 
+class TopicItem(BaseModel):
+    title: str
+    summary: str
+    follow_up_hint: str
+
+
 class EntryResponse(BaseModel):
     body_markdown: str
     mood: MoodType
     mood_score: float = Field(..., ge=-1.0, le=1.0)
-    follow_up_questions: list[str] = Field(..., min_length=2, max_length=3)
+    follow_up_questions: list[str] = Field(..., min_length=1, max_length=5)
+    topics: list[TopicItem] = Field(default_factory=list)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

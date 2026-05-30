@@ -41,6 +41,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   bool _hasExistingEntry = false;
   String _lastDate = '';
   String _lastDuration = '';
+  List<TopicDto> _lastTopics = [];
+  String _lastTranscript = '';
 
   @override
   void initState() {
@@ -89,17 +91,28 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final durationSec = _seconds;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
+    var topics = <TopicDto>[];
+    var transcript = '';
+
     try {
       final audio = await ref.read(recordingServiceProvider).stopAndRead();
       final rawTranscript =
           await ref.read(proxyClientProvider).transcribe(audio);
       final normalizedText =
           await ref.read(proxyClientProvider).normalize(rawTranscript);
+      final entry =
+          await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      topics = entry.topics;
+      transcript = normalizedText;
       await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
             normalizedText: normalizedText,
             durationSeconds: durationSec,
+            bodyMarkdown: entry.bodyMarkdown,
+            mood: entry.mood,
+            moodScore: entry.moodScore,
+            followUpQuestions: entry.followUpQuestions,
           );
     } catch (e) {
       debugPrint('[RecordingScreen] pipeline error: $e');
@@ -113,8 +126,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         _hasExistingEntry = true;
         _lastDate = date;
         _lastDuration = duration;
+        _lastTopics = topics;
+        _lastTranscript = transcript;
       });
-      context.push('/topics', extra: (date: date, duration: duration));
+      context.push('/topics', extra: (
+        date: date,
+        duration: duration,
+        topics: topics,
+        transcript: transcript,
+      ));
     }
   }
 
@@ -158,7 +178,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                 child: TextButton.icon(
                   onPressed: () => context.push(
                     '/topics',
-                    extra: (date: _lastDate, duration: _lastDuration),
+                    extra: (
+                      date: _lastDate,
+                      duration: _lastDuration,
+                      topics: _lastTopics,
+                      transcript: _lastTranscript,
+                    ),
                   ),
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
                   label: const Text('Themen'),

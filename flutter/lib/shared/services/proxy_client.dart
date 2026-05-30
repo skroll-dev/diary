@@ -7,6 +7,50 @@ import 'recording_service.dart' show AudioData;
 
 part 'proxy_client.g.dart';
 
+class TopicDto {
+  const TopicDto({
+    required this.title,
+    required this.summary,
+    required this.followUpHint,
+  });
+  final String title;
+  final String summary;
+  final String followUpHint;
+
+  factory TopicDto.fromJson(Map<String, dynamic> j) => TopicDto(
+        title: j['title'] as String? ?? '',
+        summary: j['summary'] as String? ?? '',
+        followUpHint: j['follow_up_hint'] as String? ?? '',
+      );
+}
+
+class EntryDto {
+  const EntryDto({
+    required this.bodyMarkdown,
+    required this.mood,
+    required this.moodScore,
+    required this.followUpQuestions,
+    required this.topics,
+  });
+  final String bodyMarkdown;
+  final String mood;
+  final double moodScore;
+  final List<String> followUpQuestions;
+  final List<TopicDto> topics;
+
+  factory EntryDto.fromJson(Map<String, dynamic> j) => EntryDto(
+        bodyMarkdown: j['body_markdown'] as String? ?? '',
+        mood: j['mood'] as String? ?? 'neutral',
+        moodScore: (j['mood_score'] as num?)?.toDouble() ?? 0.0,
+        followUpQuestions:
+            (j['follow_up_questions'] as List?)?.cast<String>() ?? [],
+        topics: (j['topics'] as List?)
+                ?.map((t) => TopicDto.fromJson(t as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
+}
+
 const _baseUrl = String.fromEnvironment(
   'PROXY_BASE_URL',
   defaultValue: 'http://localhost:8080',
@@ -62,6 +106,15 @@ class ProxyClient {
       data: {'transcript': transcript},
     );
     return resp.data['normalized_text'] as String;
+  }
+
+  Future<EntryDto> generateEntry(String transcript) async {
+    final dio = await _dio();
+    final resp = await dio.post(
+      '/entries/generate',
+      data: {'transcript': transcript},
+    );
+    return EntryDto.fromJson(resp.data as Map<String, dynamic>);
   }
 }
 
