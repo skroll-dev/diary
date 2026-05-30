@@ -1,0 +1,48 @@
+name: Deploy Flutter web to Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/deploy-web.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: stable
+          cache: true
+
+      - name: Write firebase_options.dart
+        env:
+          FIREBASE_OPTIONS: ${{ secrets.FIREBASE_OPTIONS_DART }}
+        run: echo "$FIREBASE_OPTIONS" > flutter/lib/firebase_options.dart
+
+      - name: Flutter pub get
+        run: flutter pub get
+        working-directory: flutter
+
+      - name: Build web
+        run: |
+          flutter build web \
+            --release \
+            --dart-define=PROXY_BASE_URL=${{ secrets.PROXY_BASE_URL }} \
+            --web-renderer canvaskit
+        working-directory: flutter
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: diary-6fa61
+          channelId: live
+          entryPoint: '.'
