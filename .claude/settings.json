@@ -53,7 +53,23 @@
       "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"journal review topics list cards contextual actions minimal calm\" --design-system -p \"Mathias Topics Review\" -f markdown)",
       "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"confirmation dialog destructive action delete\" --domain ux -n 6)",
       "Bash(git -C /Users/sebastian.kroll/Documents/git/diary diff --stat)",
-      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary log --oneline -3)"
+      "Bash(git -C /Users/sebastian.kroll/Documents/git/diary log --oneline -3)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"chat message bubble collapsible transcript voice recording\" --domain ux -n 5)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"expandable collapsible section accordion\" --domain ux -n 4)",
+      "Bash(python3 .claude/skills/ui-ux-pro-max/scripts/search.py \"navigation header sticky scroll overlap\" --domain ux -n 5)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"context awareness re-entry state continuation mode indicator\" --domain ux -n 4)",
+      "Bash(git commit -m ' *)",
+      "Bash(dart run *)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(flutter upgrade *)",
+      "WebFetch(domain:pub.dev)",
+      "Read(//log/**)",
+      "Bash(ls /log/)",
+      "Bash(find /Users/sebastian.kroll -name \"ai-proxy.log\" 2>/dev/null; find /tmp -name \"*.log\" 2>/dev/null | head -10; find /var/log -name \"ai-proxy*\" 2>/dev/null)",
+      "Read(//private/tmp/**)",
+      "Read(//private/var/log/**)",
+      "Bash(.venv/bin/python3 -c ' *)",
+      "WebFetch(domain:docs.cloud.google.com)"
     ]
   }
 }
