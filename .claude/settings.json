@@ -71,7 +71,12 @@
       "Bash(.venv/bin/python3 -c ' *)",
       "WebFetch(domain:docs.cloud.google.com)",
       "Bash(flutter --version)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(i.get\\('size','?'\\), i.get\\('scale','?'\\), i.get\\('filename','MISSING'\\)\\) for i in d['images']]\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(i.get\\('size','?'\\), i.get\\('scale','?'\\), i.get\\('filename','MISSING'\\)\\) for i in d['images']]\")",
+      "Bash(gcloud projects *)",
+      "Bash(gcloud run *)",
+      "Bash(/usr/local/bin/gcloud run *)",
+      "Bash(/usr/local/bin/gcloud auth *)",
+      "Bash(gcloud config *)"
     ]
   }
 }
