@@ -24,7 +24,7 @@ async def transcribe(
     audio: UploadFile = File(...),
     _: None = Depends(verify_app_check),
 ):
-    if audio.content_type not in ("audio/m4a", "audio/aac", "audio/wav", "audio/mpeg"):
+    if audio.content_type not in ("audio/m4a", "audio/aac", "audio/wav", "audio/mpeg", "audio/webm"):
         raise HTTPException(status_code=415, detail="Nicht unterstütztes Audio-Format")
 
     audio_bytes = await audio.read()
