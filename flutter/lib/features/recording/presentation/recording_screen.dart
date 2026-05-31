@@ -158,6 +158,86 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     }
   }
 
+  Future<void> _showTranscriptDialog() async {
+    final controller = TextEditingController();
+    final rawTranscript = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Transkript eingeben'),
+        content: TextField(
+          controller: controller,
+          maxLines: 6,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Rohes Transkript …',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Verarbeiten'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (rawTranscript == null || rawTranscript.isEmpty) return;
+
+    setState(() {
+      _state = _RecordingState.processing;
+      _seconds = 0;
+    });
+
+    final date = _dateLabel;
+    final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    var topics = <TopicDto>[];
+    var transcript = '';
+
+    try {
+      final normalizedText =
+          await ref.read(proxyClientProvider).normalize(rawTranscript);
+      final entry =
+          await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      topics = entry.topics;
+      transcript = normalizedText;
+      await ref.read(entryRepositoryProvider).saveEntry(
+            date: isoDate,
+            rawTranscript: rawTranscript,
+            normalizedText: normalizedText,
+            durationSeconds: 0,
+            bodyMarkdown: entry.bodyMarkdown,
+            mood: entry.mood,
+            moodScore: entry.moodScore,
+            followUpQuestions: entry.followUpQuestions,
+          );
+    } catch (e) {
+      debugPrint('[RecordingScreen] debug pipeline error: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _state = _RecordingState.idle;
+        _hasExistingEntry = true;
+        _lastDate = date;
+        _lastDuration = '00:00';
+        _lastTopics = topics;
+        _lastTranscript = transcript;
+      });
+      context.push('/topics', extra: (
+        date: date,
+        duration: '00:00',
+        topics: topics,
+        transcript: transcript,
+      ));
+    }
+  }
+
   String get _timerLabel {
     final m = _seconds ~/ 60;
     final s = _seconds % 60;
@@ -467,6 +547,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             ),
             GestureDetector(
               onTap: isRecording ? _stopRecording : _startRecording,
+              onLongPress: isRecording ? null : _showTranscriptDialog,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,

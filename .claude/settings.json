@@ -76,7 +76,9 @@
       "Bash(gcloud run *)",
       "Bash(/usr/local/bin/gcloud run *)",
       "Bash(/usr/local/bin/gcloud auth *)",
-      "Bash(gcloud config *)"
+      "Bash(gcloud config *)",
+      "Bash(curl -s https://ai-proxy-918937960824.europe-west3.run.app/health)",
+      "Bash(curl -s -X POST https://ai-proxy-918937960824.europe-west3.run.app/entries/normalize -H 'Content-Type: application/json' -d '{\"transcript\": \"Test.\"}')"
     ]
   }
 }

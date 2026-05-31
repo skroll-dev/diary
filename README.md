@@ -5,7 +5,7 @@
 A privacy-first, AI-powered voice diary for the DACH market. Users dictate freely; Mathias — the AI persona — shapes their words into a coherent diary entry, preserves their voice, and proposes follow-up questions that go deeper, not wider.
 
 **Status:** UI prototype in progress — recording and topics screens complete, entry/history screens pending  
-**Platforms:** iOS (15.0+) · Android · Web (layout/review only)  
+**Platforms:** iOS (15.0+) · Android · Web  
 **All data stays in Frankfurt, EU.**
 
 ---
@@ -81,13 +81,13 @@ Cross-platform client built with Flutter (Dart). Offline-first: Drift (SQLite) i
 | State management | Riverpod 3 |
 | Routing | GoRouter 17 |
 | Local DB | Drift (SQLite) |
-| Audio recording | `record` package (iOS/Android only) |
+| Audio recording | `record` package (iOS/Android/Web) |
 | UI | Material Design 3, seed `#4A90D9` |
 | Auth | Firebase Auth |
 | App protection | Firebase App Check (App Attest / Play Integrity) |
 | Biometric lock | `local_auth` (FaceID / TouchID / BiometricPrompt) |
 
-> Web is supported for layout review. Audio recording on web shows an "App only" hint.
+> Web is fully supported. Audio recording uses PCM16 streaming over WebSocket on web.
 
 ---
 
@@ -97,14 +97,69 @@ Stateless FastAPI service on Cloud Run. Receives audio, transcribes it, generate
 
 | Route | Description |
 |---|---|
-| `POST /transcribe` | Audio (m4a/aac/wav, max 10 MB) → raw transcript |
+| `POST /transcribe/` | Audio (m4a/aac/wav, max 10 MB) → raw transcript |
+| `WS /transcribe/ws` | PCM16 stream (web) → raw transcript |
+| `POST /entries/normalize` | Raw transcript → cleaned text |
 | `POST /entries/generate` | Transcript → diary entry JSON (Prompt A) |
 | `POST /entries/merge` | Existing entry + new transcript → merged entry (Prompt B) |
 | `GET /health` | Liveness check |
 
-All routes require a valid `X-Firebase-AppCheck` token.
+All routes require a valid Firebase Auth ID token (`Authorization: Bearer <token>`).
 
-**AI model:** Gemini 2.0 Flash via Vertex AI (`europe-west3`), JSON output mode, temperature 0.7.
+**AI model:** Gemini 2.5 Flash via Vertex AI (`europe-west3`), JSON output mode, temperature 0.7.
+
+#### Recording Pipeline — Fresh Entry
+
+```
+Flutter                     ai-proxy                        GCP
+─────────────────────────────────────────────────────────────────────
+┌─────────────┐
+│  mic audio  │
+└──────┬──────┘
+       │  Web    → PCM16 stream   →  WS  /transcribe/ws  ─┐
+       │  Native → M4A bytes      →  POST /transcribe/   ─┴─► Chirp 3
+       │                                                        (eu, de-DE)
+       │                    raw transcript
+       │                    (unpolished STT output)
+       │                          │
+       │                          ▼
+       │                POST /entries/normalize  ──────────► Gemini
+       │
+       │                    cleaned text
+       │                    (Perfekt, no fillers, natural sentences)
+       │                          │
+       │                          ▼
+       │                POST /entries/generate   ──────────► Gemini
+       │
+       │                    EntryDto
+       │                    ├─ body_markdown        first-person prose
+       │                    ├─ mood + mood_score     enum · –1.0 … +1.0
+       │                    ├─ topics[]              title · summary · follow_up_hint
+       │                    └─ follow_up_questions[]
+       │                          │
+       └──────────────────────────┤
+                                  ▼
+                       Drift (SQLite, local)
+                       Firestore (eu-eur3, cloud sync)
+```
+
+#### Recording Pipeline — Extend Existing Entry
+
+```
+(transcribe + normalize identical to above)
+
+                    new cleaned text
+                    + existing entry body_markdown
+                          │
+                          ▼
+                POST /entries/merge     ──────────────────► Gemini
+                    (merges, deduplicates, re-sequences)
+                          │
+                    updated EntryDto  (same structure)
+                          │
+                          ▼
+               Drift + Firestore (updated in place)
+```
 
 ---
 
