@@ -60,6 +60,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.routes.transcribe import router as transcribe_router
+from app.routes.transcribe_ws import router as transcribe_ws_router
 from app.routes.entries import router as entries_router
 
 log = structlog.get_logger()
@@ -90,6 +91,7 @@ app.add_middleware(
 )
 
 app.include_router(transcribe_router, prefix="/transcribe", tags=["STT"])
+app.include_router(transcribe_ws_router, prefix="/transcribe", tags=["STT"])
 app.include_router(entries_router, prefix="/entries", tags=["Entries"])
 
 

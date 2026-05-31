@@ -17,6 +17,17 @@ def _get_firebase_app():
     return _firebase_app
 
 
+def verify_app_check_token(token: str | None) -> bool:
+    """Verifies an App Check token string; returns True if valid."""
+    if not token:
+        return False
+    try:
+        app_check.verify_token(token, app=_get_firebase_app())
+        return True
+    except Exception:
+        return False
+
+
 async def verify_app_check(
     x_firebase_appcheck: str | None = Header(None, alias="X-Firebase-AppCheck"),
 ) -> None:

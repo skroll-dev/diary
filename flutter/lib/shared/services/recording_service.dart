@@ -1,4 +1,5 @@
-import 'package:dio/dio.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -13,12 +14,12 @@ typedef AudioData = ({Uint8List bytes, String contentType});
 class RecordingService {
   final _recorder = AudioRecorder();
   String? _tempPath;
+  Stream<Uint8List>? _webStream;
 
   Future<void> start() async {
     if (kIsWeb) {
-      await _recorder.start(
+      _webStream = await _recorder.startStream(
         const RecordConfig(encoder: AudioEncoder.opus),
-        path: '',
       );
     } else {
       final dir = await getTemporaryDirectory();
@@ -31,23 +32,24 @@ class RecordingService {
     }
   }
 
+  /// Web only: the live audio stream started by [start].
+  Stream<Uint8List> get webAudioStream {
+    assert(kIsWeb && _webStream != null, 'webAudioStream accessed outside web recording session');
+    return _webStream!;
+  }
+
+  /// Web only: stops the recorder, which closes [webAudioStream].
+  Future<void> stopStream() async {
+    await _recorder.stop();
+    _webStream = null;
+  }
+
+  /// Native only: stops the recorder and returns the recorded bytes.
   Future<AudioData> stopAndRead() async {
     final path = await _recorder.stop();
-
-    if (kIsWeb) {
-      final response = await Dio().get<List<int>>(
-        path!,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      return (
-        bytes: Uint8List.fromList(response.data!),
-        contentType: 'audio/webm',
-      );
-    } else {
-      final bytes = await readAndDeleteFile(_tempPath!);
-      _tempPath = null;
-      return (bytes: bytes, contentType: 'audio/m4a');
-    }
+    final bytes = await readAndDeleteFile(_tempPath ?? path ?? '');
+    _tempPath = null;
+    return (bytes: bytes, contentType: 'audio/m4a');
   }
 
   Future<void> dispose() => _recorder.dispose();
