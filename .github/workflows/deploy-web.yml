@@ -34,8 +34,7 @@ jobs:
         run: |
           flutter build web \
             --release \
-            --dart-define=PROXY_BASE_URL=${{ secrets.PROXY_BASE_URL }} \
-            --web-renderer canvaskit
+            --dart-define=PROXY_BASE_URL=${{ secrets.PROXY_BASE_URL }}
         working-directory: flutter
 
       - name: Deploy to Firebase Hosting
