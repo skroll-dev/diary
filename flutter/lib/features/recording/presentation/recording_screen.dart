@@ -159,7 +159,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     }
   }
 
-  // Debug: long-press mic to inject text transcript
+  // Long-press mic: type a transcript instead of speaking (works in all builds)
   Future<void> _showTranscriptDialog() async {
     final controller = TextEditingController();
     final rawTranscript = await showDialog<String>(
@@ -364,10 +364,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           if (!isProcessing) _buildMicButton(context),
           const SizedBox(height: 16),
           if (_version.isNotEmpty && _state == _RecordingState.idle)
-            Text(
-              _version,
-              textAlign: TextAlign.center,
-              style: tt.labelSmall?.copyWith(color: cs.outlineVariant),
+            GestureDetector(
+              onDoubleTap: _showTranscriptDialog,
+              child: Text(
+                _version,
+                textAlign: TextAlign.center,
+                style: tt.labelSmall?.copyWith(color: cs.outlineVariant),
+              ),
             ),
           const SizedBox(height: 32),
         ],

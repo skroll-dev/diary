@@ -278,10 +278,13 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            isRecording ? 'Tippe zum Beenden' : widget.idleLabel,
-            style: tt.bodyMedium?.copyWith(color: cs.outline),
-            textAlign: TextAlign.center,
+          GestureDetector(
+            onDoubleTap: isRecording ? null : _showTypeDialog,
+            child: Text(
+              isRecording ? 'Tippe zum Beenden' : widget.idleLabel,
+              style: tt.bodyMedium?.copyWith(color: cs.outline),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ],
