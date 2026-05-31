@@ -71,8 +71,8 @@ class ProxyClient {
     final dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
       headers: headers,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 60),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 120),
     ));
     dio.interceptors.add(LogInterceptor(
       requestHeader: false,
