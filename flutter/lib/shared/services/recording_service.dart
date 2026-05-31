@@ -17,7 +17,7 @@ class RecordingService {
   Future<void> start() async {
     if (kIsWeb) {
       await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.wav),
+        const RecordConfig(encoder: AudioEncoder.opus),
         path: '',
       );
     } else {
@@ -41,7 +41,7 @@ class RecordingService {
       );
       return (
         bytes: Uint8List.fromList(response.data!),
-        contentType: 'audio/wav',
+        contentType: 'audio/webm',
       );
     } else {
       final bytes = await readAndDeleteFile(_tempPath!);
