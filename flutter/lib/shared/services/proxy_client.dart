@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'auth_service.dart';
 import 'recording_service.dart' show AudioData;
@@ -97,6 +102,54 @@ class ProxyClient {
     });
     final resp = await dio.post('/transcribe/', data: form);
     return resp.data['transcript'] as String;
+  }
+
+  /// Web streaming path: pipes [audioStream] chunks over WebSocket and
+  /// returns the final transcript once the server responds.
+  Future<String> transcribeWebSocket(Stream<Uint8List> audioStream) async {
+    final wsBase = _baseUrl
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+
+    final isLocal =
+        _baseUrl.contains('localhost') || _baseUrl.contains('127.0.0.1');
+    final token =
+        isLocal ? '' : await _ref.read(authServiceProvider.notifier).getIdToken();
+
+    final uri = Uri.parse(
+      '$wsBase/transcribe/ws${token.isNotEmpty ? '?token=${Uri.encodeQueryComponent(token)}' : ''}',
+    );
+
+    final channel = WebSocketChannel.connect(uri);
+    final completer = Completer<String>();
+
+    channel.stream.listen(
+      (msg) {
+        final data = jsonDecode(msg as String) as Map<String, dynamic>;
+        if (data['error'] != null) {
+          completer.completeError(Exception(data['error']));
+        } else {
+          completer.complete(data['transcript'] as String);
+        }
+      },
+      onError: (Object e) {
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+      onDone: () {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('WebSocket closed without response'));
+        }
+      },
+    );
+
+    await for (final chunk in audioStream) {
+      channel.sink.add(chunk);
+    }
+    channel.sink.add('done');
+
+    final transcript = await completer.future;
+    await channel.sink.close();
+    return transcript;
   }
 
   Future<String> normalize(String transcript) async {

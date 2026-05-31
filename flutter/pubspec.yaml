@@ -1,7 +1,7 @@
 name: ai_tagebuch
 description: AI-gestütztes Sprach-Tagebuch – Codename Mathias
 publish_to: "none"
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -34,8 +34,9 @@ dependencies:
   firebase_crashlytics: ^5.2.2
   firebase_app_check: ^0.4.4
 
-  # HTTP (KI-Proxy)
+  # HTTP / WebSocket (KI-Proxy)
   dio: ^5.6.0
+  web_socket_channel: ^3.0.1
 
   # Utilities
   uuid: ^4.5.1

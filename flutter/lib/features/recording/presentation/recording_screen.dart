@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +39,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   Timer? _timer;
   int _seconds = 0;
+  Future<String>? _wsTranscriptFuture;
   // True after the first recording has been sent to TopicsReviewScreen.
   // Popping back from there means "add more" — not "start fresh".
   bool _hasExistingEntry = false;
@@ -72,7 +75,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   Future<void> _startRecording() async {
-    await ref.read(recordingServiceProvider).start();
+    final svc = ref.read(recordingServiceProvider);
+    await svc.start();
+    if (kIsWeb) {
+      _wsTranscriptFuture = ref
+          .read(proxyClientProvider)
+          .transcribeWebSocket(svc.webAudioStream);
+    }
     setState(() {
       _state = _RecordingState.recording;
       _seconds = 0;
@@ -100,9 +109,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     var transcript = '';
 
     try {
-      final audio = await ref.read(recordingServiceProvider).stopAndRead();
-      final rawTranscript =
-          await ref.read(proxyClientProvider).transcribe(audio);
+      final String rawTranscript;
+      if (kIsWeb) {
+        await ref.read(recordingServiceProvider).stopStream();
+        rawTranscript = await _wsTranscriptFuture!;
+      } else {
+        final audio = await ref.read(recordingServiceProvider).stopAndRead();
+        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
+      }
       final normalizedText =
           await ref.read(proxyClientProvider).normalize(rawTranscript);
       final entry =
@@ -128,6 +142,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       setState(() {
         _state = _RecordingState.idle;
         _seconds = 0;
+        _wsTranscriptFuture = null;
         _hasExistingEntry = true;
         _lastDate = date;
         _lastDuration = duration;
