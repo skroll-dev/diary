@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -43,11 +44,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   String _lastDuration = '';
   List<TopicDto> _lastTopics = [];
   String _lastTranscript = '';
+  String _version = '';
 
   @override
   void initState() {
     super.initState();
     _barSeeds = List.generate(22, (_) => 0.2 + _rng.nextDouble() * 0.8);
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _version = 'v${info.version}');
+    });
     _waveController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -205,7 +210,16 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           _buildCenterContent(context),
           const Spacer(),
           _buildCTA(context),
-          const SizedBox(height: 56),
+          const SizedBox(height: 16),
+          if (_version.isNotEmpty && _state == _RecordingState.idle)
+            Text(
+              _version,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+            ),
+          const SizedBox(height: 32),
         ],
       ),
     );
