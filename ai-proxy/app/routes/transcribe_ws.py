@@ -8,7 +8,7 @@ import struct
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.services.auth import verify_app_check_token
+from app.services.auth import verify_id_token
 from app.services.speech import transcribe_audio
 
 
@@ -56,7 +56,7 @@ router = APIRouter()
 @router.websocket("/ws")
 async def transcribe_ws(websocket: WebSocket, token: str | None = None):
     if os.environ.get("ENV") != "development":
-        if not verify_app_check_token(token):
+        if not verify_id_token(token):
             await websocket.close(code=4001)
             return
 

@@ -1,10 +1,10 @@
 """
-Firebase App Check Token Verifikation
-Schützt den KI-Proxy vor Missbrauch durch nicht-autorisierte Clients.
+Firebase Auth ID Token Verifikation
+Schützt den KI-Proxy vor unbefugtem Zugriff.
 """
 import os
 import firebase_admin
-from firebase_admin import app_check
+from firebase_admin import auth as fb_auth
 from fastapi import Header, HTTPException
 
 _firebase_app = None
@@ -17,28 +17,29 @@ def _get_firebase_app():
     return _firebase_app
 
 
-def verify_app_check_token(token: str | None) -> bool:
-    """Verifies an App Check token string; returns True if valid."""
+def verify_id_token(token: str | None) -> bool:
+    """Verifies a Firebase Auth ID token string; returns True if valid."""
     if not token:
         return False
     try:
-        app_check.verify_token(token, app=_get_firebase_app())
+        fb_auth.verify_id_token(token, app=_get_firebase_app())
         return True
     except Exception:
         return False
 
 
 async def verify_app_check(
-    x_firebase_appcheck: str | None = Header(None, alias="X-Firebase-AppCheck"),
+    authorization: str | None = Header(None, alias="Authorization"),
 ) -> None:
-    """FastAPI Dependency – wirft 401 wenn der App-Check-Token ungültig ist."""
+    """FastAPI Dependency – wirft 401 wenn der Auth-Token fehlt oder ungültig ist."""
     if os.environ.get("ENV") == "development":
         return
 
-    if not x_firebase_appcheck:
-        raise HTTPException(status_code=401, detail="App-Check-Token fehlt")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization-Token fehlt")
 
+    token = authorization.removeprefix("Bearer ")
     try:
-        app_check.verify_token(x_firebase_appcheck, app=_get_firebase_app())
+        fb_auth.verify_id_token(token, app=_get_firebase_app())
     except Exception as exc:
-        raise HTTPException(status_code=401, detail="Ungültiger App-Check-Token") from exc
+        raise HTTPException(status_code=401, detail="Ungültiger Token") from exc
