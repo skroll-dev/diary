@@ -19,7 +19,7 @@ class RecordingService {
   Future<void> start() async {
     if (kIsWeb) {
       _webStream = await _recorder.startStream(
-        const RecordConfig(encoder: AudioEncoder.opus),
+        const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000),
       );
     } else {
       final dir = await getTemporaryDirectory();

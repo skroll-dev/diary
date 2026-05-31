@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Firebase project:** `diary-6fa61`
 - **Bundle ID:** `com.diary.app`
-- **Target platforms:** iOS (min 15.0), Android, Web (web = layout/review only; audio recording is blocked on web with a user-facing hint)
+- **Target platforms:** iOS (min 15.0), Android, Web (full recording support via WebSocket streaming)
 
 ## Commands
 
@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cd flutter
 flutter pub get
 flutter run                                  # iOS/Android on connected device
-flutter run -d chrome                        # Web (layout verification)
+flutter run -d chrome                        # Web
 flutter analyze
 flutter test
 flutter test test/path/to/test.dart
@@ -39,13 +39,15 @@ Each service has its own Python 3.12 venv. Use `/opt/homebrew/bin/python3.12` to
 cd ai-proxy              # or gdpr-export
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-.venv/bin/uvicorn app.main:app --reload --port 8080   # ai-proxy dev server
-.venv/bin/uvicorn app.main:app --reload --port 8081   # gdpr-export dev server
+LOG_FILE=../log/ai-proxy.log .venv/bin/uvicorn app.main:app --reload --port 8080   # ai-proxy dev server
+.venv/bin/uvicorn app.main:app --reload --port 8081                                 # gdpr-export dev server
 
 # Deploy to Cloud Run (always europe-west3)
 docker build -t <service>:latest .
 gcloud run deploy <service> --image <service>:latest --region europe-west3
 ```
+
+**Logs:** ai-proxy writes to `log/ai-proxy.log` (controlled by `LOG_FILE` env var).
 
 ### Firebase
 
@@ -62,8 +64,11 @@ cd flutter && flutterfire configure --project=diary-6fa61 --platforms=android,io
 Flutter App (iOS/Android/Web)
   └─► Firebase Auth (anonymous, user identity)
   └─► ai-proxy (Cloud Run)
-  │     POST /transcribe  ──► Cloud Speech-to-Text v2 Chirp 3 (eu, de-DE)
-  │     POST /entries/normalize ──► Vertex AI Gemini 2.0 Flash
+  │     POST /transcribe         (native) audio blob → Chirp 3
+  │     WS   /transcribe/ws      (web) PCM16 stream → WAV chunks → Chirp 3
+  │     POST /entries/normalize  → Vertex AI Gemini 2.0 Flash
+  │     POST /entries/generate   → Vertex AI Gemini 2.0 Flash
+  │     POST /entries/merge      → Vertex AI Gemini 2.0 Flash
   │     audio bytes processed in RAM, never persisted
   └─► Cloud Firestore (eu-eur3, entries per user)
   └─► Drift (SQLite, local source of truth)
@@ -80,7 +85,7 @@ Riverpod 3 + GoRouter 17, Material Design 3 (seed `#4A90D9`), offline-first via 
 | Path | Screen | GoRouter `extra` |
 |---|---|---|
 | `/` | `RecordingScreen` | `RecordingContext?` (defaults to `FreshRecording`) |
-| `/topics` | `TopicsReviewScreen` | `({String date, String duration})?` |
+| `/topics` | `TopicsReviewScreen` | `({String date, String duration, List<TopicDto> topics, String transcript})?` |
 | `/entry/:date` | `EntryScreen` | — |
 | `/history` | `HistoryScreen` | — |
 
@@ -105,11 +110,23 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 - When `_hasExistingEntry` is false: no back button (fresh session or after "Von vorne anfangen").
 
 **Recording pipeline** (`_stopRecording` in `recording_screen.dart`):
-1. `RecordingService.stopAndRead()` → raw `AudioData` (WAV on web/iOS, M4A on Android)
-2. `ProxyClient.transcribe(audio)` → raw transcript string
-3. `ProxyClient.normalize(transcript)` → normalized text
-4. `EntryRepository.saveEntry(...)` → persisted to Drift + queued for Firestore sync
-5. State reset to idle + `context.push('/topics')`
+
+*Web path:*
+1. `RecordingService.start()` → `AudioRecorder.startStream(AudioEncoder.pcm16bits, sampleRate: 16000)` — stream stored in `_webStream`
+2. Immediately: `ProxyClient.transcribeWebSocket(_webStream)` starts piping PCM16 chunks over WebSocket to `/transcribe/ws`
+3. `RecordingService.stopStream()` → closes the stream, which signals `"done"` to the server
+4. Backend assembles PCM16 bytes → wraps in WAV header → chunks into ≤55 s segments → Chirp 3 (auto-detect)
+5. WebSocket future resolves with raw transcript string
+
+*Native path:*
+1. `RecordingService.stopAndRead()` → M4A file bytes
+2. `ProxyClient.transcribe(audio)` → HTTP POST `/transcribe/` → Chirp 3
+
+*Both paths continue:*
+3. `ProxyClient.normalize(transcript)` → cleaned text
+4. `ProxyClient.generateEntry(normalized)` → `EntryDto` with topics, mood, follow-ups
+5. `EntryRepository.saveEntry(...)` → Drift + Firestore sync
+6. State reset to idle + `context.push('/topics', extra: (date, duration, topics, transcript))`
 
 #### Data model (`shared/models/entry.dart`)
 - `Entry` — one per calendar day; fields: `bodyMarkdown`, `rawTranscripts`, `followUpQuestions`, `mood` (enum), `moodScore` (-1.0…+1.0), `durationSeconds`, `language`, `version`
@@ -118,16 +135,17 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 
 #### Key architectural rules
 - Drift (SQLite) is the local source of truth; Firestore syncs in background
-- `kIsWeb` guards all audio recording paths; web shows an "App only" hint instead
+- `local_auth` must be guarded with `!kIsWeb` — the package does not compile for web
 - `authServiceProvider` warmup is guarded with `if (!kIsWeb)` in `main.dart` — Firebase Auth is not initialised on web
 - `ProxyClient` skips the `Authorization` header when `_baseUrl` contains `localhost` — no auth needed for local dev
+- `record_web` 1.x `startStream` only supports `AudioEncoder.pcm16bits` — all other encoders throw at runtime
 
 #### Current implementation state
 
 | Screen | State |
 |---|---|
-| `RecordingScreen` | UI complete + real audio pipeline connected |
-| `TopicsReviewScreen` | UI complete — topic cards, collapsible transcript, per-topic delete, "Von vorne anfangen", sticky CTA. Sample data only. |
+| `RecordingScreen` | Complete — real audio pipeline, web + native |
+| `TopicsReviewScreen` | Complete — real data from pipeline; topic cards, collapsible transcript, per-topic delete, "Von vorne anfangen", sticky CTA |
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
 | `HistoryScreen` | Skeleton |
 | `settings/` | Folder exists, no route wired yet |
@@ -138,13 +156,14 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 | Route | Description |
 |---|---|
-| `POST /transcribe` | Audio (m4a/aac/wav, max 10 MB) → raw transcript via Chirp 3 |
+| `POST /transcribe/` | Audio (m4a/aac/wav, max 10 MB) → raw transcript via Chirp 3 |
+| `WS /transcribe/ws` | PCM16 stream chunks + `"done"` sentinel → WAV-wrapped chunks → Chirp 3 |
 | `POST /entries/normalize` | Raw transcript → cleaned text via Gemini |
 | `POST /entries/generate` | Transcript → diary entry JSON (Prompt A) |
 | `POST /entries/merge` | Existing entry + new transcript → merged entry JSON (Prompt B) |
 | `GET /health` | Liveness check |
 
-**Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` for Chirp 3 — regional paths (`europe-west3`, `europe-west4`) and `global` are rejected.
+**Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` — regional paths (`europe-west3`, `europe-west4`) and `global` are rejected. Synchronous `RecognizeRequest` is capped at 60 s; the WS route chunks PCM16 into ≤55 s WAV segments to stay under this limit.
 
 **Gemini model:** `gemini-2.0-flash-001`, `temperature=0.7`, JSON output mode. The AI persona is named **Mathias** — warm, restrained, writes in first person using the user's own words, adds no invented content.
 
@@ -167,5 +186,5 @@ Key skills:
 
 - **GDPR / DSGVO:** Speech-to-Text uses Chirp 3 at `eu-speech.googleapis.com` (EU multi-region). All other GCP resources must stay in `europe-west3` or `eu-eur3`. Audio is processed in RAM only — never written to disk or object storage.
 - **Firebase App Check** is required on all ai-proxy routes in production. Anonymous auth must be enabled in the Firebase console (`diary-6fa61` → Authentication → Sign-in method).
-- **Web audio:** `kIsWeb` must gate any `record` / `local_auth` usage. Never import these packages unconditionally — they will fail to compile for web.
+- **Web audio:** `kIsWeb` must gate any `local_auth` usage. The `record` package itself works on web, but only `AudioEncoder.pcm16bits` is supported for `startStream`.
 - **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.
