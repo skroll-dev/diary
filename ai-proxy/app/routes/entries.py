@@ -41,7 +41,7 @@ class MergeRequest(BaseModel):
 
 class TopicItem(BaseModel):
     title: str
-    summary: str
+    text: str
     follow_up_hint: str
 
 

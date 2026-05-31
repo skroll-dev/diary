@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/services/recording_service.dart';
+import '../../../shared/widgets/recording_controls.dart';
 import '../recording_context.dart';
 
 enum _RecordingState { idle, recording, processing }
@@ -40,13 +41,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Timer? _timer;
   int _seconds = 0;
   Future<String>? _wsTranscriptFuture;
-  // True after the first recording has been sent to TopicsReviewScreen.
-  // Popping back from there means "add more" — not "start fresh".
-  bool _hasExistingEntry = false;
-  String _lastDate = '';
-  String _lastDuration = '';
-  List<TopicDto> _lastTopics = [];
-  String _lastTranscript = '';
   String _version = '';
 
   @override
@@ -104,9 +98,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final duration = _timerLabel;
     final durationSec = _seconds;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final reason = _transcriptReason;
 
     var topics = <TopicDto>[];
-    var transcript = '';
+    var normalizedText = '';
+    var bodyMarkdown = '';
+    var mood = 'neutral';
+    var moodScore = 0.0;
+    var followUpQuestions = <String>[];
 
     try {
       final String rawTranscript;
@@ -117,25 +116,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         final audio = await ref.read(recordingServiceProvider).stopAndRead();
         rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
       }
-      final normalizedText =
-          await ref.read(proxyClientProvider).normalize(rawTranscript);
-      final entry =
-          await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
-      transcript = normalizedText;
+      bodyMarkdown = entry.bodyMarkdown;
+      mood = entry.mood;
+      moodScore = entry.moodScore;
+      followUpQuestions = entry.followUpQuestions;
       await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
             normalizedText: normalizedText,
             durationSeconds: durationSec,
-            bodyMarkdown: entry.bodyMarkdown,
-            mood: entry.mood,
-            moodScore: entry.moodScore,
-            followUpQuestions: entry.followUpQuestions,
+            bodyMarkdown: bodyMarkdown,
+            mood: mood,
+            moodScore: moodScore,
+            followUpQuestions: followUpQuestions,
+            topics: topics,
+            transcriptReason: reason,
           );
     } catch (e) {
       debugPrint('[RecordingScreen] pipeline error: $e');
-      // TODO: show error snackbar
     }
 
     if (mounted) {
@@ -143,21 +144,22 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         _state = _RecordingState.idle;
         _seconds = 0;
         _wsTranscriptFuture = null;
-        _hasExistingEntry = true;
-        _lastDate = date;
-        _lastDuration = duration;
-        _lastTopics = topics;
-        _lastTranscript = transcript;
       });
       context.push('/topics', extra: (
         date: date,
         duration: duration,
         topics: topics,
-        transcript: transcript,
+        normalizedTranscript: normalizedText,
+        bodyMarkdown: bodyMarkdown,
+        mood: mood,
+        moodScore: moodScore,
+        followUpQuestions: followUpQuestions,
+        transcriptReason: reason,
       ));
     }
   }
 
+  // Debug: long-press mic to inject text transcript
   Future<void> _showTranscriptDialog() async {
     final controller = TextEditingController();
     final rawTranscript = await showDialog<String>(
@@ -186,57 +188,67 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       ),
     );
     controller.dispose();
-
     if (rawTranscript == null || rawTranscript.isEmpty) return;
 
-    setState(() {
-      _state = _RecordingState.processing;
-      _seconds = 0;
-    });
-
+    setState(() => _state = _RecordingState.processing);
     final date = _dateLabel;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final reason = _transcriptReason;
+
     var topics = <TopicDto>[];
-    var transcript = '';
+    var normalizedText = '';
+    var bodyMarkdown = '';
+    var mood = 'neutral';
+    var moodScore = 0.0;
+    var followUpQuestions = <String>[];
 
     try {
-      final normalizedText =
-          await ref.read(proxyClientProvider).normalize(rawTranscript);
-      final entry =
-          await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
-      transcript = normalizedText;
+      bodyMarkdown = entry.bodyMarkdown;
+      mood = entry.mood;
+      moodScore = entry.moodScore;
+      followUpQuestions = entry.followUpQuestions;
       await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
             normalizedText: normalizedText,
             durationSeconds: 0,
-            bodyMarkdown: entry.bodyMarkdown,
-            mood: entry.mood,
-            moodScore: entry.moodScore,
-            followUpQuestions: entry.followUpQuestions,
+            bodyMarkdown: bodyMarkdown,
+            mood: mood,
+            moodScore: moodScore,
+            followUpQuestions: followUpQuestions,
+            topics: topics,
+            transcriptReason: reason,
           );
     } catch (e) {
       debugPrint('[RecordingScreen] debug pipeline error: $e');
     }
 
     if (mounted) {
-      setState(() {
-        _state = _RecordingState.idle;
-        _hasExistingEntry = true;
-        _lastDate = date;
-        _lastDuration = '00:00';
-        _lastTopics = topics;
-        _lastTranscript = transcript;
-      });
+      setState(() => _state = _RecordingState.idle);
       context.push('/topics', extra: (
         date: date,
         duration: '00:00',
         topics: topics,
-        transcript: transcript,
+        normalizedTranscript: normalizedText,
+        bodyMarkdown: bodyMarkdown,
+        mood: mood,
+        moodScore: moodScore,
+        followUpQuestions: followUpQuestions,
+        transcriptReason: reason,
       ));
     }
   }
+
+  String get _transcriptReason => switch (widget.recordingContext) {
+        ExtendingTopic(:final followUpHint) when followUpHint != null =>
+          'followUp:$followUpHint',
+        ExtendingTopic() => 'continuation',
+        ContinuingEntry() => 'continuation',
+        _ => 'initial',
+      };
 
   String get _timerLabel {
     final m = _seconds ~/ 60;
@@ -246,8 +258,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   String get _dateLabel {
     final now = DateTime.now();
-    const weekdays = ['', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
-    const months = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const weekdays = [
+      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
+      'Freitag', 'Samstag', 'Sonntag'
+    ];
+    const months = [
+      '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+    ];
     return '${weekdays[now.weekday]}, ${now.day}. ${months[now.month]}';
   }
 
@@ -262,57 +280,94 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Widget _appView(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final showBackToTopics =
-        _hasExistingEntry && _state == _RecordingState.idle;
+    final isRecording = _state == _RecordingState.recording;
+    final isProcessing = _state == _RecordingState.processing;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (showBackToTopics) ...[
-            SizedBox(
-              height: 44,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => context.push(
-                    '/topics',
-                    extra: (
-                      date: _lastDate,
-                      duration: _lastDuration,
-                      topics: _lastTopics,
-                      transcript: _lastTranscript,
-                    ),
-                  ),
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
-                  label: const Text('Themen'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: cs.primary,
-                    textStyle: tt.bodyMedium,
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ] else
-            const SizedBox(height: 52),
+          const SizedBox(height: 52),
           _buildHeader(context),
           const SizedBox(height: 28),
-          _buildCenterContent(context),
+          // Subtitle / processing indicator
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: isProcessing
+                ? Column(
+                    key: const ValueKey('processing'),
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.0, color: cs.primary),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Mathias strukturiert deinen Eintrag …',
+                        style: tt.bodyMedium?.copyWith(color: cs.outline),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  )
+                : Text(
+                    key: ValueKey(_subtitleText),
+                    _subtitleText,
+                    style: tt.bodyLarge?.copyWith(
+                      color: cs.onSurface.withValues(alpha: 0.38),
+                      height: 1.65,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+          ),
+          // Waveform + timer while recording
+          AnimatedSize(
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeInOut,
+            child: isRecording
+                ? Column(
+                    children: [
+                      const SizedBox(height: 40),
+                      SizedBox(
+                        height: 80,
+                        width: double.infinity,
+                        child: AnimatedBuilder(
+                          animation: _waveController,
+                          builder: (_, __) => CustomPaint(
+                            painter: WaveformPainter(
+                              value: _waveController.value,
+                              seeds: _barSeeds,
+                              activeColor: cs.primary,
+                              inactiveColor: cs.outlineVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Text(
+                        _timerLabel,
+                        textAlign: TextAlign.center,
+                        style: tt.displaySmall?.copyWith(
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: 3,
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
           const Spacer(),
-          _buildCTA(context),
+          if (!isProcessing) _buildMicButton(context),
           const SizedBox(height: 16),
           if (_version.isNotEmpty && _state == _RecordingState.idle)
             Text(
               _version,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
+              style: tt.labelSmall?.copyWith(color: cs.outlineVariant),
             ),
           const SizedBox(height: 32),
         ],
@@ -323,6 +378,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Widget _buildHeader(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final ctx = widget.recordingContext;
+    final showChip = _state != _RecordingState.processing && ctx is! FreshRecording;
 
     final String title = switch (_state) {
       _RecordingState.idle => 'Mathias',
@@ -330,30 +387,20 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       _RecordingState.processing => 'Einen Moment …',
     };
 
-    // Context chip only shown when not processing
-    final ctx = widget.recordingContext;
-    final showChip = _state != _RecordingState.processing &&
-        (ctx is! FreshRecording || _hasExistingEntry);
-
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
         child: SlideTransition(
-          position: Tween(
-            begin: const Offset(0, 0.12),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          position: Tween(begin: const Offset(0, 0.12), end: Offset.zero)
+              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
           child: child,
         ),
       ),
       child: Column(
         key: ValueKey('$title-${ctx.runtimeType}'),
         children: [
-          Text(
-            _dateLabel,
-            style: tt.bodyMedium?.copyWith(color: cs.outline),
-          ),
+          Text(_dateLabel, style: tt.bodyMedium?.copyWith(color: cs.outline)),
           const SizedBox(height: 6),
           Text(
             title,
@@ -384,15 +431,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           const Color(0xFF5E35B1),
           const Color(0xFFEDE9FF),
         ),
-      AddingTopic() => (
-          Icons.add_rounded,
-          'Neues Thema',
-          cs.primary,
-          cs.primaryContainer,
-        ),
-      FreshRecording() when _hasExistingEntry => (
+      ContinuingEntry() => (
           Icons.post_add_rounded,
-          'Wird zum Eintrag ergänzt',
+          'Ergänzt den Eintrag',
           cs.primary,
           cs.primaryContainer,
         ),
@@ -402,124 +443,32 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 15, color: color),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: tt.labelMedium?.copyWith(color: color),
-            ),
+            Text(label, style: tt.labelMedium?.copyWith(color: color)),
           ],
         ),
       ),
     );
   }
 
-  String get _subtitleText {
-    return switch (widget.recordingContext) {
-      ExtendingTopic(:final followUpHint) when followUpHint != null =>
-        followUpHint,
-      ExtendingTopic(:final topicTitle) =>
-        'Was möchtest du zu\n„$topicTitle" ergänzen?',
-      AddingTopic() =>
-        'Worum geht es beim neuen Thema?\nErzähl, was dir wichtig ist.',
-      FreshRecording() when _hasExistingEntry =>
-        'Was möchtest du noch hinzufügen?\nMathias ergänzt deinen Eintrag.',
-      _ => 'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
-    };
-  }
+  String get _subtitleText => switch (widget.recordingContext) {
+        ExtendingTopic(:final followUpHint) when followUpHint != null =>
+          followUpHint,
+        ExtendingTopic(:final topicTitle) =>
+          'Was möchtest du zu\n„$topicTitle" ergänzen?',
+        ContinuingEntry() =>
+          'Einfach weiterreden —\nMathias ordnet es ein.',
+        _ => 'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
+      };
 
-  Widget _buildCenterContent(BuildContext context) {
+  Widget _buildMicButton(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-
-    return Column(
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: _state == _RecordingState.processing
-              ? Column(
-                  key: const ValueKey('processing'),
-                  children: [
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2.0, color: cs.primary),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Mathias strukturiert deinen Eintrag …',
-                      style: tt.bodyMedium?.copyWith(color: cs.outline),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              : Text(
-                  key: ValueKey(_subtitleText),
-                  _subtitleText,
-                  style: tt.bodyLarge?.copyWith(
-                    color: cs.onSurface.withValues(alpha: 0.38),
-                    height: 1.65,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 420),
-          curve: Curves.easeInOut,
-          child: _state == _RecordingState.recording
-              ? Column(
-                  children: [
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      height: 80,
-                      width: double.infinity,
-                      child: AnimatedBuilder(
-                        animation: _waveController,
-                        builder: (_, __) => CustomPaint(
-                          painter: _WaveformPainter(
-                            value: _waveController.value,
-                            seeds: _barSeeds,
-                            activeColor: cs.primary,
-                            inactiveColor: cs.outlineVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    Text(
-                      _timerLabel,
-                      textAlign: TextAlign.center,
-                      style: tt.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 3,
-                      ),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCTA(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    if (_state == _RecordingState.processing) {
-      return const SizedBox(height: 160);
-    }
-
     final isRecording = _state == _RecordingState.recording;
 
     return Column(
@@ -557,13 +506,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                   shape: BoxShape.circle,
                   color: cs.primary,
                   boxShadow: isRecording
-                      ? [
-                          BoxShadow(
-                            color: cs.primary.withValues(alpha: 0.28),
-                            blurRadius: 24,
-                            spreadRadius: 4,
-                          ),
-                        ]
+                      ? [BoxShadow(color: cs.primary.withValues(alpha: 0.28), blurRadius: 24, spreadRadius: 4)]
                       : [],
                 ),
                 child: AnimatedSwitcher(
@@ -593,53 +536,3 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 }
 
-class _WaveformPainter extends CustomPainter {
-  const _WaveformPainter({
-    required this.value,
-    required this.seeds,
-    required this.activeColor,
-    required this.inactiveColor,
-  });
-
-  final double value;
-  final List<double> seeds;
-  final Color activeColor;
-  final Color inactiveColor;
-
-  static const int _count = 22;
-  static const double _barW = 4.0;
-  static const double _gap = 5.0;
-  static const double _maxH = 68.0;
-  static const double _minH = 5.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const totalW = _count * _barW + (_count - 1) * _gap;
-    final startX = (size.width - totalW) / 2;
-    final cy = size.height / 2;
-
-    for (int i = 0; i < _count; i++) {
-      final phase = (i / _count) * 2 * pi;
-      final wave = sin(value * 2 * pi + phase) * 0.5 +
-          sin(value * 2 * pi * 1.7 + phase * 1.3 + 0.9) * 0.3 +
-          sin(value * 2 * pi * 0.5 + phase * 0.7) * 0.2;
-      final h = _minH + seeds[i] * ((wave + 1) / 2) * (_maxH - _minH);
-
-      final distFromCenter = (i - _count / 2).abs() / (_count / 2);
-      final isActive = distFromCenter < 0.55;
-
-      final x = startX + i * (_barW + _gap) + _barW / 2;
-      canvas.drawLine(
-        Offset(x, cy - h / 2),
-        Offset(x, cy + h / 2),
-        Paint()
-          ..color = isActive ? activeColor : inactiveColor
-          ..strokeWidth = _barW
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WaveformPainter old) => old.value != value;
-}

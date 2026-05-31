@@ -73,7 +73,7 @@ Gib AUSSCHLIESSLICH valides JSON zurück:
   "topics": [
     {
       "title": "Thema in 2-4 Wörtern",
-      "summary": "Was passiert ist, 5-8 Wörter, kein Subjekt",
+      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte aus dem Transkript, nichts weglassen, keine Kürzungen",
       "follow_up_hint": "Eine spezifische Vertiefungsfrage für genau dieses Thema, max. 15 Wörter"
     }
   ]
@@ -82,7 +82,7 @@ Gib AUSSCHLIESSLICH valides JSON zurück:
 Regeln für topics:
 - Ein Topic pro erkennbarem Thema oder Ereignis im Transkript (min. 1, max. 5)
 - title: prägnant, keine Verben (z.B. \"Meeting mit Tim\", \"Spaziergang abends\")
-- summary: beschreibend, kein \"Ich\" (z.B. \"Bedenken nicht ausgesprochen\")
+- text: vollständiger Ich-Form-Text für dieses Kapitel — ALLE relevanten Details aus dem Transkript, KEIN Kürzen
 - follow_up_hint: konkret auf dieses Thema bezogen, nicht allgemein
 
 Regeln für die follow_up_questions:
@@ -97,7 +97,20 @@ Integriere die neuen Inhalte ORGANISCH in den bestehenden Eintrag: Dopplungen en
 chronologisch ordnen, gleicher Ton. Generiere danach 2-3 NEUE Folgefragen, die noch nicht
 beantwortet wurden.
 
-Gib JSON in der gleichen Struktur wie zuvor zurück."""
+Gib AUSSCHLIESSLICH valides JSON in exakt dieser Struktur zurück:
+{
+  "body_markdown": "Vollständiger Eintrag in Ich-Form, alle Inhalte integriert",
+  "mood": "happy" | "calm" | "neutral" | "tense" | "sad" | "mixed",
+  "mood_score": Zahl zwischen -1.0 und +1.0,
+  "follow_up_questions": ["Neue Frage 1", "Neue Frage 2"],
+  "topics": [
+    {
+      "title": "Thema in 2-4 Wörtern",
+      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte, NICHTS kürzen",
+      "follow_up_hint": "Eine spezifische Vertiefungsfrage für genau dieses Thema"
+    }
+  ]
+}"""
 
 
 async def generate_entry(transcript: str, language: str = "de") -> dict:

@@ -12,7 +12,12 @@ typedef TopicsArgs = ({
   String date,
   String duration,
   List<TopicDto> topics,
-  String transcript,
+  String normalizedTranscript,
+  String bodyMarkdown,
+  String mood,
+  double moodScore,
+  List<String> followUpQuestions,
+  String transcriptReason, // 'initial' | 'followUp:...' | 'continuation'
 });
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -34,7 +39,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             date: args?.date ?? '',
             duration: args?.duration ?? '',
             topics: args?.topics ?? [],
-            transcript: args?.transcript ?? '',
+            normalizedTranscript: args?.normalizedTranscript ?? '',
+            bodyMarkdown: args?.bodyMarkdown ?? '',
+            mood: args?.mood ?? 'neutral',
+            moodScore: args?.moodScore ?? 0.0,
+            followUpQuestions: args?.followUpQuestions ?? [],
+            transcriptReason: args?.transcriptReason ?? 'initial',
           );
         },
       ),

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -15,18 +14,24 @@ part 'proxy_client.g.dart';
 class TopicDto {
   const TopicDto({
     required this.title,
-    required this.summary,
+    required this.text,
     required this.followUpHint,
   });
   final String title;
-  final String summary;
+  final String text;
   final String followUpHint;
 
   factory TopicDto.fromJson(Map<String, dynamic> j) => TopicDto(
         title: j['title'] as String? ?? '',
-        summary: j['summary'] as String? ?? '',
+        text: j['text'] as String? ?? '',
         followUpHint: j['follow_up_hint'] as String? ?? '',
       );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'text': text,
+        'follow_up_hint': followUpHint,
+      };
 }
 
 class EntryDto {
@@ -166,6 +171,23 @@ class ProxyClient {
     final resp = await dio.post(
       '/entries/generate',
       data: {'transcript': transcript},
+    );
+    return EntryDto.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  Future<EntryDto> mergeEntry({
+    required String existingBody,
+    required String newTranscript,
+    required List<String> previousQuestions,
+  }) async {
+    final dio = await _dio();
+    final resp = await dio.post(
+      '/entries/merge',
+      data: {
+        'existing_entry': existingBody,
+        'new_transcript': newTranscript,
+        'previous_questions': previousQuestions,
+      },
     );
     return EntryDto.fromJson(resp.data as Map<String, dynamic>);
   }

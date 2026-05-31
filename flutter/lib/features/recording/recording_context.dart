@@ -12,6 +12,8 @@ final class ExtendingTopic extends RecordingContext {
   final String? followUpHint;
 }
 
-final class AddingTopic extends RecordingContext {
-  const AddingTopic();
+/// General continuation — user keeps talking without a specific topic target.
+/// Mathias decides which topic(s) the new content belongs to.
+final class ContinuingEntry extends RecordingContext {
+  const ContinuingEntry();
 }

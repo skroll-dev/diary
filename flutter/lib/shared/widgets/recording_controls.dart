@@ -1,0 +1,341 @@
+import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../services/proxy_client.dart';
+import '../services/recording_service.dart';
+import '../../features/recording/recording_context.dart';
+
+export 'recording_controls.dart' show WaveformPainter;
+
+enum RecordingPhase { idle, recording, processing }
+
+/// Reusable recording UI: waveform, timer, mic/stop button, processing state.
+/// Handles audio capture + transcription for both web (WebSocket) and native
+/// (HTTP). Calls [onComplete] with the raw transcript string when done.
+class RecordingControls extends ConsumerStatefulWidget {
+  const RecordingControls({
+    super.key,
+    required this.recordingContext,
+    required this.onComplete,
+    this.onCancel,
+    this.idleLabel = 'Aufnahme starten',
+  });
+
+  final RecordingContext recordingContext;
+  final Future<void> Function(String rawTranscript) onComplete;
+  final VoidCallback? onCancel;
+  final String idleLabel;
+
+  @override
+  ConsumerState<RecordingControls> createState() => _RecordingControlsState();
+}
+
+class _RecordingControlsState extends ConsumerState<RecordingControls>
+    with TickerProviderStateMixin {
+  RecordingPhase _phase = RecordingPhase.idle;
+
+  late final AnimationController _waveController;
+  late final AnimationController _pulseController;
+  final _rng = Random(42);
+  late final List<double> _barSeeds;
+
+  Timer? _timer;
+  int _seconds = 0;
+  Future<String>? _wsTranscriptFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _barSeeds = List.generate(22, (_) => 0.2 + _rng.nextDouble() * 0.8);
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _pulseController.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _timerLabel {
+    final m = _seconds ~/ 60;
+    final s = _seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _start() async {
+    final svc = ref.read(recordingServiceProvider);
+    await svc.start();
+    if (kIsWeb) {
+      _wsTranscriptFuture =
+          ref.read(proxyClientProvider).transcribeWebSocket(svc.webAudioStream);
+    }
+    setState(() {
+      _phase = RecordingPhase.recording;
+      _seconds = 0;
+    });
+    _waveController.repeat();
+    _pulseController.repeat(reverse: true);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _seconds++);
+    });
+  }
+
+  Future<void> _showTypeDialog() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Transkript eingeben'),
+        content: TextField(
+          controller: controller,
+          maxLines: 6,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Text statt Sprache …',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abbrechen')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('Verarbeiten')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text == null || text.isEmpty) return;
+
+    setState(() => _phase = RecordingPhase.processing);
+    await widget.onComplete(text);
+    if (mounted) setState(() => _phase = RecordingPhase.idle);
+  }
+
+  Future<void> _stop() async {
+    _timer?.cancel();
+    _waveController.stop();
+    _pulseController.stop();
+    _pulseController.reset();
+    setState(() => _phase = RecordingPhase.processing);
+
+    try {
+      final String rawTranscript;
+      if (kIsWeb) {
+        await ref.read(recordingServiceProvider).stopStream();
+        rawTranscript = await _wsTranscriptFuture!;
+      } else {
+        final audio = await ref.read(recordingServiceProvider).stopAndRead();
+        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
+      }
+      await widget.onComplete(rawTranscript);
+    } catch (e) {
+      debugPrint('[RecordingControls] error: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _phase = RecordingPhase.idle;
+        _seconds = 0;
+        _wsTranscriptFuture = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final isRecording = _phase == RecordingPhase.recording;
+    final isProcessing = _phase == RecordingPhase.processing;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Waveform + timer (visible only while recording)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeInOut,
+          child: isRecording
+              ? Column(
+                  children: [
+                    SizedBox(
+                      height: 80,
+                      width: double.infinity,
+                      child: AnimatedBuilder(
+                        animation: _waveController,
+                        builder: (_, __) => CustomPaint(
+                          painter: WaveformPainter(
+                            value: _waveController.value,
+                            seeds: _barSeeds,
+                            activeColor: cs.primary,
+                            inactiveColor: cs.outlineVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _timerLabel,
+                      textAlign: TextAlign.center,
+                      style: tt.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
+
+        // Processing state
+        if (isProcessing) ...[
+          SizedBox(
+            width: 36,
+            height: 36,
+            child:
+                CircularProgressIndicator(strokeWidth: 2.0, color: cs.primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Mathias verarbeitet …',
+            style: tt.bodyMedium?.copyWith(color: cs.outline),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // Mic / stop button
+        if (!isProcessing) ...[
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (_, __) {
+                  final pulse = isRecording
+                      ? Curves.easeInOut.transform(_pulseController.value)
+                      : 0.0;
+                  return Container(
+                    width: isRecording ? 148 + 10 * pulse : 88,
+                    height: isRecording ? 148 + 10 * pulse : 88,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cs.primary.withValues(
+                        alpha: isRecording ? 0.08 + 0.06 * pulse : 0.0,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              GestureDetector(
+                onTap: isRecording ? _stop : _start,
+                onLongPress: isRecording ? null : _showTypeDialog,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: cs.primary,
+                    boxShadow: isRecording
+                        ? [
+                            BoxShadow(
+                              color: cs.primary.withValues(alpha: 0.28),
+                              blurRadius: 24,
+                              spreadRadius: 4,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                      key: ValueKey(isRecording),
+                      color: cs.onPrimary,
+                      size: 36,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            isRecording ? 'Tippe zum Beenden' : widget.idleLabel,
+            style: tt.bodyMedium?.copyWith(color: cs.outline),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class WaveformPainter extends CustomPainter {
+  const WaveformPainter({
+    required this.value,
+    required this.seeds,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  final double value;
+  final List<double> seeds;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  static const int _count = 22;
+  static const double _barW = 4.0;
+  static const double _gap = 5.0;
+  static const double _maxH = 68.0;
+  static const double _minH = 5.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const totalW = _count * _barW + (_count - 1) * _gap;
+    final startX = (size.width - totalW) / 2;
+    final cy = size.height / 2;
+
+    for (int i = 0; i < _count; i++) {
+      final phase = (i / _count) * 2 * pi;
+      final wave = sin(value * 2 * pi + phase) * 0.5 +
+          sin(value * 2 * pi * 1.7 + phase * 1.3 + 0.9) * 0.3 +
+          sin(value * 2 * pi * 0.5 + phase * 0.7) * 0.2;
+      final h = _minH + seeds[i] * ((wave + 1) / 2) * (_maxH - _minH);
+
+      final distFromCenter = (i - _count / 2).abs() / (_count / 2);
+      final isActive = distFromCenter < 0.55;
+
+      final x = startX + i * (_barW + _gap) + _barW / 2;
+      canvas.drawLine(
+        Offset(x, cy - h / 2),
+        Offset(x, cy + h / 2),
+        Paint()
+          ..color = isActive ? activeColor : inactiveColor
+          ..strokeWidth = _barW
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(WaveformPainter old) => old.value != value;
+}

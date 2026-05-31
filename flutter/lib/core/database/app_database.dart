@@ -19,6 +19,10 @@ class Entries extends Table {
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  // JSON arrays stored as strings
+  TextColumn get followUpQuestions =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get topics => text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -27,7 +31,10 @@ class Entries extends Table {
 class RawTranscripts extends Table {
   TextColumn get id => text()();
   TextColumn get entryId => text().references(Entries, #id)();
-  TextColumn get content => text()();
+  TextColumn get content => text()(); // raw speech-to-text, never shown
+  TextColumn get normalizedContent => text().withDefault(const Constant(''))();
+  TextColumn get reason =>
+      text().withDefault(const Constant('initial'))(); // initial | followUp:... | continuation
   TextColumn get createdAt => text()();
 
   @override
@@ -39,7 +46,23 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(LazyDatabase(() => openDatabaseConnection()));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.database.customStatement(
+                "ALTER TABLE entries ADD COLUMN follow_up_questions TEXT NOT NULL DEFAULT '[]'");
+            await m.database.customStatement(
+                "ALTER TABLE entries ADD COLUMN topics TEXT NOT NULL DEFAULT '[]'");
+            await m.database.customStatement(
+                "ALTER TABLE raw_transcripts ADD COLUMN normalized_content TEXT NOT NULL DEFAULT ''");
+            await m.database.customStatement(
+                "ALTER TABLE raw_transcripts ADD COLUMN reason TEXT NOT NULL DEFAULT 'initial'");
+          }
+        },
+      );
 }
 
 @Riverpod(keepAlive: true)
