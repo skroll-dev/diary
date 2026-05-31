@@ -20,6 +20,20 @@ MODEL = "gemini-2.5-flash"
 vertexai.init(project=GCP_PROJECT, location=GCP_REGION)
 
 
+class GeminiBlockedError(ValueError):
+    """Raised when Gemini returns no content (safety filter or empty candidate)."""
+
+
+def _require_text(response, fn_name: str) -> str:
+    """Extract text from a Gemini response, raising GeminiBlockedError if no content."""
+    candidate = response.candidates[0] if response.candidates else None
+    if not candidate or not getattr(candidate.content, "parts", None):
+        finish = candidate.finish_reason.name if candidate and candidate.finish_reason else "UNKNOWN"
+        log.warning("gemini_blocked", fn=fn_name, finish_reason=finish)
+        raise GeminiBlockedError(f"Gemini response blocked (finish_reason={finish})")
+    return response.text
+
+
 def _extract_json(text: str) -> dict:
     """Parse JSON from Gemini response, stripping markdown fences if present."""
     cleaned = re.sub(r"^```(?:json)?\s*\n?", "", text.strip())
@@ -93,14 +107,15 @@ async def generate_entry(transcript: str, language: str = "de") -> dict:
         transcript,
         generation_config=_GENERATION_CONFIG,
     )
+    text = _require_text(response, "generate_entry")
     candidate = response.candidates[0]
     finish_reason = candidate.finish_reason.name if candidate.finish_reason else "UNKNOWN"
     usage = response.usage_metadata
     log.info("gemini_response", fn="generate_entry", finish_reason=finish_reason,
              output_tokens=usage.candidates_token_count,
              total_tokens=usage.total_token_count,
-             output=response.text)
-    return _extract_json(response.text)
+             output=text)
+    return _extract_json(text)
 
 
 _SYSTEM_PROMPT_NORMALIZE = """Du bearbeitest ein rohes Sprachtranskript leicht:
@@ -120,8 +135,13 @@ async def normalize_transcript(transcript: str) -> str:
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_NORMALIZE)
     config = GenerationConfig(temperature=0.2, max_output_tokens=2048)
     response = await model.generate_content_async(transcript, generation_config=config)
-    log.info("gemini_response", fn="normalize_transcript", output=response.text)
-    return response.text.strip()
+    try:
+        text = _require_text(response, "normalize_transcript")
+    except GeminiBlockedError:
+        log.warning("gemini_normalize_fallback", reason="blocked, returning original")
+        return transcript
+    log.info("gemini_response", fn="normalize_transcript", output=text)
+    return text.strip()
 
 
 async def merge_entry(
@@ -145,5 +165,6 @@ BISHERIGE FOLGEFRAGEN (nicht wiederholen):
         user_message,
         generation_config=_GENERATION_CONFIG,
     )
-    log.info("gemini_response", fn="merge_entry", output=response.text)
-    return _extract_json(response.text)
+    text = _require_text(response, "merge_entry")
+    log.info("gemini_response", fn="merge_entry", output=text)
+    return _extract_json(text)
