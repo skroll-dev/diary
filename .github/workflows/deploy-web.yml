@@ -30,6 +30,10 @@ jobs:
         run: flutter pub get
         working-directory: flutter
 
+      - name: Generate code (build_runner)
+        run: dart run build_runner build --delete-conflicting-outputs
+        working-directory: flutter
+
       - name: Build web
         run: |
           flutter build web \
