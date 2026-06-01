@@ -219,6 +219,15 @@ class EntryRepository {
         .go();
   }
 
+  // ── Local-only entry lookup (no auth — single-user device DB) ───────────────
+
+  Future<Entry?> getLocalEntryForDate(String date) =>
+      (_db.select(_db.entries)
+            ..where((e) => e.date.equals(date))
+            ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+            ..limit(1))
+          .getSingleOrNull();
+
   // ── Read helpers for re-derivation ───────────────────────────────────────────
 
   Future<List<RawTranscript>> getTranscriptsForDate(String date) async {

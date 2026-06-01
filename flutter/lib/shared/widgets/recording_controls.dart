@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'transcript_input_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/proxy_client.dart';
@@ -94,31 +95,11 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   }
 
   Future<void> _showTypeDialog() async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Transkript eingeben'),
-        content: TextField(
-          controller: controller,
-          maxLines: 6,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Text statt Sprache …',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Abbrechen')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Verarbeiten')),
-        ],
-      ),
+    final text = await showTranscriptInputSheet(
+      context,
+      title: 'Transkript eingeben',
+      hint: 'Text statt Sprache …',
     );
-    controller.dispose();
     if (text == null || text.isEmpty) return;
 
     setState(() => _phase = RecordingPhase.processing);

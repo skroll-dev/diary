@@ -12,6 +12,7 @@ import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/services/recording_service.dart';
 import '../../../shared/widgets/recording_controls.dart';
+import '../../../shared/widgets/transcript_input_sheet.dart';
 import '../recording_context.dart';
 
 enum _RecordingState { idle, recording, processing }
@@ -161,33 +162,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   // Long-press mic: type a transcript instead of speaking (works in all builds)
   Future<void> _showTranscriptDialog() async {
-    final controller = TextEditingController();
-    final rawTranscript = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Transkript eingeben'),
-        content: TextField(
-          controller: controller,
-          maxLines: 6,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Rohes Transkript …',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Verarbeiten'),
-          ),
-        ],
-      ),
+    final rawTranscript = await showTranscriptInputSheet(
+      context,
+      title: 'Transkript eingeben',
+      hint: 'Rohes Transkript …',
     );
-    controller.dispose();
     if (rawTranscript == null || rawTranscript.isEmpty) return;
 
     setState(() => _state = _RecordingState.processing);

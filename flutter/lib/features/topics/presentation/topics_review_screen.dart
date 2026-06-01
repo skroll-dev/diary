@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../recording/recording_context.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/recording_controls.dart';
+import '../../../shared/widgets/transcript_input_sheet.dart';
 
 // ── Internal data models ───────────────────────────────────────────────────────
 
@@ -131,6 +133,39 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
     // Load DB transcript IDs so edit/delete can target the right rows
     _loadTranscriptIds();
+
+    // On web refresh state.extra is lost — reload today's entry from Drift
+    if (_topics.isEmpty) _loadFromDbIfEmpty();
+  }
+
+  Future<void> _loadFromDbIfEmpty() async {
+    try {
+      final repo = ref.read(entryRepositoryProvider);
+      final entry = await repo.getLocalEntryForDate(_isoDate);
+      if (entry == null || !mounted) return;
+
+      final topicDtos = (jsonDecode(entry.topics) as List)
+          .map((e) => TopicDto.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final questions = (jsonDecode(entry.followUpQuestions) as List)
+          .map((e) => e as String)
+          .toList();
+      final transcripts = await repo.getTranscriptsForDate(_isoDate);
+
+      setState(() {
+        _bodyMarkdown = entry.bodyMarkdown;
+        _mood = entry.mood;
+        _moodScore = entry.moodScore;
+        _followUpQuestions = questions;
+        _topics = _mapTopics(topicDtos);
+        _recordings = transcripts.map((t) => _RecordingRecord(
+          dbId: t.id,
+          normalizedText: t.normalizedContent.isNotEmpty ? t.normalizedContent : t.content,
+          reason: t.reason,
+          timestamp: DateTime.tryParse(t.createdAt) ?? DateTime.now(),
+        )).toList();
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadTranscriptIds() async {
@@ -262,28 +297,13 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
   Future<void> _editRecording(int index) async {
     final record = _recordings[index];
-    final controller = TextEditingController(text: record.normalizedText);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aufnahme bearbeiten'),
-        content: TextField(
-          controller: controller,
-          maxLines: 8,
-          autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Abbrechen')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Speichern')),
-        ],
-      ),
+    final result = await showTranscriptInputSheet(
+      context,
+      title: 'Aufnahme bearbeiten',
+      hint: '',
+      initialValue: record.normalizedText,
+      confirmLabel: 'Speichern',
     );
-    controller.dispose();
     if (result == null || result.isEmpty || result == record.normalizedText) return;
 
     setState(() => _recordings[index].normalizedText = result);
@@ -437,15 +457,16 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Positioned(
-                        left: 4,
-                        child: IconButton(
-                          onPressed: () => context.pop(),
-                          icon: Icon(Icons.arrow_back_ios_new_rounded,
-                              size: 20, color: cs.onSurface),
-                          tooltip: 'Zurück',
+                      if (context.canPop())
+                        Positioned(
+                          left: 4,
+                          child: IconButton(
+                            onPressed: () => context.pop(),
+                            icon: Icon(Icons.arrow_back_ios_new_rounded,
+                                size: 20, color: cs.onSurface),
+                            tooltip: 'Zurück',
+                          ),
                         ),
-                      ),
                       if (_headerDateLine.isNotEmpty)
                         Text(_headerDateLine,
                             style: tt.bodyMedium?.copyWith(color: cs.outline)),
