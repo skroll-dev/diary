@@ -1,4 +1,3 @@
-import 'dart:math' show min;
 import 'package:flutter/material.dart';
 
 /// Shows a keyboard-aware bottom sheet for multi-line text input.
@@ -59,25 +58,24 @@ class _TranscriptInputSheetState extends State<_TranscriptInputSheet> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final mq = MediaQuery.of(context);
-    final keyboardHeight = mq.viewInsets.bottom;
-    // Clamp sheet height: never taller than what fits above the keyboard,
-    // never shorter than ~280 dp (enough for handle + title + field + buttons).
-    final availableHeight =
-        mq.size.height - keyboardHeight - mq.padding.top - 48;
-    final sheetHeight = min(availableHeight, 420.0);
+    // AnimatedPadding smoothly lifts the sheet as the keyboard value arrives.
+    // The sheet itself is mainAxisSize.min with a capped text field height,
+    // so it is always compact enough to fit above any keyboard without
+    // needing to know the keyboard height before the first frame.
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Padding(
-      // Lifts the sheet exactly above the keyboard — no double-compensation.
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
       padding: EdgeInsets.only(bottom: keyboardHeight),
       child: Container(
-        height: sheetHeight,
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Handle
@@ -98,36 +96,33 @@ class _TranscriptInputSheetState extends State<_TranscriptInputSheet> {
               style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
-            // Text field fills all remaining space so buttons stay anchored.
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                expands: true,
-                maxLines: null,
-                minLines: null,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: widget.hint,
-                  hintStyle: tt.bodyMedium?.copyWith(color: cs.outline),
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: cs.primary, width: 2),
-                  ),
-                  contentPadding: const EdgeInsets.all(16),
+            // Text field — capped at 5 lines so the sheet stays compact.
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              minLines: 4,
+              maxLines: 5,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              decoration: InputDecoration(
+                hintText: widget.hint,
+                hintStyle: tt.bodyMedium?.copyWith(color: cs.outline),
+                filled: true,
+                fillColor: cs.surfaceContainerHighest,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
-                style: tt.bodyLarge,
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: cs.primary, width: 2),
+                ),
+                contentPadding: const EdgeInsets.all(16),
               ),
+              style: tt.bodyLarge,
             ),
             const SizedBox(height: 16),
-            // Actions — always visible at the bottom.
+            // Actions
             Row(
               children: [
                 Expanded(
