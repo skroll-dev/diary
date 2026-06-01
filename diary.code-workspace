@@ -1,9 +1,21 @@
 {
   "folders": [
-    { "path": ".", "name": "diary (root)" },
-    { "path": "flutter", "name": "flutter" },
-    { "path": "ai-proxy", "name": "ai-proxy" },
-    { "path": "gdpr-export", "name": "gdpr-export" }
+    {
+      "path": ".",
+      "name": "diary (root)"
+    },
+    {
+      "path": "flutter",
+      "name": "flutter"
+    },
+    {
+      "path": "ai-proxy",
+      "name": "ai-proxy"
+    },
+    {
+      "path": "gdpr-export",
+      "name": "gdpr-export"
+    }
   ],
   "settings": {
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
@@ -52,6 +64,24 @@
         "deviceId": "chrome"
       },
       {
+        "name": "Flutter – Web (LAN, emulator-accessible)",
+        "type": "dart",
+        "request": "launch",
+        "program": "${workspaceFolder:flutter}/lib/main.dart",
+        "deviceId": "chrome",
+        // Change LOCAL_IP to match your current Wi-Fi/LAN address (ipconfig getifaddr en0).
+        // Android emulator reaches the host at 10.0.2.2; iOS Simulator uses the real LAN IP.
+        "args": [
+          "--web-hostname",
+          "0.0.0.0",
+          "--web-port",
+          "8088",
+          "--release",
+          "--dart-define",
+          "PROXY_BASE_URL=http://10.128.57.216:8080"
+        ]
+      },
+      {
         "name": "Flutter – Profile",
         "type": "dart",
         "request": "launch",
@@ -63,7 +93,12 @@
         "type": "debugpy",
         "request": "launch",
         "module": "uvicorn",
-        "args": ["app.main:app", "--reload", "--port", "8080"],
+        "args": [
+          "app.main:app",
+          "--reload",
+          "--port",
+          "8080"
+        ],
         "cwd": "${workspaceFolder:ai-proxy}",
         "python": "${workspaceFolder:ai-proxy}/.venv/bin/python",
         "envFile": "${workspaceFolder:ai-proxy}/.env",
@@ -74,7 +109,12 @@
         "type": "debugpy",
         "request": "launch",
         "module": "uvicorn",
-        "args": ["app.main:app", "--reload", "--port", "8081"],
+        "args": [
+          "app.main:app",
+          "--reload",
+          "--port",
+          "8081"
+        ],
         "cwd": "${workspaceFolder:gdpr-export}",
         "python": "${workspaceFolder:gdpr-export}/.venv/bin/python",
         "envFile": "${workspaceFolder:gdpr-export}/.env",

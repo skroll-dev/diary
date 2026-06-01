@@ -448,6 +448,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
     return Scaffold(
       backgroundColor: cs.surface,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           SafeArea(

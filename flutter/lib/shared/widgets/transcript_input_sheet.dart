@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Shows a keyboard-aware bottom sheet for multi-line text input.
+/// Shows a keyboard-safe dialog for multi-line text input.
+///
+/// Uses [showDialog] instead of a bottom sheet — dialogs center in the screen
+/// and are naturally above the keyboard on all platforms, including iOS Safari
+/// where bottom-sheet viewInsets are unreliable.
+///
 /// Returns the entered text, or null if cancelled.
 Future<String?> showTranscriptInputSheet(
   BuildContext context, {
@@ -9,21 +14,31 @@ Future<String?> showTranscriptInputSheet(
   String initialValue = '',
   String confirmLabel = 'Verarbeiten',
 }) async {
-  return showModalBottomSheet<String>(
+  return showDialog<String>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => _TranscriptInputSheet(
-      title: title,
-      hint: hint,
-      initialValue: initialValue,
-      confirmLabel: confirmLabel,
-    ),
+    barrierDismissible: true,
+    builder: (ctx) {
+      // Anchor to the top of the screen so the keyboard (which opens from the
+      // bottom) can never cover the dialog — no viewInsets needed.
+      final topPadding = MediaQuery.of(ctx).padding.top + 16;
+      return Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, topPadding, 20, 0),
+          child: _TranscriptInputDialog(
+            title: title,
+            hint: hint,
+            initialValue: initialValue,
+            confirmLabel: confirmLabel,
+          ),
+        ),
+      );
+    },
   );
 }
 
-class _TranscriptInputSheet extends StatefulWidget {
-  const _TranscriptInputSheet({
+class _TranscriptInputDialog extends StatefulWidget {
+  const _TranscriptInputDialog({
     required this.title,
     required this.hint,
     required this.initialValue,
@@ -36,21 +51,24 @@ class _TranscriptInputSheet extends StatefulWidget {
   final String confirmLabel;
 
   @override
-  State<_TranscriptInputSheet> createState() => _TranscriptInputSheetState();
+  State<_TranscriptInputDialog> createState() => _TranscriptInputDialogState();
 }
 
-class _TranscriptInputSheetState extends State<_TranscriptInputSheet> {
+class _TranscriptInputDialogState extends State<_TranscriptInputDialog> {
   late final TextEditingController _controller;
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialValue);
+    _scrollController = ScrollController();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -58,68 +76,55 @@ class _TranscriptInputSheetState extends State<_TranscriptInputSheet> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    // AnimatedPadding smoothly lifts the sheet as the keyboard value arrives.
-    // The sheet itself is mainAxisSize.min with a capped text field height,
-    // so it is always compact enough to fit above any keyboard without
-    // needing to know the keyboard height before the first frame.
-    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
 
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: keyboardHeight),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+    return Material(
+      borderRadius: BorderRadius.circular(20),
+      color: cs.surface,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
             // Title
             Text(
               widget.title,
               style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
-            // Text field — capped at 5 lines so the sheet stays compact.
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              minLines: 4,
-              maxLines: 5,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                hintStyle: tt.bodyMedium?.copyWith(color: cs.outline),
-                filled: true,
-                fillColor: cs.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
+            // Scrollable text area — capped at 180 dp so total dialog height
+            // stays under the ~420 dp available above a standard iOS keyboard.
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 120, maxHeight: 180),
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: TextField(
+                  controller: _controller,
+                  scrollController: _scrollController,
+                  autofocus: true,
+                  maxLines: null,
+                  minLines: 6,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    hintStyle: tt.bodyMedium?.copyWith(color: cs.outline),
+                    filled: true,
+                    fillColor: cs.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: cs.primary, width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.all(16),
+                  ),
+                  style: tt.bodyLarge,
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: cs.primary, width: 2),
-                ),
-                contentPadding: const EdgeInsets.all(16),
               ),
-              style: tt.bodyLarge,
             ),
             const SizedBox(height: 16),
             // Actions
