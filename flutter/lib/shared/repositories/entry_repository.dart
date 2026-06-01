@@ -219,6 +219,23 @@ class EntryRepository {
         .go();
   }
 
+  // ── Delete the full entry for a date (transcripts first, then entry) ─────────
+
+  Future<void> deleteEntryForDate(String date) async {
+    final user = await _auth.getUser();
+    final entry = await (_db.select(_db.entries)
+          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
+        .getSingleOrNull();
+    if (entry == null) return;
+    await (_db.delete(_db.rawTranscripts)
+          ..where((t) => t.entryId.equals(entry.id)))
+        .go();
+    await (_db.delete(_db.entries)
+          ..where((e) => e.id.equals(entry.id)))
+        .go();
+    unawaited(_deleteFromFirestore(uid: user.uid, date: date));
+  }
+
   // ── Local-only entry lookup (no auth — single-user device DB) ───────────────
 
   Future<Entry?> getLocalEntryForDate(String date) =>
@@ -243,6 +260,22 @@ class EntryRepository {
   }
 
   // ── Firestore sync ────────────────────────────────────────────────────────────
+
+  Future<void> _deleteFromFirestore({
+    required String uid,
+    required String date,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('entries')
+          .doc(date)
+          .delete();
+    } catch (_) {
+      // Best-effort — document may not exist if sync never completed
+    }
+  }
 
   Future<void> _syncToFirestore({
     required String uid,

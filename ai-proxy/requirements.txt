@@ -2,7 +2,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 
 # Google Cloud / KI
-google-cloud-speech==2.27.0
+google-cloud-speech==2.39.0
 google-cloud-aiplatform==1.70.0
 vertexai==1.70.0
 

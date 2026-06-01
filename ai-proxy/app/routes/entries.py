@@ -49,7 +49,7 @@ class EntryResponse(BaseModel):
     body_markdown: str
     mood: MoodType
     mood_score: float = Field(..., ge=-1.0, le=1.0)
-    follow_up_questions: list[str] = Field(..., min_length=1, max_length=5)
+    follow_up_questions: list[str] = Field(default_factory=list, max_length=5)
     topics: list[TopicItem] = Field(default_factory=list)
 
 

@@ -1,7 +1,7 @@
 name: ai_tagebuch
 description: AI-gestütztes Sprach-Tagebuch – Codename Mathias
 publish_to: "none"
-version: 0.3.4+7
+version: 0.4.0+8
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -41,6 +41,7 @@ dependencies:
   # Utilities
   uuid: ^4.5.1
   package_info_plus: ^8.3.0
+  shared_preferences: ^2.3.5
 
   # Biometric Lock
   local_auth: ^3.0.1

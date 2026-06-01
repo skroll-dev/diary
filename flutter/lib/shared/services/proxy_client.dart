@@ -6,8 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'app_preferences.dart';
 import 'auth_service.dart';
-import 'recording_service.dart' show AudioData;
+import 'recording_service.dart' show AudioData, RecordingService;
 
 part 'proxy_client.g.dart';
 
@@ -96,6 +97,7 @@ class ProxyClient {
   }
 
   Future<String> transcribe(AudioData audio) async {
+    final prefs = await _ref.read(appPreferencesProvider.future);
     final dio = await _dio();
     final parts = audio.contentType.split('/');
     final form = FormData.fromMap({
@@ -104,14 +106,20 @@ class ProxyClient {
         filename: 'recording.${parts.last}',
         contentType: DioMediaType(parts.first, parts.last),
       ),
+      'denoise': prefs.denoiseAudio ? '1' : '0',
     });
     final resp = await dio.post('/transcribe/', data: form);
     return resp.data['transcript'] as String;
   }
 
-  /// Web streaming path: pipes [audioStream] chunks over WebSocket and
-  /// returns the final transcript once the server responds.
-  Future<String> transcribeWebSocket(Stream<Uint8List> audioStream) async {
+  /// Web streaming path: pipes [audioStream] chunks over WebSocket.
+  /// Calls [onInterim] with each partial result and [onSegment] when a
+  /// segment is confirmed. Returns the full transcript when the stream ends.
+  Future<String> transcribeWebSocket(
+    Stream<Uint8List> audioStream, {
+    void Function(String text)? onInterim,
+    void Function(String text)? onSegment,
+  }) async {
     final wsBase = _baseUrl
         .replaceFirst('https://', 'wss://')
         .replaceFirst('http://', 'ws://');
@@ -120,9 +128,15 @@ class ProxyClient {
         _baseUrl.contains('localhost') || _baseUrl.contains('127.0.0.1');
     final token =
         isLocal ? '' : await _ref.read(authServiceProvider.notifier).getIdToken();
+    final prefs = await _ref.read(appPreferencesProvider.future);
 
+    final params = <String>[
+      if (token.isNotEmpty) 'token=${Uri.encodeQueryComponent(token)}',
+      if (!prefs.denoiseAudio) 'denoise=0',
+      'sr=${RecordingService.webSampleRate}',
+    ];
     final uri = Uri.parse(
-      '$wsBase/transcribe/ws${token.isNotEmpty ? '?token=${Uri.encodeQueryComponent(token)}' : ''}',
+      '$wsBase/transcribe/ws${params.isEmpty ? '' : '?${params.join('&')}'}',
     );
 
     final channel = WebSocketChannel.connect(uri);
@@ -132,9 +146,23 @@ class ProxyClient {
       (msg) {
         final data = jsonDecode(msg as String) as Map<String, dynamic>;
         if (data['error'] != null) {
-          completer.completeError(Exception(data['error']));
-        } else {
-          completer.complete(data['transcript'] as String);
+          if (!completer.isCompleted) {
+            completer.completeError(Exception(data['error'] as String));
+          }
+        } else if (data['type'] == 'interim') {
+          final text = data['text'] as String? ?? '';
+          debugPrint('[WS] interim: $text');
+          onInterim?.call(text);
+        } else if (data['type'] == 'segment') {
+          final text = data['text'] as String? ?? '';
+          debugPrint('[WS] segment: $text');
+          onSegment?.call(text);
+        } else if (data['type'] == 'final' || data['transcript'] != null) {
+          final text = data['transcript'] as String? ?? '';
+          debugPrint('[WS] final: $text');
+          if (!completer.isCompleted) {
+            completer.complete(text);
+          }
         }
       },
       onError: (Object e) {
@@ -147,9 +175,13 @@ class ProxyClient {
       },
     );
 
+    var chunkIndex = 0;
     await for (final chunk in audioStream) {
       channel.sink.add(chunk);
+      chunkIndex++;
+      debugPrint('[WS] chunk $chunkIndex — ${chunk.lengthInBytes} bytes');
     }
+    debugPrint('[WS] sent done after $chunkIndex chunks');
     channel.sink.add('done');
 
     final transcript = await completer.future;

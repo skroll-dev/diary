@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/services/recording_service.dart';
+import '../../../shared/widgets/live_transcript_display.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
 import '../recording_context.dart';
@@ -42,7 +43,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Timer? _timer;
   int _seconds = 0;
   Future<String>? _wsTranscriptFuture;
+  String _confirmedTranscript = '';
+  String _interimText = '';
   String _version = '';
+
+  bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
 
   @override
   void initState() {
@@ -73,9 +78,22 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final svc = ref.read(recordingServiceProvider);
     await svc.start();
     if (kIsWeb) {
-      _wsTranscriptFuture = ref
-          .read(proxyClientProvider)
-          .transcribeWebSocket(svc.webAudioStream);
+      _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
+        svc.webAudioStream,
+        onInterim: (text) {
+          if (mounted) setState(() => _interimText = text);
+        },
+        onSegment: (text) {
+          if (mounted) {
+            setState(() {
+              _confirmedTranscript = _confirmedTranscript.isEmpty
+                  ? text
+                  : '$_confirmedTranscript $text';
+              _interimText = '';
+            });
+          }
+        },
+      );
     }
     setState(() {
       _state = _RecordingState.recording;
@@ -145,6 +163,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         _state = _RecordingState.idle;
         _seconds = 0;
         _wsTranscriptFuture = null;
+        _confirmedTranscript = '';
+        _interimText = '';
       });
       context.push('/topics', extra: (
         date: date,
@@ -157,6 +177,29 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         followUpQuestions: followUpQuestions,
         transcriptReason: reason,
       ));
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    _timer?.cancel();
+    _waveController.stop();
+    _pulseController.stop();
+    _pulseController.reset();
+    try {
+      if (kIsWeb) {
+        await ref.read(recordingServiceProvider).stopStream();
+      } else {
+        await ref.read(recordingServiceProvider).stopAndRead(); // discard bytes
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _state = _RecordingState.idle;
+        _seconds = 0;
+        _wsTranscriptFuture = null;
+        _confirmedTranscript = '';
+        _interimText = '';
+      });
     }
   }
 
@@ -303,16 +346,22 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                     textAlign: TextAlign.center,
                   ),
           ),
-          // Waveform + timer while recording
+          // Waveform + timer + live transcript while recording
           AnimatedSize(
             duration: const Duration(milliseconds: 420),
             curve: Curves.easeInOut,
             child: isRecording
                 ? Column(
                     children: [
-                      const SizedBox(height: 40),
-                      SizedBox(
-                        height: 80,
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        height: _hasText ? 20 : 40,
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        height: _hasText ? 44 : 80,
                         width: double.infinity,
                         child: AnimatedBuilder(
                           animation: _waveController,
@@ -322,18 +371,31 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                               seeds: _barSeeds,
                               activeColor: cs.primary,
                               inactiveColor: cs.outlineVariant,
+                              compact: _hasText,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 28),
-                      Text(
-                        _timerLabel,
-                        textAlign: TextAlign.center,
-                        style: tt.displaySmall?.copyWith(
-                          fontWeight: FontWeight.w300,
-                          letterSpacing: 3,
-                        ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        height: _hasText ? 10 : 28,
+                      ),
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        style: (_hasText ? tt.titleLarge : tt.displaySmall)
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w300,
+                                  letterSpacing: 3,
+                                ) ??
+                            const TextStyle(),
+                        child: Text(_timerLabel, textAlign: TextAlign.center),
+                      ),
+                      const SizedBox(height: 16),
+                      LiveTranscriptDisplay(
+                        confirmedText: _confirmedTranscript,
+                        interimText: _interimText,
                       ),
                     ],
                   )
@@ -512,6 +574,25 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             key: ValueKey(isRecording),
             style: tt.bodyMedium?.copyWith(color: cs.outline),
           ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: isRecording
+              ? GestureDetector(
+                  onTap: _cancelRecording,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 10),
+                    child: Text(
+                      'Aufnahme abbrechen',
+                      style: tt.labelMedium?.copyWith(
+                        color: cs.error.withValues(alpha: 0.65),
+                      ),
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );

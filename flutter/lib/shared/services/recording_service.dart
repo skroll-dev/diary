@@ -14,10 +14,20 @@ class RecordingService {
   String? _tempPath;
   Stream<Uint8List>? _webStream;
 
+  // Native AudioContext rate on most browsers/OS — no resampling needed.
+  // Forcing 16000 Hz causes Chrome to report an inconsistent context rate,
+  // making the worklet passthrough incorrect audio (sounds WAY too slow).
+  static const int webSampleRate = 44100;
+
   Future<void> start() async {
     if (kIsWeb) {
       _webStream = await _recorder.startStream(
-        const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000),
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: webSampleRate,
+          numChannels: 1,
+          streamBufferSize: 512,
+        ),
       );
     } else {
       final dir = await getTemporaryDirectory();

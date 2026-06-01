@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'transcript_input_sheet.dart';
+import 'live_transcript_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/proxy_client.dart';
@@ -47,6 +48,10 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   Timer? _timer;
   int _seconds = 0;
   Future<String>? _wsTranscriptFuture;
+  String _confirmedTranscript = '';
+  String _interimText = '';
+
+  bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
 
   @override
   void initState() {
@@ -80,8 +85,22 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     final svc = ref.read(recordingServiceProvider);
     await svc.start();
     if (kIsWeb) {
-      _wsTranscriptFuture =
-          ref.read(proxyClientProvider).transcribeWebSocket(svc.webAudioStream);
+      _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
+        svc.webAudioStream,
+        onInterim: (text) {
+          if (mounted) setState(() => _interimText = text);
+        },
+        onSegment: (text) {
+          if (mounted) {
+            setState(() {
+              _confirmedTranscript = _confirmedTranscript.isEmpty
+                  ? text
+                  : '$_confirmedTranscript $text';
+              _interimText = '';
+            });
+          }
+        },
+      );
     }
     setState(() {
       _phase = RecordingPhase.recording;
@@ -133,7 +152,33 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
         _phase = RecordingPhase.idle;
         _seconds = 0;
         _wsTranscriptFuture = null;
+        _confirmedTranscript = '';
+        _interimText = '';
       });
+    }
+  }
+
+  Future<void> _cancel() async {
+    _timer?.cancel();
+    _waveController.stop();
+    _pulseController.stop();
+    _pulseController.reset();
+    try {
+      if (kIsWeb) {
+        await ref.read(recordingServiceProvider).stopStream();
+      } else {
+        await ref.read(recordingServiceProvider).stopAndRead(); // discard
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _phase = RecordingPhase.idle;
+        _seconds = 0;
+        _wsTranscriptFuture = null;
+        _confirmedTranscript = '';
+        _interimText = '';
+      });
+      widget.onCancel?.call();
     }
   }
 
@@ -147,15 +192,17 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Waveform + timer (visible only while recording)
+        // Waveform + timer + live transcript (visible while recording)
         AnimatedSize(
           duration: const Duration(milliseconds: 420),
           curve: Curves.easeInOut,
           child: isRecording
               ? Column(
                   children: [
-                    SizedBox(
-                      height: 80,
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      height: _hasText ? 44 : 80,
                       width: double.infinity,
                       child: AnimatedBuilder(
                         animation: _waveController,
@@ -165,20 +212,35 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                             seeds: _barSeeds,
                             activeColor: cs.primary,
                             inactiveColor: cs.outlineVariant,
+                            compact: _hasText,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _timerLabel,
-                      textAlign: TextAlign.center,
-                      style: tt.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 3,
-                      ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      height: _hasText ? 8 : 16,
                     ),
-                    const SizedBox(height: 24),
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      style: (_hasText
+                              ? tt.titleLarge
+                              : tt.displaySmall)
+                          ?.copyWith(
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: 3,
+                          ) ??
+                          const TextStyle(),
+                      child: Text(_timerLabel, textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(height: 12),
+                    LiveTranscriptDisplay(
+                      confirmedText: _confirmedTranscript,
+                      interimText: _interimText,
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 )
               : const SizedBox.shrink(),
@@ -267,6 +329,26 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
               textAlign: TextAlign.center,
             ),
           ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: isRecording
+                ? GestureDetector(
+                    onTap: _cancel,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 10),
+                      child: Text(
+                        'Aufnahme abbrechen',
+                        style: tt.labelMedium?.copyWith(
+                          color: cs.error.withValues(alpha: 0.65),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ],
     );
@@ -279,18 +361,19 @@ class WaveformPainter extends CustomPainter {
     required this.seeds,
     required this.activeColor,
     required this.inactiveColor,
+    this.compact = false,
   });
 
   final double value;
   final List<double> seeds;
   final Color activeColor;
   final Color inactiveColor;
+  final bool compact;
 
   static const int _count = 22;
   static const double _barW = 4.0;
   static const double _gap = 5.0;
-  static const double _maxH = 68.0;
-  static const double _minH = 5.0;
+  static const double _minH = 3.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -303,7 +386,8 @@ class WaveformPainter extends CustomPainter {
       final wave = sin(value * 2 * pi + phase) * 0.5 +
           sin(value * 2 * pi * 1.7 + phase * 1.3 + 0.9) * 0.3 +
           sin(value * 2 * pi * 0.5 + phase * 0.7) * 0.2;
-      final h = _minH + seeds[i] * ((wave + 1) / 2) * (_maxH - _minH);
+      final maxH = compact ? 24.0 : 68.0;
+      final h = _minH + seeds[i] * ((wave + 1) / 2) * (maxH - _minH);
 
       final distFromCenter = (i - _count / 2).abs() / (_count / 2);
       final isActive = distFromCenter < 0.55;
@@ -321,5 +405,5 @@ class WaveformPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WaveformPainter old) => old.value != value;
+  bool shouldRepaint(WaveformPainter old) => old.value != value || old.compact != compact;
 }

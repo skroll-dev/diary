@@ -380,7 +380,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       body: 'Alle Aufnahmen und der aktuelle Eintrag werden gelöscht.',
       confirmLabel: 'Alles löschen',
     );
-    if (confirmed && mounted) context.go('/');
+    if (confirmed && mounted) {
+      await ref.read(entryRepositoryProvider).deleteEntryForDate(_isoDate);
+      if (mounted) context.go('/');
+    }
   }
 
   Future<bool> _showConfirmDialog({
