@@ -47,6 +47,19 @@ LOG_FILE=../log/ai-proxy.log .venv/bin/uvicorn app.main:app --reload --port 8080
 
 **Logs:** ai-proxy writes to `log/ai-proxy.log` (controlled by `LOG_FILE` env var).
 
+#### ai-proxy `.env` (gitignored, local dev only)
+
+```env
+GCP_PROJECT=diary-6fa61
+GCP_REGION=europe-west1
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/diary-6fa61-<key-id>.json   # service account key for local auth
+ENV=development        # bypasses Firebase App Check; omit or set to 'production' in Cloud Run
+LOG_FILE=/path/to/log/ai-proxy.log
+LOG_LEVEL=debug        # debug | info | warning | error
+```
+
+The actual key file lives at `doc/key/` (gitignored). In Cloud Run, `GOOGLE_APPLICATION_CREDENTIALS` is not needed — the service account is attached to the revision directly.
+
 ### Deployment (CI/CD)
 
 GitHub Actions auto-deploy on push to `main`:
