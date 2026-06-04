@@ -16,22 +16,18 @@ class TopicDto {
   const TopicDto({
     required this.title,
     required this.text,
-    required this.followUpHint,
   });
   final String title;
   final String text;
-  final String followUpHint;
 
   factory TopicDto.fromJson(Map<String, dynamic> j) => TopicDto(
         title: j['title'] as String? ?? '',
         text: j['text'] as String? ?? '',
-        followUpHint: j['follow_up_hint'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
         'title': title,
         'text': text,
-        'follow_up_hint': followUpHint,
       };
 }
 

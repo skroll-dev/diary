@@ -42,7 +42,7 @@ class MergeRequest(BaseModel):
 class TopicItem(BaseModel):
     title: str
     text: str
-    follow_up_hint: str
+    follow_up_hint: str = ""
 
 
 class EntryResponse(BaseModel):

@@ -81,15 +81,13 @@ Gib AUSSCHLIESSLICH valides JSON zurück:
   "mood": "happy" | "calm" | "neutral" | "tense" | "sad" | "mixed",
   "mood_score": Zahl zwischen -1.0 und +1.0,
   "follow_up_questions": [
-    "Genau eine offene Frage, keine Ja/Nein-Frage",
-    "Bezieht sich auf etwas Konkretes aus dem Eintrag",
-    "Dritte Frage geht in die Tiefe, nicht in die Breite"
+    "Offene Frage, keine Ja/Nein-Frage",
+    "Bezieht sich auf etwas Konkretes aus dem Eintrag"
   ],
   "topics": [
     {
       "title": "Thema in 2-4 Wörtern",
-      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte aus dem Transkript, nichts weglassen, keine Kürzungen",
-      "follow_up_hint": "Eine spezifische Vertiefungsfrage für genau dieses Thema, max. 15 Wörter"
+      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte aus dem Transkript, nichts weglassen, keine Kürzungen"
     }
   ]
 }
@@ -98,19 +96,20 @@ Regeln für topics:
 - Ein Topic pro erkennbarem Thema oder Ereignis im Transkript (min. 1, max. 5)
 - title: prägnant, keine Verben (z.B. \"Meeting mit Tim\", \"Spaziergang abends\")
 - text: vollständiger Ich-Form-Text für dieses Kapitel — ALLE relevanten Details aus dem Transkript, KEIN Kürzen
-- follow_up_hint: konkret auf dieses Thema bezogen, nicht allgemein
 
 Regeln für die follow_up_questions:
 - Keine Ratschläge, keine Therapie-Phrasen
 - Keine Frage darf mit \"Wie fühlst du dich?\" beginnen
 - Greife konkrete Wörter aus dem Eintrag auf
-- Maximal 15 Wörter pro Frage"""
+- Maximal 15 Wörter pro Frage
+- 1-3 Fragen, nur wenn sie dem Eintrag echten Mehrwert bieten
+- Wenn keine sinnvollen Fragen entstehen, gib ein leeres Array zurück: []"""
 
 _SYSTEM_PROMPT_MERGE = """Du bist Mathias. Der Nutzer hat heute bereits einen Eintrag verfasst
 und gerade weitere Gedanken diktiert – meist als Antwort auf eine deiner Folgefragen.
 Integriere die neuen Inhalte ORGANISCH in den bestehenden Eintrag: Dopplungen entfernen,
-chronologisch ordnen, gleicher Ton. Generiere danach 2-3 NEUE Folgefragen, die noch nicht
-beantwortet wurden.
+chronologisch ordnen, gleicher Ton. Generiere danach neue Folgefragen, die noch nicht
+beantwortet wurden — nur wenn sie echten Mehrwert bieten.
 
 Gib AUSSCHLIESSLICH valides JSON in exakt dieser Struktur zurück:
 {
@@ -121,11 +120,12 @@ Gib AUSSCHLIESSLICH valides JSON in exakt dieser Struktur zurück:
   "topics": [
     {
       "title": "Thema in 2-4 Wörtern",
-      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte, NICHTS kürzen",
-      "follow_up_hint": "Eine spezifische Vertiefungsfrage für genau dieses Thema"
+      "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte, NICHTS kürzen"
     }
   ]
-}"""
+}
+
+follow_up_questions: 0-3 Fragen, keine Ja/Nein-Fragen, konkret auf den Eintrag bezogen, max. 15 Wörter pro Frage. Wenn keine sinnvollen Fragen entstehen, gib [] zurück."""
 
 
 async def generate_entry(transcript: str, language: str = "de") -> dict:

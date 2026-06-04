@@ -18,13 +18,11 @@ class _TopicData {
   const _TopicData({
     required this.title,
     required this.text,
-    required this.followUpHint,
     required this.cardColor,
     required this.accentColor,
   });
   final String title;
   final String text;
-  final String followUpHint;
   final Color cardColor;
   final Color accentColor;
 }
@@ -196,7 +194,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         return _TopicData(
           title: dto.title,
           text: dto.text,
-          followUpHint: dto.followUpHint,
           cardColor: card,
           accentColor: accent,
         );
@@ -519,15 +516,29 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                           0,
                           Padding(
                             padding: const EdgeInsets.only(bottom: 20),
-                            child: Text(
-                              _topics.isEmpty
-                                  ? 'Keine Themen erkannt.'
-                                  : '${_topics.length} ${_topics.length == 1 ? 'Thema' : 'Themen'} erkannt.\nMöchtest du etwas vertiefen?',
-                              style: tt.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                height: 1.25,
-                                letterSpacing: -0.5,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _topics.isEmpty
+                                      ? 'Keine Themen erkannt.'
+                                      : '${_topics.length} ${_topics.length == 1 ? 'Thema' : 'Themen'} erkannt.',
+                                  style: tt.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.25,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                if (_topics.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Möchtest du etwas vertiefen?',
+                                    style: tt.bodyMedium?.copyWith(
+                                      color: cs.primary,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ),
@@ -545,31 +556,15 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                               _TopicCard(
                                 key: ValueKey(_topics[i].title),
                                 topic: _topics[i],
-                                onExtend: () => _showRecordingOverlay(
-                                  ExtendingTopic(
-                                    topicTitle: _topics[i].title,
-                                    followUpHint: _topics[i].followUpHint,
-                                  ),
-                                ),
                               ),
                             ),
                           ),
-
-                        // ── General Ergänzen ───────────────────────────────
-                        _animated(
-                          _topics.length + 2,
-                          _ErgaenzenButton(
-                            onTap: () => _showRecordingOverlay(
-                              const ContinuingEntry(),
-                            ),
-                          ),
-                        ),
 
                         // ── Weitere Fragen ─────────────────────────────────
                         if (_followUpQuestions.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           _animated(
-                            _topics.length + 3,
+                            _topics.length + 2,
                             _buildQuestionsSection(context),
                           ),
                         ],
@@ -594,24 +589,47 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                     top: BorderSide(
                         color: cs.outlineVariant.withValues(alpha: 0.5))),
               ),
-              child: FilledButton(
-                onPressed: _topics.isNotEmpty
-                    ? () => context.push('/entry/today')
-                    : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF3730A3),
-                  disabledBackgroundColor:
-                      const Color(0xFF3730A3).withValues(alpha: 0.38),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  textStyle: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                child: const Text('Eintrag erstellen'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _showRecordingOverlay(const ContinuingEntry()),
+                    icon: const Icon(Icons.mic_none_rounded, size: 18),
+                    label: const Text('Eintrag vertiefen'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cs.onSurface,
+                      side: BorderSide(color: cs.outlineVariant),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      textStyle: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _topics.isNotEmpty
+                        ? () => context.push('/entry/today')
+                        : null,
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Eintrag abschließen'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cs.onSurface,
+                      side: BorderSide(color: cs.outlineVariant),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      textStyle: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -721,14 +739,33 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(Icons.auto_awesome_rounded, size: 14, color: cs.primary),
-              const SizedBox(width: 6),
-              Text('Mathias fragt',
-                  style:
-                      tt.labelMedium?.copyWith(color: cs.primary)),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.auto_awesome_rounded,
+                    size: 16, color: cs.onPrimaryContainer),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Mathias fragt',
+                      style: tt.labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    '${_followUpQuestions.length} ${_followUpQuestions.length == 1 ? 'Impuls' : 'Impulse'} zum Vertiefen',
+                    style: tt.labelSmall?.copyWith(color: cs.outline),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -745,7 +782,14 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(Icons.chat_bubble_outline_rounded,
+                        size: 16, color: cs.primary),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _followUpQuestions[i],
@@ -755,8 +799,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(Icons.mic_none_rounded, size: 18, color: cs.primary),
                 ],
               ),
             ),
@@ -964,109 +1006,56 @@ class _NormalizedTextBubble extends StatelessWidget {
 
 // ── Topic card ────────────────────────────────────────────────────────────────
 
-class _TopicCard extends StatefulWidget {
-  const _TopicCard({super.key, required this.topic, required this.onExtend});
+class _TopicCard extends StatelessWidget {
+  const _TopicCard({super.key, required this.topic});
   final _TopicData topic;
-  final VoidCallback onExtend;
-
-  @override
-  State<_TopicCard> createState() => _TopicCardState();
-}
-
-class _TopicCardState extends State<_TopicCard> {
-
-  @override
-  Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-    final titleColor =
-        Color.lerp(widget.topic.accentColor, Colors.black, 0.25)!;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: widget.topic.cardColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title
-          Text(
-            widget.topic.title,
-            style: tt.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700, color: titleColor),
-          ),
-          const SizedBox(height: 10),
-          // Topic text — always fully shown
-          Text(
-            widget.topic.text,
-            style: tt.bodyMedium?.copyWith(
-                color: widget.topic.accentColor, height: 1.55),
-          ),
-          // Follow-up hint
-          if (widget.topic.followUpHint.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              '💬 ${widget.topic.followUpHint}',
-              style: tt.bodySmall?.copyWith(
-                color: titleColor.withValues(alpha: 0.75),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          // Ergänzen button
-          OutlinedButton.icon(
-            onPressed: widget.onExtend,
-            icon: Icon(Icons.mic_none_rounded,
-                size: 15, color: widget.topic.accentColor),
-            label: const Text('Ergänzen'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: widget.topic.accentColor,
-              side: BorderSide(color: widget.topic.accentColor, width: 1.5),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              textStyle: tt.labelLarge,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── General Ergänzen button ────────────────────────────────────────────────────
-
-class _ErgaenzenButton extends StatelessWidget {
-  const _ErgaenzenButton({required this.onTap});
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(Icons.mic_none_rounded, size: 18, color: cs.primary),
-      label: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Ergänzen',
-              style: tt.labelLarge?.copyWith(color: cs.primary)),
-          Text('Einfach weiterreden — Mathias ordnet es ein',
-              style: tt.labelSmall?.copyWith(
-                  color: cs.outline)),
-        ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
-      style: OutlinedButton.styleFrom(
-        alignment: Alignment.centerLeft,
-        foregroundColor: cs.primary,
-        side: BorderSide(color: cs.outlineVariant),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: topic.accentColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        topic.title.toUpperCase(),
+                        style: tt.labelSmall?.copyWith(
+                          color: topic.accentColor,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        topic.text,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.55,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
