@@ -78,7 +78,21 @@
       "Bash(/usr/local/bin/gcloud auth *)",
       "Bash(gcloud config *)",
       "Bash(curl -s https://ai-proxy-918937960824.europe-west3.run.app/health)",
-      "Bash(curl -s -X POST https://ai-proxy-918937960824.europe-west3.run.app/entries/normalize -H 'Content-Type: application/json' -d '{\"transcript\": \"Test.\"}')"
+      "Bash(curl -s -X POST https://ai-proxy-918937960824.europe-west3.run.app/entries/normalize -H 'Content-Type: application/json' -d '{\"transcript\": \"Test.\"}')",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"splash screen launch animation minimal brand logo\" --domain ux -n 4)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"text input keyboard modal bottom sheet multiline\" --domain ux -n 3)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"destructive secondary action cancel dark mode minimal\" --domain ux -n 5)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"touch target secondary text action spacing dark\" --domain ux -n 3)",
+      "Bash(curl -s \"https://docs.cloud.google.com/speech-to-text/docs/models/chirp-3\")",
+      "Bash(python3 -c \"from google.cloud.speech_v2.types import cloud_speech; print\\(dir\\(cloud_speech.RecognitionConfig\\(\\)\\)\\)\")",
+      "Bash(.venv/bin/python3 -c \"from google.cloud.speech_v2.types import cloud_speech; cfg = cloud_speech.RecognitionConfig\\(\\); print\\(hasattr\\(cfg, 'denoiser_config'\\)\\); print\\(dir\\(cloud_speech.DenoiserConfig\\(\\)\\)\\)\")",
+      "Bash(.venv/bin/pip index *)",
+      "Bash(.venv/bin/python3 -c \"from google.cloud.speech_v2.types import cloud_speech; print\\(hasattr\\(cloud_speech.RecognitionConfig\\(\\), 'denoiser_config'\\)\\); print\\([x for x in dir\\(cloud_speech\\) if 'enois' in x.lower\\(\\)]\\)\")",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(awk '{print $2}')",
+      "WebFetch(domain:www.dhiwise.com)",
+      "WebFetch(domain:blog.logrocket.com)",
+      "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"multiline text input dialog scrollable dark mode\" --domain ux -n 4)"
     ]
   }
 }

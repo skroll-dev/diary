@@ -69,8 +69,6 @@
         "request": "launch",
         "program": "${workspaceFolder:flutter}/lib/main.dart",
         "deviceId": "chrome",
-        // Change LOCAL_IP to match your current Wi-Fi/LAN address (ipconfig getifaddr en0).
-        // Android emulator reaches the host at 10.0.2.2; iOS Simulator uses the real LAN IP.
         "args": [
           "--web-hostname",
           "0.0.0.0",
