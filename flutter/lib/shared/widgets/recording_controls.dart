@@ -236,9 +236,12 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                       child: Text(_timerLabel, textAlign: TextAlign.center),
                     ),
                     const SizedBox(height: 12),
-                    LiveTranscriptDisplay(
-                      confirmedText: _confirmedTranscript,
-                      interimText: _interimText,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 130),
+                      child: LiveTranscriptDisplay(
+                        confirmedText: _confirmedTranscript,
+                        interimText: _interimText,
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -268,41 +271,54 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
           Stack(
             alignment: Alignment.center,
             children: [
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (_, __) {
-                  final pulse = isRecording
-                      ? Curves.easeInOut.transform(_pulseController.value)
-                      : 0.0;
-                  return Container(
-                    width: isRecording ? 148 + 10 * pulse : 88,
-                    height: isRecording ? 148 + 10 * pulse : 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: cs.primary.withValues(
-                        alpha: isRecording ? 0.08 + 0.06 * pulse : 0.0,
+              // Layout anchor — fixed size so the pulse ring (Positioned) never
+              // causes 60fps layout thrashing on the parent Column.
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                width: isRecording ? 114 : 88,
+                height: isRecording ? 114 : 88,
+              ),
+              // Pulse ring is Positioned — purely visual, zero layout impact.
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (_, __) {
+                    final pulse = isRecording
+                        ? Curves.easeInOut.transform(_pulseController.value)
+                        : 0.0;
+                    return Center(
+                      child: Container(
+                        width: isRecording ? 106 + 8 * pulse : 0,
+                        height: isRecording ? 106 + 8 * pulse : 0,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: cs.primary.withValues(
+                            alpha: isRecording ? 0.08 + 0.06 * pulse : 0.0,
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
               GestureDetector(
                 onTap: isRecording ? _stop : _start,
                 onLongPress: isRecording ? null : _showTypeDialog,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOut,
-                  width: 88,
-                  height: 88,
+                  width: isRecording ? 66 : 88,
+                  height: isRecording ? 66 : 88,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: cs.primary,
                     boxShadow: isRecording
                         ? [
                             BoxShadow(
-                              color: cs.primary.withValues(alpha: 0.28),
-                              blurRadius: 24,
-                              spreadRadius: 4,
+                              color: cs.primary.withValues(alpha: 0.22),
+                              blurRadius: 14,
+                              spreadRadius: 2,
                             ),
                           ]
                         : [],
@@ -313,14 +329,14 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                       isRecording ? Icons.stop_rounded : Icons.mic_rounded,
                       key: ValueKey(isRecording),
                       color: cs.onPrimary,
-                      size: 36,
+                      size: isRecording ? 26 : 36,
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           GestureDetector(
             onDoubleTap: isRecording ? null : _showTypeDialog,
             child: Text(

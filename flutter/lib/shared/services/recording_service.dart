@@ -26,7 +26,7 @@ class RecordingService {
           encoder: AudioEncoder.pcm16bits,
           sampleRate: webSampleRate,
           numChannels: 1,
-          streamBufferSize: 512,
+          streamBufferSize: 8192, // AudioWorklet max; WS batching in proxy_client
         ),
       );
     } else {

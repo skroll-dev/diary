@@ -25,12 +25,27 @@ class GeminiBlockedError(ValueError):
 
 
 def _require_text(response, fn_name: str) -> str:
-    """Extract text from a Gemini response, raising GeminiBlockedError if no content."""
+    """Extract text from a Gemini response, raising GeminiBlockedError if no content.
+
+    Filters out thinking/reasoning parts (thought=True) so that gemini-2.5-flash
+    thinking tokens don't contaminate the returned text and break JSON parsing.
+    """
     candidate = response.candidates[0] if response.candidates else None
     if not candidate or not getattr(candidate.content, "parts", None):
         finish = candidate.finish_reason.name if candidate and candidate.finish_reason else "UNKNOWN"
         log.warning("gemini_blocked", fn=fn_name, finish_reason=finish)
         raise GeminiBlockedError(f"Gemini response blocked (finish_reason={finish})")
+    all_parts = candidate.content.parts
+    output_parts = [
+        p.text for p in all_parts
+        if not getattr(p, "thought", False) and getattr(p, "text", None)
+    ]
+    thinking_parts = [p for p in all_parts if getattr(p, "thought", False)]
+    if thinking_parts:
+        thinking_chars = sum(len(getattr(p, "text", "") or "") for p in thinking_parts)
+        log.info("gemini_thinking_filtered", fn=fn_name, thinking_parts=len(thinking_parts), thinking_chars=thinking_chars)
+    if output_parts:
+        return "".join(output_parts)
     return response.text
 
 
@@ -146,14 +161,20 @@ Gib ausschließlich den bereinigten Text zurück — kein JSON, keine Erklärung
 async def normalize_transcript(transcript: str) -> str:
     log.info("gemini_call", fn="normalize_transcript", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_NORMALIZE)
-    config = GenerationConfig(temperature=0.2, max_output_tokens=2048)
+    config = GenerationConfig(temperature=0.2, max_output_tokens=8192)
     response = await model.generate_content_async(transcript, generation_config=config)
     try:
         text = _require_text(response, "normalize_transcript")
     except GeminiBlockedError:
         log.warning("gemini_normalize_fallback", reason="blocked, returning original")
         return transcript
-    log.info("gemini_response", fn="normalize_transcript", output=text)
+    candidate = response.candidates[0]
+    finish_reason = candidate.finish_reason.name if candidate.finish_reason else "UNKNOWN"
+    usage = response.usage_metadata
+    log.info("gemini_response", fn="normalize_transcript", finish_reason=finish_reason,
+             output_tokens=usage.candidates_token_count,
+             total_tokens=usage.total_token_count,
+             output=text)
     return text.strip()
 
 
@@ -174,10 +195,17 @@ NEUE GEDANKEN (Transkript):
 BISHERIGE FOLGEFRAGEN (nicht wiederholen):
 {chr(10).join(f"- {q}" for q in previous_questions)}"""
 
-    response = await model.generate_content_async(
-        user_message,
-        generation_config=_GENERATION_CONFIG,
-    )
-    text = _require_text(response, "merge_entry")
-    log.info("gemini_response", fn="merge_entry", output=text)
-    return _extract_json(text)
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        response = await model.generate_content_async(
+            user_message,
+            generation_config=_GENERATION_CONFIG,
+        )
+        text = _require_text(response, "merge_entry")
+        log.info("gemini_response", fn="merge_entry", output=text)
+        try:
+            return _extract_json(text)
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            log.warning("gemini_json_retry", fn="merge_entry", attempt=attempt, error=str(exc))
+    raise last_exc

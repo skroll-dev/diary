@@ -77,14 +77,20 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   Future<void> _startRecording() async {
     final svc = ref.read(recordingServiceProvider);
     await svc.start();
+    // Reset transcripts here in case a previous session's late callbacks wrote
+    // stale text after a cancel.
+    _confirmedTranscript = '';
+    _interimText = '';
     if (kIsWeb) {
       _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
         svc.webAudioStream,
         onInterim: (text) {
-          if (mounted) setState(() => _interimText = text);
+          if (mounted && _state == _RecordingState.recording) {
+            setState(() => _interimText = text);
+          }
         },
         onSegment: (text) {
-          if (mounted) {
+          if (mounted && _state == _RecordingState.recording) {
             setState(() {
               _confirmedTranscript = _confirmedTranscript.isEmpty
                   ? text
@@ -347,7 +353,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                     textAlign: TextAlign.center,
                   ),
           ),
-          // Waveform + timer + live transcript while recording
+          // Waveform + timer while recording
           AnimatedSize(
             duration: const Duration(milliseconds: 420),
             curve: Curves.easeInOut,
@@ -394,15 +400,20 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                         child: Text(_timerLabel, textAlign: TextAlign.center),
                       ),
                       const SizedBox(height: 16),
-                      LiveTranscriptDisplay(
-                        confirmedText: _confirmedTranscript,
-                        interimText: _interimText,
-                      ),
                     ],
                   )
                 : const SizedBox.shrink(),
           ),
-          const Spacer(),
+          // Live transcript fills all remaining space between timer and button
+          Expanded(
+            child: isRecording
+                ? LiveTranscriptDisplay(
+                    confirmedText: _confirmedTranscript,
+                    interimText: _interimText,
+                  )
+                : const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 12),
           if (!isProcessing) _buildMicButton(context),
           const SizedBox(height: 16),
           if (_version.isNotEmpty && _state == _RecordingState.idle)
@@ -521,37 +532,49 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         Stack(
           alignment: Alignment.center,
           children: [
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (_, __) {
-                final pulse = isRecording
-                    ? Curves.easeInOut.transform(_pulseController.value)
-                    : 0.0;
-                return Container(
-                  width: isRecording ? 148 + 10 * pulse : 96,
-                  height: isRecording ? 148 + 10 * pulse : 96,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: cs.primary.withValues(
-                      alpha: isRecording ? 0.08 + 0.06 * pulse : 0.0,
+            // Layout anchor — transitions once on start/stop, never on pulse frames.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              width: isRecording ? 114 : 96,
+              height: isRecording ? 114 : 96,
+            ),
+            // Pulse ring is Positioned — purely visual, zero layout impact.
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (_, __) {
+                  final pulse = isRecording
+                      ? Curves.easeInOut.transform(_pulseController.value)
+                      : 0.0;
+                  return Center(
+                    child: Container(
+                      width: isRecording ? 106 + 8 * pulse : 0,
+                      height: isRecording ? 106 + 8 * pulse : 0,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: cs.primary.withValues(
+                          alpha: isRecording ? 0.08 + 0.06 * pulse : 0.0,
+                        ),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
             GestureDetector(
               onTap: isRecording ? _stopRecording : _startRecording,
               onLongPress: isRecording ? null : _showTranscriptDialog,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOut,
-                width: 96,
-                height: 96,
+                width: isRecording ? 66 : 96,
+                height: isRecording ? 66 : 96,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: cs.primary,
                   boxShadow: isRecording
-                      ? [BoxShadow(color: cs.primary.withValues(alpha: 0.28), blurRadius: 24, spreadRadius: 4)]
+                      ? [BoxShadow(color: cs.primary.withValues(alpha: 0.22), blurRadius: 14, spreadRadius: 2)]
                       : [],
                 ),
                 child: AnimatedSwitcher(
@@ -560,14 +583,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                     isRecording ? Icons.stop_rounded : Icons.mic_rounded,
                     key: ValueKey(isRecording),
                     color: cs.onPrimary,
-                    size: 38,
+                    size: isRecording ? 26 : 38,
                   ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: Text(

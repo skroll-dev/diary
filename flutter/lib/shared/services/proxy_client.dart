@@ -175,12 +175,35 @@ class ProxyClient {
       },
     );
 
+    // Batch small AudioWorklet buffers into ~2 s chunks before sending.
+    // 44100 Hz * 2 bytes * 1 ch * 2 s = 176400 bytes
+    const batchTarget = 176400;
+
     var chunkIndex = 0;
-    await for (final chunk in audioStream) {
-      channel.sink.add(chunk);
+    final pending = <Uint8List>[];
+    var pendingBytes = 0;
+
+    Future<void> flush() async {
+      if (pending.isEmpty) return;
+      final batch = Uint8List(pendingBytes);
+      var offset = 0;
+      for (final c in pending) {
+        batch.setRange(offset, offset + c.lengthInBytes, c);
+        offset += c.lengthInBytes;
+      }
+      pending.clear();
+      pendingBytes = 0;
+      channel.sink.add(batch);
       chunkIndex++;
-      debugPrint('[WS] chunk $chunkIndex — ${chunk.lengthInBytes} bytes');
+      debugPrint('[WS] chunk $chunkIndex — ${batch.lengthInBytes} bytes');
     }
+
+    await for (final chunk in audioStream) {
+      pending.add(chunk);
+      pendingBytes += chunk.lengthInBytes;
+      if (pendingBytes >= batchTarget) await flush();
+    }
+    await flush(); // send any remaining bytes
     debugPrint('[WS] sent done after $chunkIndex chunks');
     channel.sink.add('done');
 

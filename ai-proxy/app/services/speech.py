@@ -97,6 +97,9 @@ async def stream_transcribe_audio(
     chunks_sent = 0
     audio_stream_done = False  # set to True once the client closes the stream
 
+    # Chirp 3 streaming rejects chunks larger than 25600 bytes.
+    _MAX_CHUNK = 25600
+
     async def _requests():
         nonlocal chunks_sent, audio_stream_done
         yield cloud_speech.StreamingRecognizeRequest(
@@ -108,12 +111,14 @@ async def stream_transcribe_audio(
                 audio_stream_done = True
                 log.debug("stream_requests_done", chunks_sent=chunks_sent)
                 return
-            chunks_sent += 1
-            yield cloud_speech.StreamingRecognizeRequest(audio=chunk)
+            for offset in range(0, len(chunk), _MAX_CHUNK):
+                chunks_sent += 1
+                yield cloud_speech.StreamingRecognizeRequest(audio=chunk[offset:offset + _MAX_CHUNK])
 
     final_parts: list[str] = []
     total_duration = 0.0
     response_count = 0
+    last_interim: str = ""  # last interim text since the most recent final
 
     log.debug("stream_recognize_start")
     async for response in await client.streaming_recognize(requests=_requests()):
@@ -131,22 +136,22 @@ async def stream_transcribe_audio(
                 continue
             text = result.alternatives[0].transcript
             if result.is_final:
-                if audio_stream_done and final_parts:
-                    # Segments arriving after the audio stream closes are
-                    # Chirp 3 tail hallucinations — drop them.
-                    log.warning(
-                        "stream_tail_hallucination_dropped",
-                        text=text[:80],
-                        response_n=response_count,
-                    )
-                    continue
                 final_parts.append(text)
+                last_interim = ""  # this segment is now finalized
                 if result.result_end_offset:
                     total_duration = result.result_end_offset.total_seconds()
                 if on_segment and text:
                     await on_segment(text)
-            elif on_interim and text:
-                await on_interim(text)
+            elif text:
+                last_interim = text
+                if on_interim:
+                    await on_interim(text)
+
+    # Chirp 3 sometimes never emits is_final=True for the last segment — include
+    # whatever interim was in flight when the response stream closed.
+    if last_interim:
+        log.warning("stream_unfinalized_interim_included", text=last_interim[:80])
+        final_parts.append(last_interim)
 
     log.debug("stream_recognize_done", responses=response_count, finals=len(final_parts))
     return {
