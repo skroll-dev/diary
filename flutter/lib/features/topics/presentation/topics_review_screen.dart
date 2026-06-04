@@ -507,7 +507,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 // ── Scrollable content ─────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+                    padding: EdgeInsets.fromLTRB(
+                      20, 4, 20,
+                      160 + MediaQuery.of(context).padding.bottom,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -582,7 +585,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             right: 0,
             bottom: 0,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              padding: EdgeInsets.fromLTRB(
+                20, 12, 20,
+                MediaQuery.of(context).padding.bottom + 16,
+              ),
               decoration: BoxDecoration(
                 color: cs.surface,
                 border: Border(
