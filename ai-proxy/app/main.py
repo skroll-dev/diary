@@ -37,15 +37,18 @@ class _TeeLoggerFactory:
 
 
 def _configure_logging() -> None:
+    import sys
     log_file = os.environ.get("LOG_FILE")
     min_level = os.environ.get("LOG_LEVEL", "info").lower()
+    is_tty = sys.stdout.isatty()
+    renderer = structlog.dev.ConsoleRenderer() if is_tty else structlog.processors.JSONRenderer()
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+            structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.ExceptionRenderer(),
-            structlog.dev.ConsoleRenderer(),
+            renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
             {"debug": 10, "info": 20, "warning": 30, "error": 40}.get(min_level, 20)
