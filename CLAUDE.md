@@ -35,30 +35,36 @@ flutter build ios
 
 ### Backend Services
 
-Each service has its own Python 3.12 venv. Use `/opt/homebrew/bin/python3.12` to create them.
+Each service has its own Python venv (3.12+ required; 3.14 works with `pydantic>=2.11.0`).
 
 ```bash
 cd ai-proxy              # or gdpr-export
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-LOG_FILE=../log/ai-proxy.log .venv/bin/uvicorn app.main:app --reload --port 8080   # ai-proxy dev server
-.venv/bin/uvicorn app.main:app --reload --port 8081                                 # gdpr-export dev server
+# macOS / Linux
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+LOG_FILE=../log/ai-proxy.log .venv/bin/uvicorn app.main:app --reload --port 8080
+
+# Windows
+python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\uvicorn app.main:app --reload --port 8080
+
+# gdpr-export (port 8081, same pattern)
 ```
 
-**Logs:** ai-proxy writes to `log/ai-proxy.log` (controlled by `LOG_FILE` env var).
+**Logs:** ai-proxy writes to `log/ai-proxy.log` (controlled by `LOG_FILE` env var). The `log/` directory at repo root must exist — create it once with `mkdir log`.
 
 #### ai-proxy `.env` (gitignored, local dev only)
 
 ```env
+ENV=development        # bypasses Firebase App Check; omit or set to 'production' in Cloud Run
 GCP_PROJECT=diary-6fa61
 GCP_REGION=europe-west1
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/diary-6fa61-<key-id>.json   # service account key for local auth
-ENV=development        # bypasses Firebase App Check; omit or set to 'production' in Cloud Run
-LOG_FILE=/path/to/log/ai-proxy.log
+GOOGLE_APPLICATION_CREDENTIALS=./credentials.json   # service account key for local auth
+LOG_FILE=../log/ai-proxy.log
 LOG_LEVEL=debug        # debug | info | warning | error
 ```
 
-The actual key file lives at `doc/key/` (gitignored). In Cloud Run, `GOOGLE_APPLICATION_CREDENTIALS` is not needed — the service account is attached to the revision directly.
+The service account key JSON lives at `ai-proxy/credentials.json` (gitignored — matched by `*credentials*.json`). Download it from GCP Console → IAM → Service Accounts → Keys → Add Key. In Cloud Run, `GOOGLE_APPLICATION_CREDENTIALS` is not needed — the service account is attached to the revision directly.
 
 ### Deployment (CI/CD)
 
@@ -77,6 +83,12 @@ gcloud run services update ai-proxy --region=europe-west3 --project=diary-6fa61 
 ### Firebase
 
 ```bash
+# Install flutterfire CLI (once per machine)
+dart pub global activate flutterfire_cli
+# Add $HOME/.pub-cache/bin (macOS) or %LOCALAPPDATA%\Pub\Cache\bin (Windows) to PATH
+
+firebase login   # required before flutterfire configure
+
 # Regenerate firebase_options.dart after Firebase project changes
 cd flutter && flutterfire configure --project=diary-6fa61 --platforms=android,ios,web
 ```
@@ -103,7 +115,7 @@ gdpr-export (Cloud Run) ──► Firestore (JSON export / account deletion)
 
 ### Flutter App (`flutter/lib/`)
 
-Riverpod 3 + GoRouter 17, Material Design 3 (seed `#4A90D9`), offline-first via Drift (SQLite).
+Flutter 3.44.1+ (Dart 3.12+) required — `record ^7.0.0` needs Dart SDK `^3.12.0`. Riverpod 3 + GoRouter 17, Material Design 3 (seed `#4A90D9`), offline-first via Drift (SQLite).
 
 #### Routes
 

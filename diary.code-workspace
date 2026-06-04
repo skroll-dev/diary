@@ -18,7 +18,6 @@
     }
   ],
   "settings": {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     "python.analysis.extraPaths": [],
     "dart.flutterSdkPath": null,
     "editor.formatOnSave": true,
@@ -98,9 +97,17 @@
           "8080"
         ],
         "cwd": "${workspaceFolder:ai-proxy}",
-        "python": "${workspaceFolder:ai-proxy}/.venv/bin/python",
         "envFile": "${workspaceFolder:ai-proxy}/.env",
-        "justMyCode": false
+        "justMyCode": false,
+        "windows": {
+          "python": "${workspaceFolder:ai-proxy}/.venv/Scripts/python.exe"
+        },
+        "osx": {
+          "python": "${workspaceFolder:ai-proxy}/.venv/bin/python"
+        },
+        "linux": {
+          "python": "${workspaceFolder:ai-proxy}/.venv/bin/python"
+        }
       },
       {
         "name": "gdpr-export – Dev Server",
@@ -114,9 +121,17 @@
           "8081"
         ],
         "cwd": "${workspaceFolder:gdpr-export}",
-        "python": "${workspaceFolder:gdpr-export}/.venv/bin/python",
         "envFile": "${workspaceFolder:gdpr-export}/.env",
-        "justMyCode": false
+        "justMyCode": false,
+        "windows": {
+          "python": "${workspaceFolder:gdpr-export}/.venv/Scripts/python.exe"
+        },
+        "osx": {
+          "python": "${workspaceFolder:gdpr-export}/.venv/bin/python"
+        },
+        "linux": {
+          "python": "${workspaceFolder:gdpr-export}/.venv/bin/python"
+        }
       },
     ]
   }
