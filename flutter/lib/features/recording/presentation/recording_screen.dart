@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -9,8 +10,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/proxy_client.dart';
+import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/recording_service.dart';
+import '../../auth/presentation/auth_sheet.dart';
 import '../../../shared/widgets/live_transcript_display.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
@@ -270,6 +274,86 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     }
   }
 
+  Future<void> _onSignInTap() async {
+    final success = await showAuthSheet(context, isDismissible: true);
+    if (!success || !mounted) return;
+    await _checkForExistingTodayEntry();
+  }
+
+  Future<void> _checkForExistingTodayEntry() async {
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                      color: Theme.of(ctx).colorScheme.primary),
+                  const SizedBox(height: 20),
+                  Text('Eintrag wird geladen …',
+                      style: Theme.of(ctx).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final repo = ref.read(entryRepositoryProvider);
+    await repo.syncEntryFromFirestoreIfMissing(isoDate);
+    final entry = await repo.getLocalEntryForDate(isoDate);
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (entry == null) return;
+
+    final topics = (jsonDecode(entry.topics) as List)
+        .map((t) => TopicDto.fromJson(t as Map<String, dynamic>))
+        .toList();
+    final questions =
+        (jsonDecode(entry.followUpQuestions) as List).cast<String>();
+
+    final now = DateTime.now();
+    const weekdays = [
+      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
+      'Freitag', 'Samstag', 'Sonntag'
+    ];
+    const months = [
+      '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+    ];
+    final dateLabel =
+        '${weekdays[now.weekday]}, ${now.day}. ${months[now.month]}';
+
+    if (mounted) {
+      context.push('/topics', extra: (
+        date: dateLabel,
+        duration: '',
+        topics: topics,
+        normalizedTranscript: '',
+        bodyMarkdown: entry.bodyMarkdown,
+        mood: entry.mood,
+        moodScore: entry.moodScore,
+        followUpQuestions: questions,
+        transcriptReason: 'initial',
+      ));
+    }
+  }
+
   String get _transcriptReason => switch (widget.recordingContext) {
         ExtendingTopic(:final followUpHint) when followUpHint != null =>
           'followUp:$followUpHint',
@@ -302,7 +386,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       resizeToAvoidBottomInset: false,
-      body: SafeArea(child: _appView(context)),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            _appView(context),
+            const Positioned(
+              top: 8, right: 12,
+              child: ProfileAvatarButton(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -416,13 +510,55 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           const SizedBox(height: 12),
           if (!isProcessing) _buildMicButton(context),
           const SizedBox(height: 16),
+          if (_state == _RecordingState.idle &&
+              ref.watch(authServiceProvider).when(
+                data: (u) => u.isAnonymous,
+                loading: () => true,
+                error: (_, __) => true,
+              )) ...[
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () async {
+                final success = await showAuthSheet(context, isDismissible: true);
+                if (success && mounted) await _checkForExistingTodayEntry();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_outline_rounded,
+                        size: 13, color: cs.onSurface.withValues(alpha: 0.35)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Bereits registriert? ',
+                      style: tt.labelSmall?.copyWith(
+                        color: cs.onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    Text(
+                      'Anmelden',
+                      style: tt.labelSmall?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (_version.isNotEmpty && _state == _RecordingState.idle)
             GestureDetector(
               onDoubleTap: _showTranscriptDialog,
-              child: Text(
-                _version,
-                textAlign: TextAlign.center,
-                style: tt.labelSmall?.copyWith(color: cs.outlineVariant),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  _version,
+                  textAlign: TextAlign.center,
+                  style: tt.labelSmall?.copyWith(color: cs.outlineVariant),
+                ),
               ),
             ),
           const SizedBox(height: 32),

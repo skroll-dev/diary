@@ -1,3 +1,5 @@
+import 'package:app_links/app_links.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -14,12 +16,46 @@ void main() async {
   runApp(const ProviderScope(child: AiTagebuchApp()));
 }
 
-class AiTagebuchApp extends ConsumerWidget {
+class AiTagebuchApp extends ConsumerStatefulWidget {
   const AiTagebuchApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!kIsWeb) ref.watch(authServiceProvider); // warm up anonymous auth on startup
+  ConsumerState<AiTagebuchApp> createState() => _AiTagebuchAppState();
+}
+
+class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      ref.read(authServiceProvider); // warm up anonymous auth on startup
+      _initDeepLinks();
+    }
+  }
+
+  Future<void> _initDeepLinks() async {
+    final appLinks = AppLinks();
+
+    // Cold start: link that launched the app
+    final initialUri = await appLinks.getInitialLink();
+    if (initialUri != null) _handleLink(initialUri);
+
+    // Foreground / background: links received while app is running
+    appLinks.uriLinkStream.listen(_handleLink);
+  }
+
+  void _handleLink(Uri uri) {
+    final link = uri.toString();
+    if (FirebaseAuth.instance.isSignInWithEmailLink(link)) {
+      ref
+          .read(authServiceProvider.notifier)
+          .completeEmailLinkSignIn(link)
+          .catchError((_) {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'AI Tagebuch',

@@ -98,9 +98,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<_Destination> _checkTodaysEntry() async {
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
-      final entry = await ref
-          .read(entryRepositoryProvider)
-          .getLocalEntryForDate(isoDate);
+      final repo = ref.read(entryRepositoryProvider);
+      await repo.syncEntryFromFirestoreIfMissing(isoDate);
+      final entry = await repo.getLocalEntryForDate(isoDate);
       if (entry == null) return const _Destination.recording();
 
       final topics = (jsonDecode(entry.topics) as List)

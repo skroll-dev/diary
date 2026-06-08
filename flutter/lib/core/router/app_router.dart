@@ -7,6 +7,7 @@ import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/topics/presentation/topics_review_screen.dart';
 import '../../features/entry/presentation/entry_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../shared/services/proxy_client.dart' show TopicDto;
 
 typedef TopicsArgs = ({
@@ -61,6 +62,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/history',
         builder: (context, state) => const HistoryScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
       ),
     ],
   );

@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../auth/presentation/auth_sheet.dart';
 import '../../recording/recording_context.dart';
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/auth_service.dart';
+import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
@@ -369,6 +372,16 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     }
   }
 
+  // ── Finish entry ─────────────────────────────────────────────────────────────
+
+  Future<void> _handleFinishEntry() async {
+    if (ref.read(authServiceProvider.notifier).isAnonymous) {
+      final success = await showAuthSheet(context);
+      if (!success || !mounted) return;
+    }
+    if (mounted) context.push('/entry/today');
+  }
+
   // ── Von vorne anfangen ────────────────────────────────────────────────────────
 
   Future<void> _confirmDeleteAll() async {
@@ -458,16 +471,23 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (context.canPop())
-                        Positioned(
-                          left: 4,
-                          child: IconButton(
-                            onPressed: () => context.pop(),
-                            icon: Icon(Icons.arrow_back_ios_new_rounded,
-                                size: 20, color: cs.onSurface),
-                            tooltip: 'Zurück',
-                          ),
+                      Positioned(
+                        left: 4,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (context.canPop())
+                              IconButton(
+                                onPressed: () => context.pop(),
+                                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                                    size: 20, color: cs.onSurface),
+                                tooltip: 'Zurück',
+                              ),
+                            const SizedBox(width: 4),
+                            _MoodChip(mood: _mood, moodScore: _moodScore),
+                          ],
                         ),
+                      ),
                       if (_headerDateLine.isNotEmpty)
                         Text(_headerDateLine,
                             style: tt.bodyMedium?.copyWith(color: cs.outline)),
@@ -476,7 +496,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _MoodChip(mood: _mood, moodScore: _moodScore),
+                            const ProfileAvatarButton(),
                             PopupMenuButton<String>(
                               icon: Icon(Icons.more_vert_rounded,
                                   color: cs.onSurface),
@@ -619,7 +639,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: _topics.isNotEmpty
-                        ? () => context.push('/entry/today')
+                        ? () => _handleFinishEntry()
                         : null,
                     icon: const Icon(Icons.check_rounded, size: 18),
                     label: const Text('Eintrag abschließen'),
