@@ -176,15 +176,26 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           .getTranscriptsForDate(_isoDate);
       if (!mounted || rows.isEmpty) return;
       setState(() {
-        for (int i = 0; i < rows.length && i < _recordings.length; i++) {
-          _recordings[i] = _RecordingRecord(
-            dbId: rows[i].id,
-            normalizedText: rows[i].normalizedContent.isNotEmpty
-                ? rows[i].normalizedContent
-                : _recordings[i].normalizedText,
-            reason: rows[i].reason,
-            timestamp: DateTime.tryParse(rows[i].createdAt) ?? DateTime.now(),
-          );
+        if (_recordings.isEmpty) {
+          // Navigated here without a fresh transcript (e.g. post-login sync) —
+          // populate recordings entirely from DB.
+          _recordings = rows.map((r) => _RecordingRecord(
+            dbId: r.id,
+            normalizedText: r.normalizedContent.isNotEmpty ? r.normalizedContent : r.content,
+            reason: r.reason,
+            timestamp: DateTime.tryParse(r.createdAt) ?? DateTime.now(),
+          )).toList();
+        } else {
+          for (int i = 0; i < rows.length && i < _recordings.length; i++) {
+            _recordings[i] = _RecordingRecord(
+              dbId: rows[i].id,
+              normalizedText: rows[i].normalizedContent.isNotEmpty
+                  ? rows[i].normalizedContent
+                  : _recordings[i].normalizedText,
+              reason: rows[i].reason,
+              timestamp: DateTime.tryParse(rows[i].createdAt) ?? DateTime.now(),
+            );
+          }
         }
       });
     } catch (_) {}

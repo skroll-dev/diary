@@ -18,6 +18,8 @@ class EmailNotFoundForLinkException implements Exception {
   const EmailNotFoundForLinkException();
 }
 
+enum AuthLinkError { expiredLink, emailNotFound }
+
 @Riverpod(keepAlive: true)
 class AuthService extends _$AuthService {
   @override
@@ -42,8 +44,11 @@ class AuthService extends _$AuthService {
   }
 
   Future<void> sendEmailLink(String email) async {
+    // On web use the current origin so links work on localhost too.
+    final continueUrl =
+        kIsWeb ? Uri.base.origin : 'https://diary-6fa61.firebaseapp.com';
     final settings = ActionCodeSettings(
-      url: 'https://diary-6fa61.firebaseapp.com',
+      url: continueUrl,
       handleCodeInApp: true,
       iOSBundleId: 'com.diary.app',
       androidPackageName: 'com.diary.app',
@@ -69,8 +74,19 @@ class AuthService extends _$AuthService {
     );
     final currentUser = await getUser();
     if (currentUser.isAnonymous) {
-      final result = await currentUser.linkWithCredential(credential);
-      _updateState(result.user!);
+      try {
+        final result = await currentUser.linkWithCredential(credential);
+        _updateState(result.user!);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use' ||
+            e.code == 'credential-already-in-use') {
+          final result =
+              await FirebaseAuth.instance.signInWithCredential(credential);
+          _updateState(result.user!);
+          throw const UidChangedNotice();
+        }
+        rethrow;
+      }
     } else {
       final result =
           await FirebaseAuth.instance.signInWithCredential(credential);
@@ -116,6 +132,12 @@ class AuthService extends _$AuthService {
       final result = await auth.signInWithCredential(credential);
       _updateState(result.user!);
     }
+  }
+
+  Future<void> updateDisplayName(String name) async {
+    final user = await getUser();
+    await user.updateDisplayName(name.trim().isEmpty ? null : name.trim());
+    _updateState(FirebaseAuth.instance.currentUser!);
   }
 
   Future<void> signOut() async {

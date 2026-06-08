@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
-import 'shared/services/auth_service.dart';
+import 'shared/services/auth_error_provider.dart';
+import 'shared/services/auth_service.dart'
+    show AuthLinkError, EmailNotFoundForLinkException, authServiceProvider;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,9 +29,37 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb) {
+    if (kIsWeb) {
+      _handleWebEmailLink();
+    } else {
       ref.read(authServiceProvider); // warm up anonymous auth on startup
       _initDeepLinks();
+    }
+  }
+
+  // On web, Firebase redirects to continueUrl?link=<encodedActionUrl>.
+  // Extract the inner `link` param — that is the actual sign-in URL.
+  void _handleWebEmailLink() {
+    final uri = Uri.base;
+    final link = uri.queryParameters['link'] ?? uri.toString();
+    if (FirebaseAuth.instance.isSignInWithEmailLink(link)) {
+      ref
+          .read(authServiceProvider.notifier)
+          .completeEmailLinkSignIn(link)
+          .catchError((e) => _handleEmailLinkError(e));
+    }
+  }
+
+  void _handleEmailLinkError(Object e) {
+    AuthLinkError? error;
+    if (e is FirebaseAuthException &&
+        (e.code == 'invalid-action-code' || e.code == 'expired-action-code')) {
+      error = AuthLinkError.expiredLink;
+    } else if (e is EmailNotFoundForLinkException) {
+      error = AuthLinkError.emailNotFound;
+    }
+    if (error != null) {
+      ref.read(authLinkErrorProvider.notifier).set(error);
     }
   }
 

@@ -73,6 +73,20 @@ class _ProfileBody extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ── Name tile ────────────────────────────────────────────────────
+            _SectionLabel('Persönlich', cs: cs, tt: tt),
+            const SizedBox(height: 12),
+            _EditableTile(
+              icon: Icons.badge_outlined,
+              label: 'Name',
+              value: user.displayName,
+              placeholder: 'Kein Name gesetzt',
+              cs: cs,
+              tt: tt,
+              onTap: () => _editName(context, ref, user.displayName),
+            ),
             const SizedBox(height: 32),
 
             // ── Statistics ───────────────────────────────────────────────────
@@ -158,6 +172,38 @@ class _ProfileBody extends ConsumerWidget {
 
   String _primaryProviderId(User user) =>
       user.providerData.isNotEmpty ? user.providerData.first.providerId : '';
+
+  Future<void> _editName(
+      BuildContext context, WidgetRef ref, String? current) async {
+    final ctrl = TextEditingController(text: current ?? '');
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Name'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'Dein Name'),
+          onSubmitted: (_) => Navigator.of(ctx).pop(ctrl.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (saved == null || !context.mounted) return;
+    await ref.read(authServiceProvider.notifier).updateDisplayName(saved);
+  }
 
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -297,6 +343,60 @@ class _SectionLabel extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       );
+}
+
+class _EditableTile extends StatelessWidget {
+  const _EditableTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.placeholder,
+    required this.cs,
+    required this.tt,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? value;
+  final String placeholder;
+  final ColorScheme cs;
+  final TextTheme tt;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSet = value != null && value!.isNotEmpty;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: cs.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(label,
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            ),
+            Text(
+              isSet ? value! : placeholder,
+              style: tt.bodyMedium?.copyWith(
+                fontWeight: isSet ? FontWeight.w600 : FontWeight.w400,
+                color: isSet ? null : cs.outline,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.edit_outlined, size: 14, color: cs.outline),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _StatTile extends StatelessWidget {

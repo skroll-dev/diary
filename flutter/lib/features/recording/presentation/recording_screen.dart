@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -10,7 +12,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
-import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/auth_error_provider.dart';
+import '../../../shared/services/auth_service.dart'
+    show AuthLinkError, authServiceProvider;
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/recording_service.dart';
@@ -50,6 +54,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   String _confirmedTranscript = '';
   String _interimText = '';
   String _version = '';
+  StreamSubscription<User?>? _authSub;
 
   bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
 
@@ -68,10 +73,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
+    // React to email-link sign-in on web: the link opens a fresh page, so
+    // there is no auth sheet to dismiss — we watch auth state instead.
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null && !user.isAnonymous && mounted) {
+        _checkForExistingTodayEntry();
+      }
+    });
+    // ref.listen only fires on changes; if the error was set before this
+    // screen was built (e.g. expired email link on cold start), check once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final error = ref.read(authLinkErrorProvider);
+      if (error != null && mounted) {
+        ref.read(authLinkErrorProvider.notifier).clear();
+        _showAuthLinkErrorDialog(error);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _waveController.dispose();
     _pulseController.dispose();
     _timer?.cancel();
@@ -274,6 +296,40 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     }
   }
 
+  void _showAuthLinkErrorDialog(AuthLinkError error) {
+    final (title, message) = switch (error) {
+      AuthLinkError.expiredLink => (
+          'Link abgelaufen',
+          'Dieser Anmelde-Link ist nicht mehr gültig. Bitte fordere einen neuen Link an.',
+        ),
+      AuthLinkError.emailNotFound => (
+          'E-Mail nicht gefunden',
+          'Bitte öffne den Link in demselben Browser, in dem du die E-Mail angefordert hast, oder fordere einen neuen Link an.',
+        ),
+    };
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              showAuthSheet(context, isDismissible: true);
+            },
+            child: const Text('Neuen Link anfordern'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _onSignInTap() async {
     final success = await showAuthSheet(context, isDismissible: true);
     if (!success || !mounted) return;
@@ -383,6 +439,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthLinkError?>(authLinkErrorProvider, (_, error) {
+      if (error == null || !mounted) return;
+      ref.read(authLinkErrorProvider.notifier).clear();
+      _showAuthLinkErrorDialog(error);
+    });
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       resizeToAvoidBottomInset: false,
