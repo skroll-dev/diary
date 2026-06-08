@@ -157,8 +157,8 @@ async def cleanup_anonymous_users(request: Request):
             user.uid
             for user in page.users
             if user.provider_data == []  # anonymous = no linked providers
-            and user.creation_timestamp is not None
-            and datetime.fromtimestamp(user.creation_timestamp / 1000, tz=timezone.utc) < cutoff
+            and user.user_metadata.creation_timestamp is not None
+            and datetime.fromtimestamp(user.user_metadata.creation_timestamp / 1000, tz=timezone.utc) < cutoff
         ]
 
         if uids_to_delete:
