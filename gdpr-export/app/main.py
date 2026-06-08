@@ -1,18 +1,19 @@
 """
 gdpr-export – DSGVO-Datenexport (Art. 20 DSGVO: Recht auf Datenübertragbarkeit)
 Endpunkte:
-  POST /export/request  – Nutzer fordert Export an; Job wird angestoßen
-  DELETE /account       – Löscht alle Daten des Nutzers (Art. 17 DSGVO)
+  POST /export/request                – Nutzer fordert Export an; Job wird angestoßen
+  DELETE /account                     – Löscht alle Daten des Nutzers (Art. 17 DSGVO)
+  POST /admin/cleanup-anonymous-users – Löscht anonyme Auth-Accounts älter als 5 Tage (Cloud Scheduler)
 """
 import io
 import json
 import os
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import firebase_admin
 import structlog
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from firebase_admin import auth, firestore, storage
 from pydantic import BaseModel
 
@@ -52,6 +53,12 @@ class ExportResponse(BaseModel):
 class DeleteResponse(BaseModel):
     message: str
     deleted_at: str
+
+
+class CleanupResponse(BaseModel):
+    message: str
+    deleted_count: int
+    ran_at: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -126,4 +133,52 @@ async def delete_account(authorization: str = Header(...)):
     return DeleteResponse(
         message="Dein Account und alle Daten wurden vollständig gelöscht.",
         deleted_at=deleted_at,
+    )
+
+
+@app.post("/admin/cleanup-anonymous-users", response_model=CleanupResponse)
+async def cleanup_anonymous_users(request: Request):
+    # Cloud Scheduler always sends this header; reject anything that doesn't.
+    if not request.headers.get("X-CloudScheduler-JobName"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=5)
+    deleted_count = 0
+    page_token = None
+
+    while True:
+        kwargs = {"page_size": 1000}
+        if page_token:
+            kwargs["page_token"] = page_token
+
+        page = auth.list_users(**kwargs)
+
+        uids_to_delete = [
+            user.uid
+            for user in page.users
+            if user.provider_data == []  # anonymous = no linked providers
+            and user.creation_timestamp is not None
+            and datetime.fromtimestamp(user.creation_timestamp / 1000, tz=timezone.utc) < cutoff
+        ]
+
+        if uids_to_delete:
+            result = auth.delete_users(uids_to_delete)
+            deleted_count += result.success_count
+            if result.failure_count:
+                log.warning(
+                    "cleanup_partial_failures",
+                    failures=result.failure_count,
+                    errors=[str(e) for e in result.errors],
+                )
+
+        page_token = page.next_page_token
+        if not page_token:
+            break
+
+    ran_at = datetime.now(timezone.utc).isoformat()
+    log.info("anonymous_users_cleaned_up", deleted=deleted_count, ran_at=ran_at)
+    return CleanupResponse(
+        message=f"{deleted_count} anonyme Accounts gelöscht.",
+        deleted_count=deleted_count,
+        ran_at=ran_at,
     )
