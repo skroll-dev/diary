@@ -147,7 +147,7 @@ async def cleanup_anonymous_users(request: Request):
     page_token = None
 
     while True:
-        kwargs = {"page_size": 1000}
+        kwargs = {"max_results": 1000}
         if page_token:
             kwargs["page_token"] = page_token
 
