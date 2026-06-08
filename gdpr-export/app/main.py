@@ -162,6 +162,13 @@ async def cleanup_anonymous_users(request: Request):
         ]
 
         if uids_to_delete:
+            # Delete Firestore data before removing Auth accounts
+            for uid in uids_to_delete:
+                entries_ref = db.collection("users").document(uid).collection("entries")
+                for doc in entries_ref.stream():
+                    doc.reference.delete()
+                db.collection("users").document(uid).delete()
+
             result = auth.delete_users(uids_to_delete)
             deleted_count += result.success_count
             if result.failure_count:
