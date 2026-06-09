@@ -31,6 +31,7 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
     super.initState();
     if (kIsWeb) {
       _handleWebEmailLink();
+      _handleWebGoogleRedirect();
     } else {
       ref.read(authServiceProvider); // warm up anonymous auth on startup
       _initDeepLinks();
@@ -48,6 +49,13 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
           .completeEmailLinkSignIn(link)
           .catchError((e) => _handleEmailLinkError(e));
     }
+  }
+
+  void _handleWebGoogleRedirect() {
+    ref
+        .read(authServiceProvider.notifier)
+        .handleGoogleRedirectResult()
+        .catchError((_) => false);
   }
 
   void _handleEmailLinkError(Object e) {

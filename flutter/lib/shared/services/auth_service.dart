@@ -98,37 +98,27 @@ class AuthService extends _$AuthService {
   Future<void> linkWithGoogle() async {
     final auth = FirebaseAuth.instance;
     final currentUser = await getUser();
-    OAuthCredential credential;
 
     if (kIsWeb) {
-      try {
-        final result = await auth.signInWithPopup(GoogleAuthProvider());
-        credential = GoogleAuthProvider.credential(
-          accessToken: result.credential?.accessToken,
-          idToken: (result.credential as OAuthCredential?)?.idToken,
-        );
-      } on FirebaseAuthException catch (e) {
-        // On web, signInWithPopup itself throws when the Google account is
-        // already linked to a different Firebase user. The credential is
-        // attached to the exception — use it to sign in directly.
-        if ((e.code == 'credential-already-in-use' ||
-                e.code == 'federated-user-id-already-linked') &&
-            e.credential != null) {
-          final result = await auth.signInWithCredential(e.credential!);
-          _updateState(result.user!);
-          throw const UidChangedNotice();
-        }
-        rethrow;
+      // signInWithPopup fails on mobile browsers (popup blocked / cross-tab
+      // message passing broken). Use redirect instead: the browser navigates
+      // to Google and back; the result is processed in handleGoogleRedirectResult()
+      // called from main.dart on every web startup.
+      if (currentUser.isAnonymous) {
+        await currentUser.linkWithRedirect(GoogleAuthProvider());
+      } else {
+        await auth.signInWithRedirect(GoogleAuthProvider());
       }
-    } else {
-      final account = await GoogleSignIn().signIn();
-      if (account == null) throw const GoogleCancelledException();
-      final googleAuth = await account.authentication;
-      credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+      return; // page is now navigating away; result handled on next load
     }
+
+    final account = await GoogleSignIn().signIn();
+    if (account == null) throw const GoogleCancelledException();
+    final googleAuth = await account.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
 
     if (currentUser.isAnonymous) {
       try {
@@ -146,6 +136,27 @@ class AuthService extends _$AuthService {
     } else {
       final result = await auth.signInWithCredential(credential);
       _updateState(result.user!);
+    }
+  }
+
+  /// Call on web app startup to process a pending Google redirect result.
+  /// Returns true if a sign-in was completed, false if no redirect was pending.
+  Future<bool> handleGoogleRedirectResult() async {
+    try {
+      final result = await FirebaseAuth.instance.getRedirectResult();
+      if (result.user == null) return false;
+      _updateState(result.user!);
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if ((e.code == 'credential-already-in-use' ||
+              e.code == 'federated-user-id-already-linked') &&
+          e.credential != null) {
+        final result =
+            await FirebaseAuth.instance.signInWithCredential(e.credential!);
+        _updateState(result.user!);
+        return true;
+      }
+      rethrow;
     }
   }
 
