@@ -55,6 +55,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   String _interimText = '';
   String _version = '';
   StreamSubscription<User?>? _authSub;
+  bool _checkingEntry = false;
+  bool _authSheetOpen = false;
+
+  // Pipeline progress
+  double _pipelinePercent = 0.0;
+  String _pipelineStep = '';
+  Timer? _progressTimer;
 
   bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
 
@@ -73,10 +80,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
-    // React to email-link sign-in on web: the link opens a fresh page, so
-    // there is no auth sheet to dismiss — we watch auth state instead.
+    // Only react to auth state changes when NO explicit sign-in is in progress.
+    // This covers email-link on web (fresh page load, no auth sheet).
+    // Google/email-sheet flows are handled by _onSignInTap instead.
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null && !user.isAnonymous && mounted) {
+      if (user != null && !user.isAnonymous && mounted && !_authSheetOpen) {
         _checkForExistingTodayEntry();
       }
     });
@@ -91,12 +99,33 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     });
   }
 
+  void _setStep(String label, double start, double end) {
+    _progressTimer?.cancel();
+    setState(() {
+      _pipelinePercent = start;
+      _pipelineStep = label;
+    });
+    // Exponential approach: each tick closes 2.5% of remaining gap.
+    // Self-adapting — no timing estimate needed. Reaches ~97% of the range
+    // after ~14s, so the final snap to _completeStep is barely visible.
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _pipelinePercent += (end - _pipelinePercent) * 0.025);
+    });
+  }
+
+  void _completeStep(double pct) {
+    _progressTimer?.cancel();
+    if (mounted) setState(() => _pipelinePercent = pct);
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();
     _waveController.dispose();
     _pulseController.dispose();
     _timer?.cancel();
+    _progressTimer?.cancel();
     super.dispose();
   }
 
@@ -159,6 +188,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     var followUpQuestions = <String>[];
 
     try {
+      final sw = Stopwatch()..start();
+
+      _setStep('Mathias hört zu …', 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();
@@ -167,13 +199,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         final audio = await ref.read(recordingServiceProvider).stopAndRead();
         rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
       }
+      _completeStep(0.35);
+      debugPrint('[Pipeline] transcribe: ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
+      _setStep('Mathias liest deinen Text …', 0.36, 0.55);
       normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      _completeStep(0.55);
+      debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
+      _setStep('Mathias denkt nach …', 0.56, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
       mood = entry.mood;
       moodScore = entry.moodScore;
       followUpQuestions = entry.followUpQuestions;
+      _completeStep(1.0);
+      debugPrint('[Pipeline] generate: ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
       await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
@@ -186,6 +232,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             topics: topics,
             transcriptReason: reason,
           );
+      debugPrint('[Pipeline] save: ${sw.elapsedMilliseconds}ms');
     } catch (e) {
       debugPrint('[RecordingScreen] pipeline error: $e');
     }
@@ -257,13 +304,25 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     var followUpQuestions = <String>[];
 
     try {
+      final sw = Stopwatch()..start();
+
+      _setStep('Mathias liest deinen Text …', 0.0, 0.30);
       normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      _completeStep(0.30);
+      debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
+      _setStep('Mathias denkt nach …', 0.31, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
       mood = entry.mood;
       moodScore = entry.moodScore;
       followUpQuestions = entry.followUpQuestions;
+      _completeStep(1.0);
+      debugPrint('[Pipeline] generate (typed): ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
       await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
@@ -276,8 +335,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             topics: topics,
             transcriptReason: reason,
           );
+      debugPrint('[Pipeline] save (typed): ${sw.elapsedMilliseconds}ms');
     } catch (e) {
-      debugPrint('[RecordingScreen] debug pipeline error: $e');
+      debugPrint('[RecordingScreen] pipeline error: $e');
     }
 
     if (mounted) {
@@ -331,13 +391,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   Future<void> _onSignInTap() async {
+    _authSheetOpen = true;
     final success = await showAuthSheet(context, isDismissible: true);
+    _authSheetOpen = false;
     if (!success || !mounted) return;
     await _checkForExistingTodayEntry();
   }
 
   Future<void> _checkForExistingTodayEntry() async {
+    if (_checkingEntry) return;
     if (!mounted) return;
+    _checkingEntry = true;
 
     showDialog<void>(
       context: context,
@@ -369,9 +433,51 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final repo = ref.read(entryRepositoryProvider);
-    await repo.syncEntryFromFirestoreIfMissing(isoDate);
-    final entry = await repo.getLocalEntryForDate(isoDate);
+    final currentUid = FirebaseAuth.instance.currentUser!.uid;
 
+    // Detect recording made as anonymous user before this sign-in.
+    final orphan = await repo.getOrphanedEntryForDate(isoDate, currentUid);
+
+    await repo.syncEntryFromFirestoreIfMissing(isoDate);
+    var entry = await repo.getLocalEntryForDate(isoDate);
+
+    // If we recorded as anonymous AND the account already has an entry today,
+    // merge them so nothing is lost.
+    if (orphan != null && entry != null) {
+      final orphanTranscripts = await repo.getTranscriptsForEntry(orphan.id);
+      final combined = orphanTranscripts
+          .map((t) => t.normalizedContent.isNotEmpty ? t.normalizedContent : t.content)
+          .where((s) => s.isNotEmpty)
+          .join('\n\n');
+      if (combined.isNotEmpty) {
+        try {
+          final merged = await ref.read(proxyClientProvider).mergeEntry(
+                existingBody: entry.bodyMarkdown,
+                newTranscript: combined,
+                previousQuestions:
+                    (jsonDecode(entry.followUpQuestions) as List).cast<String>(),
+              );
+          await repo.mergeEntry(
+            date: isoDate,
+            rawTranscript: combined,
+            normalizedText: combined,
+            bodyMarkdown: merged.bodyMarkdown,
+            mood: merged.mood,
+            moodScore: merged.moodScore,
+            followUpQuestions: merged.followUpQuestions,
+            topics: merged.topics,
+            transcriptReason: 'continuation',
+          );
+          entry = await repo.getLocalEntryForDate(isoDate);
+        } catch (_) {
+          // Merge failed — fall through and show the cloud entry unchanged.
+        }
+      }
+      // Clean up the orphaned anonymous entry.
+      unawaited(repo.deleteEntryById(orphan.id).catchError((_) {}));
+    }
+
+    _checkingEntry = false;
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
 
@@ -485,15 +591,22 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                 ? Column(
                     key: const ValueKey('processing'),
                     children: [
-                      SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.0, color: cs.primary),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(end: _pipelinePercent),
+                        duration: const Duration(milliseconds: 200),
+                        builder: (_, v, __) => Text(
+                          '${(v * 100).round()}%',
+                          style: tt.displayLarge?.copyWith(
+                            fontSize: 88,
+                            fontWeight: FontWeight.w200,
+                            color: cs.primary,
+                            letterSpacing: -2,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
                       Text(
-                        'Mathias strukturiert deinen Eintrag …',
+                        _pipelineStep,
                         style: tt.bodyMedium?.copyWith(color: cs.outline),
                         textAlign: TextAlign.center,
                       ),
@@ -581,7 +694,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             const SizedBox(height: 4),
             GestureDetector(
               onTap: () async {
+                _authSheetOpen = true;
                 final success = await showAuthSheet(context, isDismissible: true);
+                _authSheetOpen = false;
                 if (success && mounted) await _checkForExistingTodayEntry();
               },
               child: Padding(

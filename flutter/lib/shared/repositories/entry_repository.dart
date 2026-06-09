@@ -290,6 +290,32 @@ class EntryRepository {
         .getSingleOrNull();
   }
 
+  /// Returns a local entry for [date] recorded under a DIFFERENT user (e.g. an
+  /// anonymous session that was active before sign-in). Used to detect conflicts.
+  Future<Entry?> getOrphanedEntryForDate(String date, String currentUid) async {
+    return (_db.select(_db.entries)
+          ..where((e) => e.date.equals(date) & e.userId.isNotValue(currentUid))
+          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<List<RawTranscript>> getTranscriptsForEntry(String entryId) {
+    return (_db.select(_db.rawTranscripts)
+          ..where((t) => t.entryId.equals(entryId))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+  }
+
+  Future<void> deleteEntryById(String entryId) async {
+    await (_db.delete(_db.rawTranscripts)
+          ..where((t) => t.entryId.equals(entryId)))
+        .go();
+    await (_db.delete(_db.entries)
+          ..where((e) => e.id.equals(entryId)))
+        .go();
+  }
+
   Future<int> getEntryCount() async {
     final user = await _auth.getUser();
     final rows = await (_db.select(_db.entries)

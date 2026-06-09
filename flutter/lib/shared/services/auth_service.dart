@@ -101,11 +101,25 @@ class AuthService extends _$AuthService {
     OAuthCredential credential;
 
     if (kIsWeb) {
-      final result = await auth.signInWithPopup(GoogleAuthProvider());
-      credential = GoogleAuthProvider.credential(
-        accessToken: result.credential?.accessToken,
-        idToken: (result.credential as OAuthCredential?)?.idToken,
-      );
+      try {
+        final result = await auth.signInWithPopup(GoogleAuthProvider());
+        credential = GoogleAuthProvider.credential(
+          accessToken: result.credential?.accessToken,
+          idToken: (result.credential as OAuthCredential?)?.idToken,
+        );
+      } on FirebaseAuthException catch (e) {
+        // On web, signInWithPopup itself throws when the Google account is
+        // already linked to a different Firebase user. The credential is
+        // attached to the exception — use it to sign in directly.
+        if ((e.code == 'credential-already-in-use' ||
+                e.code == 'federated-user-id-already-linked') &&
+            e.credential != null) {
+          final result = await auth.signInWithCredential(e.credential!);
+          _updateState(result.user!);
+          throw const UidChangedNotice();
+        }
+        rethrow;
+      }
     } else {
       final account = await GoogleSignIn().signIn();
       if (account == null) throw const GoogleCancelledException();
@@ -121,7 +135,8 @@ class AuthService extends _$AuthService {
         final result = await currentUser.linkWithCredential(credential);
         _updateState(result.user!);
       } on FirebaseAuthException catch (e) {
-        if (e.code == 'credential-already-in-use') {
+        if (e.code == 'credential-already-in-use' ||
+            e.code == 'federated-user-id-already-linked') {
           final result = await auth.signInWithCredential(credential);
           _updateState(result.user!);
           throw const UidChangedNotice();

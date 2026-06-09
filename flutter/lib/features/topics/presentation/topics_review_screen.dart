@@ -108,6 +108,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   bool _isRecordingsExpanded = false;
   bool _isRegenerating = false;
 
+  // Pipeline progress for the re-generating overlay
+  double _regenPercent = 0.0;
+  String _regenStep = '';
+  Timer? _regenTimer;
+
   // ── Init ────────────────────────────────────────────────────────────────────
 
   @override
@@ -216,7 +221,25 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   @override
   void dispose() {
     _entrance.dispose();
+    _regenTimer?.cancel();
     super.dispose();
+  }
+
+  void _setRegenStep(String label, double start, double end) {
+    _regenTimer?.cancel();
+    setState(() {
+      _regenPercent = start;
+      _regenStep = label;
+    });
+    _regenTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _regenPercent += (end - _regenPercent) * 0.025);
+    });
+  }
+
+  void _completeRegenStep(double pct) {
+    _regenTimer?.cancel();
+    if (mounted) setState(() => _regenPercent = pct);
   }
 
   // ── Header helpers ───────────────────────────────────────────────────────────
@@ -261,13 +284,22 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         _ => 'continuation',
       };
 
+      final sw = Stopwatch()..start();
+      _setRegenStep('Mathias liest deinen Text …', 0.0, 0.35);
       final normalized =
           await ref.read(proxyClientProvider).normalize(rawTranscript);
+      _completeRegenStep(0.35);
+      debugPrint('[Pipeline] normalize (merge): ${sw.elapsedMilliseconds}ms');
+      sw.reset(); sw.start();
+
+      _setRegenStep('Mathias fügt alles zusammen …', 0.36, 1.0);
       final entry = await ref.read(proxyClientProvider).mergeEntry(
             existingBody: _bodyMarkdown,
             newTranscript: normalized,
             previousQuestions: _followUpQuestions,
           );
+      _completeRegenStep(1.0);
+      debugPrint('[Pipeline] merge: ${sw.elapsedMilliseconds}ms');
 
       // Update UI immediately — DB save is best-effort and must not block this
       if (mounted) {
@@ -356,8 +388,12 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     try {
       final combined =
           _recordings.map((r) => r.normalizedText).join('\n\n');
+      final sw = Stopwatch()..start();
+      _setRegenStep('Mathias denkt nach …', 0.0, 1.0);
       final entry =
           await ref.read(proxyClientProvider).generateEntry(combined);
+      _completeRegenStep(1.0);
+      debugPrint('[Pipeline] re-derive: ${sw.elapsedMilliseconds}ms');
       await ref.read(entryRepositoryProvider).updateEntry(
             date: _isoDate,
             bodyMarkdown: entry.bodyMarkdown,
@@ -681,16 +717,33 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                       borderRadius: BorderRadius.circular(16)),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 28),
+                        horizontal: 40, vertical: 28),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(
-                            color: Theme.of(context).colorScheme.primary),
-                        const SizedBox(height: 20),
-                        Text('Mathias überarbeitet …',
-                            style:
-                                Theme.of(context).textTheme.bodyMedium),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(end: _regenPercent),
+                          duration: const Duration(milliseconds: 200),
+                          builder: (_, v, __) => Text(
+                            '${(v * 100).round()}%',
+                            style: Theme.of(context)
+                                .textTheme
+                                .displayMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w200,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  letterSpacing: -1,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _regenStep,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   ),

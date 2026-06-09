@@ -51,7 +51,29 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   String _confirmedTranscript = '';
   String _interimText = '';
 
+  // Pipeline progress
+  double _pipelinePercent = 0.0;
+  String _pipelineStep = '';
+  Timer? _progressTimer;
+
   bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
+
+  void _setStep(String label, double start, double end) {
+    _progressTimer?.cancel();
+    setState(() {
+      _pipelinePercent = start;
+      _pipelineStep = label;
+    });
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _pipelinePercent += (end - _pipelinePercent) * 0.025);
+    });
+  }
+
+  void _completeStep(double pct) {
+    _progressTimer?.cancel();
+    if (mounted) setState(() => _pipelinePercent = pct);
+  }
 
   @override
   void initState() {
@@ -72,6 +94,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     _waveController.dispose();
     _pulseController.dispose();
     _timer?.cancel();
+    _progressTimer?.cancel();
     super.dispose();
   }
 
@@ -134,6 +157,8 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     setState(() => _phase = RecordingPhase.processing);
 
     try {
+      final sw = Stopwatch()..start();
+      _setStep('Mathias hört zu …', 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();
@@ -142,6 +167,8 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
         final audio = await ref.read(recordingServiceProvider).stopAndRead();
         rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
       }
+      _completeStep(0.40);
+      debugPrint('[Pipeline] transcribe (controls): ${sw.elapsedMilliseconds}ms');
       await widget.onComplete(rawTranscript);
     } catch (e) {
       debugPrint('[RecordingControls] error: $e');
@@ -251,16 +278,22 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
 
         // Processing state
         if (isProcessing) ...[
-          SizedBox(
-            width: 36,
-            height: 36,
-            child:
-                CircularProgressIndicator(strokeWidth: 2.0, color: cs.primary),
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: _pipelinePercent),
+            duration: const Duration(milliseconds: 200),
+            builder: (_, v, __) => Text(
+              '${(v * 100).round()}%',
+              style: tt.displayMedium?.copyWith(
+                fontWeight: FontWeight.w200,
+                color: cs.primary,
+                letterSpacing: -1,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Text(
-            'Mathias verarbeitet …',
-            style: tt.bodyMedium?.copyWith(color: cs.outline),
+            _pipelineStep,
+            style: tt.bodySmall?.copyWith(color: cs.outline),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
