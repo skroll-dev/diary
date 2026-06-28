@@ -158,7 +158,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
 
     try {
       final sw = Stopwatch()..start();
-      _setStep('Mathias hört zu …', 0.0, 0.35);
+      _setStep('Mein KI-Tagebuch hört zu …', 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();

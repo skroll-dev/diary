@@ -92,7 +92,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
       _errorMessage = null;
     });
     try {
-      if (email == 'review@tester.com') {
+      if ({'review@tester.com', 'mblaich@test.de', 'skroll@test.de'}.contains(email)) {
         await ref
             .read(authServiceProvider.notifier)
             .signInWithPassword(email, 'tester');

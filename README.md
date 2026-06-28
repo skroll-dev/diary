@@ -1,8 +1,8 @@
-# AI Tagebuch — Codename *Mathias*
+# AI Tagebuch — Codename *Mein KI-Tagebuch*
 
 > *"Sprich 60 Sekunden – bekomme einen Eintrag, den du selbst niemals so geschrieben hättest."*
 
-A privacy-first, AI-powered voice diary for the DACH market. Users dictate freely; Mathias — the AI persona — shapes their words into a coherent diary entry, preserves their voice, and proposes follow-up questions that go deeper, not wider.
+A privacy-first, AI-powered voice diary for the DACH market. Users dictate freely; Mein KI-Tagebuch — the AI persona — shapes their words into a coherent diary entry, preserves their voice, and proposes follow-up questions that go deeper, not wider.
 
 **Status:** UI prototype in progress — recording and topics screens complete, entry/history screens pending  
 **Platforms:** iOS (15.0+) · Android · Web  
@@ -16,9 +16,9 @@ Most journaling apps are either passive archives (Day One) or exhausting AI coac
 
 1. **One tap** — start recording
 2. **Speak freely** — 30–120 seconds, no structure needed
-3. **Mathias writes** — a first-person diary entry in your words, your tone
-4. **Review topics** — Mathias identifies the themes it heard; deepen any of them or add a new one
-5. **Optional: dictate again** — Mathias merges the new thoughts organically into the existing entry
+3. **Mein KI-Tagebuch writes** — a first-person diary entry in your words, your tone
+4. **Review topics** — Mein KI-Tagebuch identifies the themes it heard; deepen any of them or add a new one
+5. **Optional: dictate again** — Mein KI-Tagebuch merges the new thoughts organically into the existing entry
 
 One entry per calendar day. Multiple recordings merge, not stack.
 

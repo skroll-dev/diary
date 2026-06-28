@@ -85,7 +85,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     // Google/email-sheet flows are handled by _onSignInTap instead.
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null && !user.isAnonymous && mounted && !_authSheetOpen) {
-        _checkForExistingTodayEntry();
+        // Only handle here when recording screen is on top — sign-in from
+        // topics/entry screens handles the post-login navigation themselves.
+        final location = GoRouter.of(context).routerDelegate.currentConfiguration.uri.path;
+        if (location == '/') _checkForExistingTodayEntry();
       }
     });
     // ref.listen only fires on changes; if the error was set before this
@@ -190,7 +193,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     try {
       final sw = Stopwatch()..start();
 
-      _setStep('Mathias hört zu …', 0.0, 0.35);
+      _setStep('Mein KI-Tagebuch hört zu …', 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();
@@ -203,13 +206,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] transcribe: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mathias liest deinen Text …', 0.36, 0.55);
+      _setStep('Mein KI-Tagebuch liest deinen Text …', 0.36, 0.55);
       normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
       _completeStep(0.55);
       debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mathias denkt nach …', 0.56, 1.0);
+      _setStep('Mein KI-Tagebuch denkt nach …', 0.56, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
@@ -306,13 +309,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     try {
       final sw = Stopwatch()..start();
 
-      _setStep('Mathias liest deinen Text …', 0.0, 0.30);
+      _setStep('Mein KI-Tagebuch liest deinen Text …', 0.0, 0.30);
       normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
       _completeStep(0.30);
       debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mathias denkt nach …', 0.31, 1.0);
+      _setStep('Mein KI-Tagebuch denkt nach …', 0.31, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
@@ -479,7 +482,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     _checkingEntry = false;
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop();
+    final nav = Navigator.of(context, rootNavigator: true);
+    if (nav.canPop()) nav.pop();
 
     if (entry == null) return;
 
@@ -751,8 +755,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final showChip = _state != _RecordingState.processing && ctx is! FreshRecording;
 
     final String title = switch (_state) {
-      _RecordingState.idle => 'Mathias',
-      _RecordingState.recording => 'Mathias hört zu',
+      _RecordingState.idle => 'Mein KI-Tagebuch',
+      _RecordingState.recording => 'Mein KI-Tagebuch hört zu',
       _RecordingState.processing => 'Einen Moment …',
     };
 
@@ -831,8 +835,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         ExtendingTopic(:final topicTitle) =>
           'Was möchtest du zu\n„$topicTitle" ergänzen?',
         ContinuingEntry() =>
-          'Einfach weiterreden —\nMathias ordnet es ein.',
-        _ => 'Erzähl einfach drauflos.\nMathias strukturiert es nachher.',
+          'Einfach weiterreden —\nMein KI-Tagebuch ordnet es ein.',
+        _ => 'Erzähl einfach drauflos.\nMein KI-Tagebuch strukturiert es nachher.',
       };
 
   Widget _buildMicButton(BuildContext context) {

@@ -13,7 +13,7 @@ final class ExtendingTopic extends RecordingContext {
 }
 
 /// General continuation — user keeps talking without a specific topic target.
-/// Mathias decides which topic(s) the new content belongs to.
+/// Mein KI-Tagebuch decides which topic(s) the new content belongs to.
 final class ContinuingEntry extends RecordingContext {
   const ContinuingEntry();
 }

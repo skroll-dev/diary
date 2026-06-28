@@ -285,14 +285,14 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       };
 
       final sw = Stopwatch()..start();
-      _setRegenStep('Mathias liest deinen Text …', 0.0, 0.35);
+      _setRegenStep('Mein KI-Tagebuch liest deinen Text …', 0.0, 0.35);
       final normalized =
           await ref.read(proxyClientProvider).normalize(rawTranscript);
       _completeRegenStep(0.35);
       debugPrint('[Pipeline] normalize (merge): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setRegenStep('Mathias fügt alles zusammen …', 0.36, 1.0);
+      _setRegenStep('Mein KI-Tagebuch fügt alles zusammen …', 0.36, 1.0);
       final entry = await ref.read(proxyClientProvider).mergeEntry(
             existingBody: _bodyMarkdown,
             newTranscript: normalized,
@@ -389,7 +389,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       final combined =
           _recordings.map((r) => r.normalizedText).join('\n\n');
       final sw = Stopwatch()..start();
-      _setRegenStep('Mathias denkt nach …', 0.0, 1.0);
+      _setRegenStep('Mein KI-Tagebuch denkt nach …', 0.0, 1.0);
       final entry =
           await ref.read(proxyClientProvider).generateEntry(combined);
       _completeRegenStep(1.0);
@@ -847,7 +847,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Mathias fragt',
+                  Text('Mein KI-Tagebuch fragt',
                       style: tt.labelLarge
                           ?.copyWith(fontWeight: FontWeight.w700)),
                   Text(
@@ -864,7 +864,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           (i) => InkWell(
             onTap: () => _showRecordingOverlay(
               ExtendingTopic(
-                topicTitle: 'Mathias fragt',
+                topicTitle: 'Mein KI-Tagebuch fragt',
                 followUpHint: _followUpQuestions[i],
               ),
             ),
@@ -918,7 +918,7 @@ class _RecordingOverlay extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     final contextLabel = switch (recordingContext) {
-      ExtendingTopic(:final topicTitle) when topicTitle == 'Mathias fragt' =>
+      ExtendingTopic(:final topicTitle) when topicTitle == 'Mein KI-Tagebuch fragt' =>
         'Antwort aufnehmen',
       ExtendingTopic(:final topicTitle) => 'Ergänzt · $topicTitle',
       ContinuingEntry() => 'Ergänzen',

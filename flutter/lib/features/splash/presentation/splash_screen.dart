@@ -205,7 +205,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   child: FadeTransition(
                     opacity: _nameOpacity,
                     child: Text(
-                      'Mathias',
+                      'Mein KI-Tagebuch',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -219,7 +219,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 FadeTransition(
                   opacity: _sloganOpacity,
                   child: Text(
-                    'Sprich. Mathias schreibt.',
+                    'Sprich. Mein KI-Tagebuch schreibt.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.white.withValues(alpha: 0.5),
                           letterSpacing: 0.5,

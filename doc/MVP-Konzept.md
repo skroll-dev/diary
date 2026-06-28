@@ -1,6 +1,6 @@
 # AI Tagebuch – MVP-Konzept
 
-**Arbeitstitel:** AI Tagebuch (Codename: *Mathias*)
+**Arbeitstitel:** AI Tagebuch (Codename: *Mein KI-Tagebuch*)
 **Version:** 0.1 – Konzept-Entwurf
 **Datum:** 17. Mai 2026
 **Zielgruppe:** Gen Z & junge Millennials (18–32) im DACH-Raum
@@ -76,13 +76,13 @@ Der Markt ist gespalten zwischen passiven Archivierungs-Apps (Day One) und über
 Lena spricht ~90 Sekunden frei
    │
    ▼
-[Stopp] ──► Loading 3-5 Sek ("Mathias formuliert deinen Eintrag…")
+[Stopp] ──► Loading 3-5 Sek ("Mein KI-Tagebuch formuliert deinen Eintrag…")
    │
    ▼
 Eintrag wird angezeigt: 1-2 Absätze, ich-Form, ihre Stimme, geglättet
    │
    ▼
-Darunter: "Mathias hat ein paar Fragen für dich:"
+Darunter: "Mein KI-Tagebuch hat ein paar Fragen für dich:"
    ●  „Was hat dich an dem Gespräch mit Tim am meisten beschäftigt?"
    ●  „Du hast zweimal 'eigentlich' gesagt – was hättest du wirklich gewollt?"
    ●  „Welche Entscheidung steht morgen an?"
@@ -219,7 +219,7 @@ In Firestore + lokalem Drift-Cache speichern
 
 ```
 System:
-Du bist Mathias, ein zurückhaltender, warmherziger Tagebuch-Assistent.
+Du bist Mein KI-Tagebuch, ein zurückhaltender, warmherziger Tagebuch-Assistent.
 Aus dem rohen Sprachtranskript des Nutzers formst du einen
 Tagebucheintrag in der Ich-Form, in seiner Sprache, mit seiner
 Wortwahl. Du fügst KEINE Informationen hinzu, die nicht im
@@ -252,7 +252,7 @@ User:
 
 ```
 System:
-Du bist Mathias. Der Nutzer hat heute bereits einen Eintrag verfasst
+Du bist Mein KI-Tagebuch. Der Nutzer hat heute bereits einen Eintrag verfasst
 und gerade weitere Gedanken diktiert – meist als Antwort auf eine
 deiner Folgefragen. Integriere die neuen Inhalte ORGANISCH in den
 bestehenden Eintrag: Dopplungen entfernen, chronologisch ordnen,
@@ -332,7 +332,7 @@ Folgende Punkte müssen wir noch klären, bevor die Implementierung beginnt:
 1. **„Ein Eintrag pro Tag" vs. mehrere:** Was ist die Definition eines „Tages" – Kalendertag oder 04:00-bis-04:00-Fenster (für Nachteulen)?
 2. **Onboarding-Anmeldung:** Magic Link per E-Mail, oder erst Beta-Code, oder Apple/Google Sign-In?
 3. **Beta-Distribution:** TestFlight + Google Play Internal Testing, oder Expo-Go für maximale Geschwindigkeit?
-4. **Name:** Bleibt es bei „Mathias" als KI-Persönlichkeit oder soll der Nutzer den Namen wählen können?
+4. **Name:** Bleibt es bei „Mein KI-Tagebuch" als KI-Persönlichkeit oder soll der Nutzer den Namen wählen können?
 5. **Pre-Build-Validierung:** Wollen wir vorher noch eine Landingpage + Warteliste bauen, um die Nachfrage zu testen?
 
 ---

@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**AI Tagebuch** (codename: Mathias) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini. All data stays in the EU.
+**AI Tagebuch** (codename: Mein KI-Tagebuch) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini. All data stays in the EU.
 
 - **Firebase project:** `diary-6fa61`
 - **Bundle ID:** `com.diary.app`
@@ -200,7 +200,7 @@ Always run `dart run build_runner build` after changing `app_database.dart`.
 The screen is the **Tageseintrag** — the growing diary entry for the day. Key design:
 - **Aufnahmen section** (collapsed by default): shows `normalizedContent` of each recording with provenance label. Tap to edit (triggers re-derivation via `generateEntry`). Long-press to delete (same).
 - **Themen section**: topic cards with full chapter `text`, follow-up hint, and `Ergänzen` button per topic.
-- **Mathias fragt section**: general follow-up questions as tappable mic invitations.
+- **Mein KI-Tagebuch fragt section**: general follow-up questions as tappable mic invitations.
 - **General Ergänzen button**: records without topic context — AI decides placement.
 - **Recording overlay**: `ModalBottomSheet` with `RecordingControls` + context chip.
 - **Von vorne anfangen**: overflow menu `⋮` only — never in the main scroll area.
@@ -241,7 +241,7 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 **Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` — `europe-west3`, `europe-west4`, and `global` are all rejected.
 
-**Gemini model:** `gemini-2.5-flash`, `temperature=0.7`, `max_output_tokens=8192`, JSON output mode. The AI persona is named **Mathias**. Topic `text` fields must be complete chapter prose — never truncated.
+**Gemini model:** `gemini-2.5-flash`, `temperature=0.7`, `max_output_tokens=8192`, JSON output mode. The AI persona is named **Mein KI-Tagebuch**. Topic `text` fields must be complete chapter prose — never truncated.
 
 **Logging:** All Gemini calls logged at `info` level: `gemini_call` (fn, input) and `gemini_response` (fn, finish_reason, output_tokens, output). JSON parse errors log the full raw response via `gemini_json_parse_error`.
 
