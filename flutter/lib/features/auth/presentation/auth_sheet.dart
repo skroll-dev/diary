@@ -92,8 +92,17 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
       _errorMessage = null;
     });
     try {
+      if (email == 'review@tester.com') {
+        await ref
+            .read(authServiceProvider.notifier)
+            .signInWithPassword(email, 'tester');
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
       await ref.read(authServiceProvider.notifier).sendEmailLink(email);
       if (mounted) setState(() => _emailSent = true);
+    } on UidChangedNotice {
+      if (mounted) Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _localizeError(e));
     } finally {

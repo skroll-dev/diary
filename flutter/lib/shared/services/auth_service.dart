@@ -43,6 +43,30 @@ class AuthService extends _$AuthService {
     return true;
   }
 
+  Future<void> signInWithPassword(String email, String password) async {
+    final currentUser = await getUser();
+    final credential = EmailAuthProvider.credential(email: email, password: password);
+    if (currentUser.isAnonymous) {
+      try {
+        final result = await currentUser.linkWithCredential(credential);
+        _updateState(result.user!);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use' ||
+            e.code == 'credential-already-in-use') {
+          final result = await FirebaseAuth.instance.signInWithEmailAndPassword(
+              email: email, password: password);
+          _updateState(result.user!);
+          throw const UidChangedNotice();
+        }
+        rethrow;
+      }
+    } else {
+      final result = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+      _updateState(result.user!);
+    }
+  }
+
   Future<void> sendEmailLink(String email) async {
     // On web use the current origin so links work on localhost too.
     final continueUrl =
