@@ -13,6 +13,7 @@ Future<bool> showAuthSheet(
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     isDismissible: isDismissible,
     enableDrag: isDismissible,

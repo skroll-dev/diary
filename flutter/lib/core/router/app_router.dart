@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/analytics/presentation/analytics_screen.dart';
 import '../../features/recording/presentation/recording_screen.dart';
 import '../../features/recording/recording_context.dart';
 import '../../features/splash/presentation/splash_screen.dart';
@@ -9,6 +10,7 @@ import '../../features/entry/presentation/entry_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../shared/services/proxy_client.dart' show TopicDto;
+import '../../shared/widgets/main_shell.dart';
 
 typedef TopicsArgs = ({
   String date,
@@ -30,13 +32,45 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
-        path: '/',
-        builder: (context, state) => RecordingScreen(
-          recordingContext:
-              state.extra as RecordingContext? ?? const FreshRecording(),
-        ),
+
+      // ── Shell: screens with bottom navigation ──────────────────────────────
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => MainShell(shell: shell),
+        branches: [
+          // Heute
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => RecordingScreen(
+                  recordingContext:
+                      state.extra as RecordingContext? ?? const FreshRecording(),
+                ),
+              ),
+            ],
+          ),
+          // Verlauf
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/history',
+                builder: (context, state) => const HistoryScreen(),
+              ),
+            ],
+          ),
+          // Analyse
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/analytics',
+                builder: (context, state) => const AnalyticsScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
+
+      // ── Screens without bottom navigation ─────────────────────────────────
       GoRoute(
         path: '/topics',
         builder: (context, state) {
@@ -58,10 +92,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/entry/:date',
         builder: (context, state) =>
             EntryScreen(date: state.pathParameters['date']!),
-      ),
-      GoRoute(
-        path: '/history',
-        builder: (context, state) => const HistoryScreen(),
       ),
       GoRoute(
         path: '/profile',

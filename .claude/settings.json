@@ -94,7 +94,8 @@
       "WebFetch(domain:blog.logrocket.com)",
       "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"multiline text input dialog scrollable dark mode\" --domain ux -n 4)",
       "Bash(git add *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
