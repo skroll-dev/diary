@@ -89,13 +89,19 @@ Gib AUSSCHLIESSLICH valides JSON zurück:
       "title": "Thema in 2-4 Wörtern",
       "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte aus dem Transkript, nichts weglassen, keine Kürzungen"
     }
-  ]
+  ],
+  "tags": ["Kurzwort1", "Kurzwort2"]
 }
 
 Regeln für topics:
 - Ein Topic pro erkennbarem Thema oder Ereignis im Transkript (min. 1, max. 5)
 - title: prägnant, keine Verben (z.B. \"Meeting mit Tim\", \"Spaziergang abends\")
 - text: vollständiger Ich-Form-Text für dieses Kapitel — ALLE relevanten Details aus dem Transkript, KEIN Kürzen
+
+Regeln für tags:
+- 1-4 kurze Schlüsselwörter (Nomen, keine Verben, max. 2 Wörter pro Tag)
+- Bevorzuge vorhandene Tags aus existing_tags (falls im Transkript übergeben) — erfinde nur neue wenn kein vorhandener passt
+- Beispiele: "Familie", "Arbeit", "Natur", "Sport", "Freunde"
 
 Regeln für die follow_up_questions:
 - Keine Ratschläge, keine Therapie-Phrasen
@@ -122,17 +128,21 @@ Gib AUSSCHLIESSLICH valides JSON in exakt dieser Struktur zurück:
       "title": "Thema in 2-4 Wörtern",
       "text": "Vollständiger Text zu diesem Thema in der Ich-Form — alle relevanten Inhalte, NICHTS kürzen"
     }
-  ]
+  ],
+  "tags": ["Kurzwort1", "Kurzwort2"]
 }
 
-follow_up_questions: 0-3 Fragen, keine Ja/Nein-Fragen, konkret auf den Eintrag bezogen, max. 15 Wörter pro Frage. Wenn keine sinnvollen Fragen entstehen, gib [] zurück."""
+follow_up_questions: 0-3 Fragen, keine Ja/Nein-Fragen, konkret auf den Eintrag bezogen, max. 15 Wörter pro Frage. Wenn keine sinnvollen Fragen entstehen, gib [] zurück.
+
+tags: 1-4 kurze Schlüsselwörter (Nomen, keine Verben, max. 2 Wörter pro Tag). Bevorzuge vorhandene Tags aus existing_tags (falls übergeben) — erfinde nur neue wenn kein vorhandener passt."""
 
 
-async def generate_entry(transcript: str, language: str = "de") -> dict:
+async def generate_entry(transcript: str, language: str = "de", existing_tags: list[str] | None = None) -> dict:
+    tags_hint = f"\n\nexisting_tags (bevorzuge diese): {existing_tags}" if existing_tags else ""
     log.info("gemini_call", fn="generate_entry", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_GENERATE)
     response = await model.generate_content_async(
-        transcript,
+        transcript + tags_hint,
         generation_config=_GENERATION_CONFIG,
     )
     text = _require_text(response, "generate_entry")
@@ -183,9 +193,11 @@ async def merge_entry(
     new_transcript: str,
     previous_questions: list[str],
     language: str = "de",
+    existing_tags: list[str] | None = None,
 ) -> dict:
     log.info("gemini_call", fn="merge_entry", existing_len=len(existing_entry), new_transcript=new_transcript)
     model = GenerativeModel(MODEL, system_instruction=_SYSTEM_PROMPT_MERGE)
+    tags_hint = f"\n\nexisting_tags (bevorzuge diese): {existing_tags}" if existing_tags else ""
     user_message = f"""BESTEHENDER EINTRAG:
 {existing_entry}
 
@@ -193,7 +205,7 @@ NEUE GEDANKEN (Transkript):
 {new_transcript}
 
 BISHERIGE FOLGEFRAGEN (nicht wiederholen):
-{chr(10).join(f"- {q}" for q in previous_questions)}"""
+{chr(10).join(f"- {q}" for q in previous_questions)}{tags_hint}"""
 
     last_exc: Exception | None = None
     for attempt in range(3):

@@ -30,6 +30,7 @@ class NormalizeResponse(BaseModel):
 class GenerateRequest(BaseModel):
     transcript: str = Field(..., min_length=10, max_length=8_000)
     language: str = Field(default="de")
+    existing_tags: list[str] = Field(default_factory=list)
 
 
 class MergeRequest(BaseModel):
@@ -37,6 +38,7 @@ class MergeRequest(BaseModel):
     new_transcript: str = Field(..., min_length=10, max_length=4_000)
     previous_questions: list[str] = Field(default_factory=list)
     language: str = Field(default="de")
+    existing_tags: list[str] = Field(default_factory=list)
 
 
 class TopicItem(BaseModel):
@@ -51,6 +53,7 @@ class EntryResponse(BaseModel):
     mood_score: float = Field(..., ge=-1.0, le=1.0)
     follow_up_questions: list[str] = Field(default_factory=list, max_length=5)
     topics: list[TopicItem] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -71,7 +74,7 @@ async def generate(
     _: None = Depends(verify_app_check),
 ):
     log.info("generate_entry", transcript_len=len(req.transcript))
-    result = await generate_entry(req.transcript, req.language)
+    result = await generate_entry(req.transcript, req.language, req.existing_tags or None)
     return EntryResponse(**result)
 
 
@@ -86,5 +89,6 @@ async def merge(
         req.new_transcript,
         req.previous_questions,
         req.language,
+        req.existing_tags or None,
     )
     return EntryResponse(**result)

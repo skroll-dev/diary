@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 
+import '../../../core/database/app_database.dart' as db;
 import '../../../shared/models/entry.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../shared/providers/dev_settings.dart';
+import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 
 // ─── Palette (mirrors _topicPalette in topics_review_screen.dart) ────────────
@@ -30,6 +36,8 @@ class _EntryPreview {
     required this.durationSeconds,
     required this.tags,
     required this.paletteIndex,
+    this.allTopics = const [],
+    this.entryDate = '',
   });
 
   final DateTime date;
@@ -39,6 +47,8 @@ class _EntryPreview {
   final int durationSeconds;
   final List<String> tags;
   final int paletteIndex;
+  final List<Map<String, dynamic>> allTopics;
+  final String entryDate; // raw yyyy-MM-dd string for DB operations
 }
 
 // ─── Index entry (for scrubber) ───────────────────────────────────────────────
@@ -269,6 +279,64 @@ String _moodEmoji(Mood m) => switch (m) {
       _ => '😐',
     };
 
+// ─── Real-data provider ───────────────────────────────────────────────────────
+
+final _historyEntriesProvider = StreamProvider<List<db.Entry>>((ref) {
+  return ref.watch(entryRepositoryProvider).watchAllEntries();
+});
+
+// ─── DB → preview mapping ─────────────────────────────────────────────────────
+
+List<String> _parseTags(String json) {
+  try {
+    return (jsonDecode(json) as List).cast<String>();
+  } catch (_) {
+    return [];
+  }
+}
+
+List<Map<String, dynamic>> _parseTopics(String json) {
+  try {
+    return (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+  } catch (_) {
+    return [];
+  }
+}
+
+String _stripMarkdown(String md) {
+  return md
+      .replaceAll(RegExp(r'#{1,6} '), '')
+      .replaceAll('**', '')
+      .replaceAll('*', '')
+      .replaceAll('__', '')
+      .replaceAll('_', '')
+      .replaceAll('\n', ' ')
+      .replaceAll(RegExp(r' {2,}'), ' ')
+      .trim();
+}
+
+_EntryPreview _toPreview(db.Entry e, int index) {
+  final topics = _parseTopics(e.topics);
+  final title = topics.isNotEmpty
+      ? (topics.first['title'] as String? ?? '')
+      : e.date;
+  final date = DateTime.tryParse(e.date) ?? DateTime.now();
+  return _EntryPreview(
+    date: date,
+    mood: Mood.values.firstWhere(
+      (m) => m.name == e.mood,
+      orElse: () => Mood.neutral,
+    ),
+    title: title,
+    preview: _stripMarkdown(e.bodyMarkdown),
+    durationSeconds: e.durationSeconds,
+    tags: _parseTags(e.tags),
+    paletteIndex: index % 5,
+    allTopics: topics,
+    entryDate: e.date,
+  );
+}
+
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -282,17 +350,11 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   late final ScrollController _scrollController;
-  late final List<_IndexEntry> _indexEntries;
-  late final double _totalEstimatedHeight;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    final grouped = _groupEntries(HistoryScreen._entries);
-    final built = _buildIndex(grouped);
-    _indexEntries = built.$1;
-    _totalEstimatedHeight = built.$2;
   }
 
   @override
@@ -301,19 +363,28 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  AppBar _appBar(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final grouped = _groupEntries(HistoryScreen._entries);
+    return AppBar(
+      backgroundColor: cs.surface,
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Mein Tagebuch'),
+      actions: const [ProfileAvatarButton(), SizedBox(width: 8)],
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    Map<int, Map<int, List<_EntryPreview>>> grouped,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+    final built = _buildIndex(grouped);
+    final indexEntries = built.$1;
+    final totalH = built.$2;
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: AppBar(
-        backgroundColor: cs.surface,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('Verlauf'),
-        actions: const [ProfileAvatarButton(), SizedBox(width: 8)],
-      ),
+      appBar: _appBar(context),
       body: Stack(
         children: [
           CustomScrollView(
@@ -333,10 +404,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               final e = grouped[year]![month]![i];
                               return _EntryCard(entry: e)
                                   .animate()
-                                  .fadeIn(
-                                    duration: 250.ms,
-                                    delay: (i * 30).ms,
-                                  )
+                                  .fadeIn(duration: 250.ms, delay: (i * 30).ms)
                                   .slideY(begin: 0.05, end: 0);
                             },
                           ),
@@ -347,19 +415,82 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
           ),
-          if (_indexEntries.isNotEmpty)
+          if (indexEntries.isNotEmpty)
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
               child: _ScrollScrubber(
-                entries: _indexEntries,
+                entries: indexEntries,
                 controller: _scrollController,
-                totalEstimatedHeight: _totalEstimatedHeight,
+                totalEstimatedHeight: totalH,
               ),
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: _appBar(context),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.book_outlined, size: 56, color: cs.outlineVariant),
+            const SizedBox(height: 16),
+            Text(
+              'Noch keine Einträge',
+              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Nimm deinen ersten Tagebucheintrag auf\nund er erscheint hier.',
+              style: tt.bodyMedium?.copyWith(color: cs.outline),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => context.go('/'),
+              icon: const Icon(Icons.mic_rounded),
+              label: const Text('Ersten Eintrag aufnehmen'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final useFakeHistory = ref.watch(useFakeHistoryProvider);
+
+    if (useFakeHistory) {
+      return _buildScaffold(context, _groupEntries(HistoryScreen._entries));
+    }
+
+    final async = ref.watch(_historyEntriesProvider);
+    return async.when(
+      loading: () => Scaffold(
+        appBar: _appBar(context),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        appBar: _appBar(context),
+        body: const Center(child: Text('Fehler beim Laden')),
+      ),
+      data: (dbEntries) {
+        if (dbEntries.isEmpty) return _buildEmptyState(context);
+        final previews = dbEntries
+            .asMap()
+            .entries
+            .map((e) => _toPreview(e.value, e.key))
+            .toList();
+        return _buildScaffold(context, _groupEntries(previews));
+      },
     );
   }
 }
@@ -441,6 +572,15 @@ class _EntryCard extends StatelessWidget {
 
   final _EntryPreview entry;
 
+  void _openDetail(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EntryDetailSheet(entry: entry),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -451,51 +591,249 @@ class _EntryCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       color: cs.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                shape: BoxShape.circle,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _moodEmoji(entry.mood),
+                  style: const TextStyle(fontSize: 22),
+                ),
               ),
-              alignment: Alignment.center,
-              child: Text(
-                _moodEmoji(entry.mood),
-                style: const TextStyle(fontSize: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.title,
+                      style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_formatEntryDate(entry.date)} · ${_formatDuration(entry.durationSeconds)}',
+                      style: tt.labelSmall?.copyWith(color: cs.outline),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      entry.preview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        height: 1.45,
+                      ),
+                    ),
+                    if (entry.allTopics.length > 1) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: entry.allTopics
+                            .map((t) => _TopicChip(
+                                  label: t['title'] as String? ?? '',
+                                  paletteIndex: entry.paletteIndex,
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                    if (entry.tags.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: entry.tags
+                            .map((t) => _TagChip(
+                                  tag: t,
+                                  paletteIndex: entry.paletteIndex,
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (entry.allTopics.isNotEmpty)
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: cs.outlineVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Topic chip (card summary) ────────────────────────────────────────────────
+
+class _TopicChip extends StatelessWidget {
+  const _TopicChip({required this.label, required this.paletteIndex});
+
+  final String label;
+  final int paletteIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, fg) = _tagPalette[paletteIndex % _tagPalette.length];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: fg.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w500,
+            ),
+      ),
+    );
+  }
+}
+
+// ─── Entry detail sheet ───────────────────────────────────────────────────────
+
+class _EntryDetailSheet extends ConsumerWidget {
+  const _EntryDetailSheet({required this.entry});
+
+  final _EntryPreview entry;
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eintrag löschen?'),
+        content: const Text(
+            'Dieser Eintrag wird dauerhaft gelöscht und kann nicht wiederhergestellt werden.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await ref.read(entryRepositoryProvider).deleteEntryForDate(entry.entryDate);
+      if (context.mounted) Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Row(
                 children: [
-                  Text(
-                    entry.title,
-                    style:
-                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${_formatEntryDate(entry.date)} · ${_formatDuration(entry.durationSeconds)}',
-                    style: tt.labelSmall?.copyWith(color: cs.outline),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    entry.preview,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: tt.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.45,
+                  Text(_moodEmoji(entry.mood),
+                      style: const TextStyle(fontSize: 28)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatEntryDate(entry.date),
+                          style: tt.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          _formatDuration(entry.durationSeconds),
+                          style:
+                              tt.labelSmall?.copyWith(color: cs.outline),
+                        ),
+                      ],
                     ),
                   ),
+                ],
+              ),
+            ),
+            Divider(
+                height: 1,
+                indent: 20,
+                endIndent: 20,
+                color: cs.outlineVariant.withValues(alpha: 0.4)),
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                children: [
+                  if (entry.preview.isNotEmpty) ...[
+                    Text(
+                      entry.preview,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  Text(
+                    'Themen',
+                    style: tt.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.outline,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  for (int i = 0; i < entry.allTopics.length; i++) ...[
+                    _DetailTopicCard(
+                      topic: entry.allTopics[i],
+                      paletteIndex: (entry.paletteIndex + i) % _tagPalette.length,
+                    ),
+                    if (i < entry.allTopics.length - 1)
+                      const SizedBox(height: 12),
+                  ],
                   if (entry.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 20),
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
@@ -507,10 +845,87 @@ class _EntryCard extends StatelessWidget {
                           .toList(),
                     ),
                   ],
+                  if (entry.entryDate.isNotEmpty) ...[
+                    const SizedBox(height: 28),
+                    Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => _confirmDelete(context, ref),
+                        icon: Icon(Icons.delete_outline_rounded,
+                            color: cs.error, size: 18),
+                        label: Text('Eintrag löschen',
+                            style: TextStyle(color: cs.error)),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Detail topic card ────────────────────────────────────────────────────────
+
+class _DetailTopicCard extends StatelessWidget {
+  const _DetailTopicCard(
+      {required this.topic, required this.paletteIndex});
+
+  final Map<String, dynamic> topic;
+  final int paletteIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final (_, accent) = _tagPalette[paletteIndex % _tagPalette.length];
+    final title = topic['title'] as String? ?? '';
+    final text = topic['text'] as String? ?? '';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: accent),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toUpperCase(),
+                        style: tt.labelSmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        text,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.55,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

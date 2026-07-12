@@ -38,12 +38,14 @@ class EntryDto {
     required this.moodScore,
     required this.followUpQuestions,
     required this.topics,
+    required this.tags,
   });
   final String bodyMarkdown;
   final String mood;
   final double moodScore;
   final List<String> followUpQuestions;
   final List<TopicDto> topics;
+  final List<String> tags;
 
   factory EntryDto.fromJson(Map<String, dynamic> j) => EntryDto(
         bodyMarkdown: j['body_markdown'] as String? ?? '',
@@ -55,6 +57,7 @@ class EntryDto {
                 ?.map((t) => TopicDto.fromJson(t as Map<String, dynamic>))
                 .toList() ??
             [],
+        tags: (j['tags'] as List?)?.cast<String>() ?? [],
       );
 }
 
@@ -217,11 +220,17 @@ class ProxyClient {
     return resp.data['normalized_text'] as String;
   }
 
-  Future<EntryDto> generateEntry(String transcript) async {
+  Future<EntryDto> generateEntry(
+    String transcript, {
+    List<String> existingTags = const [],
+  }) async {
     final dio = await _dio();
     final resp = await dio.post(
       '/entries/generate',
-      data: {'transcript': transcript},
+      data: {
+        'transcript': transcript,
+        if (existingTags.isNotEmpty) 'existing_tags': existingTags,
+      },
     );
     return EntryDto.fromJson(resp.data as Map<String, dynamic>);
   }
@@ -230,6 +239,7 @@ class ProxyClient {
     required String existingBody,
     required String newTranscript,
     required List<String> previousQuestions,
+    List<String> existingTags = const [],
   }) async {
     final dio = await _dio();
     final resp = await dio.post(
@@ -238,6 +248,7 @@ class ProxyClient {
         'existing_entry': existingBody,
         'new_transcript': newTranscript,
         'previous_questions': previousQuestions,
+        if (existingTags.isNotEmpty) 'existing_tags': existingTags,
       },
     );
     return EntryDto.fromJson(resp.data as Map<String, dynamic>);

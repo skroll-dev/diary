@@ -101,7 +101,7 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
       routerConfig: router,
-      debugShowCheckedModeBanner: true,
+      debugShowCheckedModeBanner: false,
     );
   }
 }

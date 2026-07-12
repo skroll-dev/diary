@@ -23,6 +23,7 @@ class Entries extends Table {
   TextColumn get followUpQuestions =>
       text().withDefault(const Constant('[]'))();
   TextColumn get topics => text().withDefault(const Constant('[]'))();
+  TextColumn get tags => text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -46,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(LazyDatabase(() => openDatabaseConnection()));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -60,6 +61,10 @@ class AppDatabase extends _$AppDatabase {
                 "ALTER TABLE raw_transcripts ADD COLUMN normalized_content TEXT NOT NULL DEFAULT ''");
             await m.database.customStatement(
                 "ALTER TABLE raw_transcripts ADD COLUMN reason TEXT NOT NULL DEFAULT 'initial'");
+          }
+          if (from < 3) {
+            await m.database.customStatement(
+                "ALTER TABLE entries ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
           }
         },
       );

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_error_provider.dart';
 import '../../../shared/services/auth_service.dart'
@@ -62,6 +63,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   double _pipelinePercent = 0.0;
   String _pipelineStep = '';
   Timer? _progressTimer;
+
+  // Dev menu triple-tap
+  int _devTapCount = 0;
+  Timer? _devTapTimer;
 
   bool get _hasText => _confirmedTranscript.isNotEmpty || _interimText.isNotEmpty;
 
@@ -213,7 +218,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       sw.reset(); sw.start();
 
       _setStep('Mein KI-Tagebuch denkt nach …', 0.56, 1.0);
-      final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
+      final entry = await ref.read(proxyClientProvider).generateEntry(
+        normalizedText,
+        existingTags: existingTags,
+      );
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
       mood = entry.mood;
@@ -233,6 +242,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             moodScore: moodScore,
             followUpQuestions: followUpQuestions,
             topics: topics,
+            tags: entry.tags,
             transcriptReason: reason,
           );
       debugPrint('[Pipeline] save: ${sw.elapsedMilliseconds}ms');
@@ -316,7 +326,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       sw.reset(); sw.start();
 
       _setStep('Mein KI-Tagebuch denkt nach …', 0.31, 1.0);
-      final entry = await ref.read(proxyClientProvider).generateEntry(normalizedText);
+      final existingTagsTyped = await ref.read(entryRepositoryProvider).getAllTags();
+      final entry = await ref.read(proxyClientProvider).generateEntry(
+        normalizedText,
+        existingTags: existingTagsTyped,
+      );
       topics = entry.topics;
       bodyMarkdown = entry.bodyMarkdown;
       mood = entry.mood;
@@ -336,6 +350,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             moodScore: moodScore,
             followUpQuestions: followUpQuestions,
             topics: topics,
+            tags: entry.tags,
             transcriptReason: reason,
           );
       debugPrint('[Pipeline] save (typed): ${sw.elapsedMilliseconds}ms');
@@ -357,6 +372,32 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         transcriptReason: reason,
       ));
     }
+  }
+
+  void _showDevMenu() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dev-Menü'),
+        content: Consumer(
+          builder: (_, ref, __) {
+            final fakeHistory = ref.watch(useFakeHistoryProvider);
+            return SwitchListTile(
+              title: const Text('Fake Verlauf-Daten'),
+              subtitle: const Text('Mock-Einträge statt echter Daten'),
+              value: fakeHistory,
+              onChanged: (v) => ref.read(useFakeHistoryProvider.notifier).set(v),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAuthLinkErrorDialog(AuthLinkError error) {
@@ -733,6 +774,19 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
           if (_version.isNotEmpty && _state == _RecordingState.idle)
             GestureDetector(
               onDoubleTap: _showTranscriptDialog,
+              onTap: () {
+                _devTapCount++;
+                _devTapTimer?.cancel();
+                if (_devTapCount >= 3) {
+                  _devTapCount = 0;
+                  _showDevMenu();
+                } else {
+                  _devTapTimer = Timer(
+                    const Duration(milliseconds: 800),
+                    () => _devTapCount = 0,
+                  );
+                }
+              },
               child: Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(

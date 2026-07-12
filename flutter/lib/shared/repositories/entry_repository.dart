@@ -62,6 +62,7 @@ class EntryRepository {
     required double moodScore,
     required List<String> followUpQuestions,
     required List<TopicDto> topics,
+    List<String> tags = const [],
     String transcriptReason = 'initial',
   }) async {
     final user = await _auth.getUser();
@@ -70,6 +71,7 @@ class EntryRepository {
     final transcriptId = _uuid.v4();
     final topicsJson = jsonEncode(topics.map((t) => t.toJson()).toList());
     final questionsJson = jsonEncode(followUpQuestions);
+    final tagsJson = jsonEncode(tags);
 
     await _db.transaction(() async {
       await _db.into(_db.entries).insertOnConflictUpdate(
@@ -83,6 +85,7 @@ class EntryRepository {
               durationSeconds: durationSeconds,
               followUpQuestions: Value(questionsJson),
               topics: Value(topicsJson),
+              tags: Value(tagsJson),
               createdAt: now,
               updatedAt: now,
             ),
@@ -108,6 +111,7 @@ class EntryRepository {
       moodScore: moodScore,
       followUpQuestions: followUpQuestions,
       topics: topics,
+      tags: tags,
       rawTranscript: rawTranscript,
       normalizedText: normalizedText,
       transcriptId: transcriptId,
@@ -128,6 +132,7 @@ class EntryRepository {
     required double moodScore,
     required List<String> followUpQuestions,
     required List<TopicDto> topics,
+    List<String> tags = const [],
     String transcriptReason = 'continuation',
   }) async {
     final user = await _auth.getUser();
@@ -135,6 +140,7 @@ class EntryRepository {
     final transcriptId = _uuid.v4();
     final topicsJson = jsonEncode(topics.map((t) => t.toJson()).toList());
     final questionsJson = jsonEncode(followUpQuestions);
+    final tagsJson = jsonEncode(tags);
 
     // Find the existing entry for this date
     final existing = await (_db.select(_db.entries)
@@ -167,6 +173,7 @@ class EntryRepository {
             moodScore: Value(moodScore),
             followUpQuestions: Value(questionsJson),
             topics: Value(topicsJson),
+            tags: Value(tagsJson),
             updatedAt: Value(now),
             synced: const Value(false),
           ));
@@ -191,6 +198,7 @@ class EntryRepository {
       moodScore: moodScore,
       followUpQuestions: followUpQuestions,
       topics: topics,
+      tags: tags,
       rawTranscript: rawTranscript,
       normalizedText: normalizedText,
       transcriptId: transcriptId,
@@ -210,11 +218,13 @@ class EntryRepository {
     required double moodScore,
     required List<String> followUpQuestions,
     required List<TopicDto> topics,
+    List<String> tags = const [],
   }) async {
     final user = await _auth.getUser();
     final now = DateTime.now().toIso8601String();
     final topicsJson = jsonEncode(topics.map((t) => t.toJson()).toList());
     final questionsJson = jsonEncode(followUpQuestions);
+    final tagsJson = jsonEncode(tags);
 
     await (_db.update(_db.entries)
           ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
@@ -224,9 +234,32 @@ class EntryRepository {
           moodScore: Value(moodScore),
           followUpQuestions: Value(questionsJson),
           topics: Value(topicsJson),
+          tags: Value(tagsJson),
           updatedAt: Value(now),
           synced: const Value(false),
         ));
+  }
+
+  Future<List<String>> getAllTags() async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    final rows = await (_db.select(_db.entries)
+          ..where((e) => e.userId.equals(user.uid)))
+        .get();
+    final tagSet = <String>{};
+    for (final row in rows) {
+      try {
+        tagSet.addAll((jsonDecode(row.tags) as List).cast<String>());
+      } catch (_) {}
+    }
+    return tagSet.toList();
+  }
+
+  Stream<List<Entry>> watchAllEntries() async* {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    yield* (_db.select(_db.entries)
+          ..where((e) => e.userId.equals(user.uid))
+          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+        .watch();
   }
 
   // ── Update a single normalized transcript ────────────────────────────────────
@@ -484,6 +517,7 @@ class EntryRepository {
     required double moodScore,
     required List<String> followUpQuestions,
     required List<TopicDto> topics,
+    required List<String> tags,
     required String rawTranscript,
     required String normalizedText,
     required String transcriptId,
@@ -506,6 +540,7 @@ class EntryRepository {
         'moodScore': moodScore,
         'followUpQuestions': followUpQuestions,
         'topics': topics.map((t) => t.toJson()).toList(),
+        'tags': tags,
         'durationSeconds': durationSeconds,
         'language': 'de',
         'version': 1,
@@ -538,6 +573,7 @@ class EntryRepository {
     required double moodScore,
     required List<String> followUpQuestions,
     required List<TopicDto> topics,
+    required List<String> tags,
     required String rawTranscript,
     required String normalizedText,
     required String transcriptId,
@@ -556,6 +592,7 @@ class EntryRepository {
         'moodScore': moodScore,
         'followUpQuestions': followUpQuestions,
         'topics': topics.map((t) => t.toJson()).toList(),
+        'tags': tags,
         'updatedAt': now,
         'rawTranscripts': FieldValue.arrayUnion([
           {

@@ -293,10 +293,12 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       sw.reset(); sw.start();
 
       _setRegenStep('Mein KI-Tagebuch fügt alles zusammen …', 0.36, 1.0);
+      final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
       final entry = await ref.read(proxyClientProvider).mergeEntry(
             existingBody: _bodyMarkdown,
             newTranscript: normalized,
             previousQuestions: _followUpQuestions,
+            existingTags: existingTags,
           );
       _completeRegenStep(1.0);
       debugPrint('[Pipeline] merge: ${sw.elapsedMilliseconds}ms');
@@ -327,6 +329,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             moodScore: entry.moodScore,
             followUpQuestions: entry.followUpQuestions,
             topics: entry.topics,
+            tags: entry.tags,
             transcriptReason: reason,
           ).then((_) => _loadTranscriptIds()).catchError((_) {}));
     } catch (e) {
@@ -390,8 +393,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           _recordings.map((r) => r.normalizedText).join('\n\n');
       final sw = Stopwatch()..start();
       _setRegenStep('Mein KI-Tagebuch denkt nach …', 0.0, 1.0);
-      final entry =
-          await ref.read(proxyClientProvider).generateEntry(combined);
+      final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
+      final entry = await ref.read(proxyClientProvider).generateEntry(
+        combined,
+        existingTags: existingTags,
+      );
       _completeRegenStep(1.0);
       debugPrint('[Pipeline] re-derive: ${sw.elapsedMilliseconds}ms');
       await ref.read(entryRepositoryProvider).updateEntry(
@@ -401,6 +407,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             moodScore: entry.moodScore,
             followUpQuestions: entry.followUpQuestions,
             topics: entry.topics,
+            tags: entry.tags,
           );
       if (mounted) {
         setState(() {
@@ -426,7 +433,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       final success = await showAuthSheet(context);
       if (!success || !mounted) return;
     }
-    if (mounted) context.push('/entry/today');
+    if (mounted) context.go('/history');
   }
 
   // ── Von vorne anfangen ────────────────────────────────────────────────────────
