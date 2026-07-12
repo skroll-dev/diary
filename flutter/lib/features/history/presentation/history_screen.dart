@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -38,6 +39,24 @@ class _EntryPreview {
   final int durationSeconds;
   final List<String> tags;
   final int paletteIndex;
+}
+
+// ─── Index entry (for scrubber) ───────────────────────────────────────────────
+
+class _IndexEntry {
+  const _IndexEntry({
+    required this.year,
+    required this.month,
+    required this.label,
+    required this.estimatedOffset,
+  });
+
+  final int year;
+  final int month; // 0 = year-level entry
+  final String label;
+  final double estimatedOffset;
+
+  bool get isYear => month == 0;
 }
 
 // ─── Mock data generation ────────────────────────────────────────────────────
@@ -102,18 +121,15 @@ List<_EntryPreview> _generateMockEntries() {
   int entryIndex = 0;
 
   const moods = Mood.values;
-  // Weighted mood distribution: calm, neutral most common
   const moodWeights = [2, 4, 4, 1, 1, 2]; // happy calm neutral tense sad mixed
 
   for (var year = 2016; year <= 2025; year++) {
     for (var month = 1; month <= 12; month++) {
-      // 65% chance to skip a month entirely
       if (rng.nextDouble() < 0.65) continue;
 
       final daysInMonth = DateTime(year, month + 1, 0).day;
       final entryCount = 1 + rng.nextInt(7);
 
-      // Pick unique random days
       final days = <int>{};
       while (days.length < entryCount && days.length < daysInMonth) {
         days.add(1 + rng.nextInt(daysInMonth));
@@ -123,10 +139,8 @@ List<_EntryPreview> _generateMockEntries() {
         final palette = entryIndex % 5;
         final titleIdx = entryIndex % _mockTitles.length;
         final tags = List<String>.from(_mockTagPools[palette]);
-        // Occasionally only show one tag
         if (rng.nextBool()) tags.removeLast();
 
-        // Pick mood by weight
         final roll = rng.nextInt(moodWeights.fold(0, (a, b) => a + b));
         var acc = 0;
         var moodIdx = 0;
@@ -153,7 +167,6 @@ List<_EntryPreview> _generateMockEntries() {
     }
   }
 
-  // Sort newest first
   entries.sort((a, b) => b.date.compareTo(a.date));
   return entries;
 }
@@ -170,6 +183,57 @@ Map<int, Map<int, List<_EntryPreview>>> _groupEntries(
         .add(e);
   }
   return result;
+}
+
+// ─── Index builder for scrubber ───────────────────────────────────────────────
+
+const _kYearHeaderH = 57.0;
+const _kMonthHeaderH = 44.0;
+const _kCardH = 130.0;
+
+const _monthNamesShort = [
+  '',
+  'Jan.',
+  'Feb.',
+  'März',
+  'Apr.',
+  'Mai',
+  'Juni',
+  'Juli',
+  'Aug.',
+  'Sep.',
+  'Okt.',
+  'Nov.',
+  'Dez.',
+];
+
+(List<_IndexEntry>, double) _buildIndex(
+    Map<int, Map<int, List<_EntryPreview>>> grouped) {
+  final entries = <_IndexEntry>[];
+  double offset = 0;
+
+  for (final year in grouped.keys) {
+    entries.add(_IndexEntry(
+      year: year,
+      month: 0,
+      label: '$year',
+      estimatedOffset: offset,
+    ));
+    offset += _kYearHeaderH;
+
+    for (final month in grouped[year]!.keys) {
+      entries.add(_IndexEntry(
+        year: year,
+        month: month,
+        label: '${_monthNamesShort[month]} $year',
+        estimatedOffset: offset,
+      ));
+      offset += _kMonthHeaderH;
+      offset += grouped[year]![month]!.length * _kCardH;
+    }
+  }
+
+  return (entries, offset);
 }
 
 // ─── Date / duration helpers ─────────────────────────────────────────────────
@@ -207,15 +271,40 @@ String _moodEmoji(Mood m) => switch (m) {
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
-class HistoryScreen extends ConsumerWidget {
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   static final _entries = _generateMockEntries();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  late final ScrollController _scrollController;
+  late final List<_IndexEntry> _indexEntries;
+  late final double _totalEstimatedHeight;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    final grouped = _groupEntries(HistoryScreen._entries);
+    final built = _buildIndex(grouped);
+    _indexEntries = built.$1;
+    _totalEstimatedHeight = built.$2;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final grouped = _groupEntries(_entries);
+    final grouped = _groupEntries(HistoryScreen._entries);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -225,34 +314,50 @@ class HistoryScreen extends ConsumerWidget {
         title: const Text('Verlauf'),
         actions: const [ProfileAvatarButton(), SizedBox(width: 8)],
       ),
-      body: CustomScrollView(
-        slivers: [
-          for (final year in grouped.keys)
-            SliverStickyHeader(
-              header: _YearHeader(year: year),
-              sliver: SliverMainAxisGroup(
-                slivers: [
-                  for (final month in grouped[year]!.keys)
-                    SliverStickyHeader(
-                      header: _MonthHeader(year: year, month: month),
-                      sliver: SliverList.builder(
-                        itemCount: grouped[year]![month]!.length,
-                        itemBuilder: (ctx, i) {
-                          final e = grouped[year]![month]![i];
-                          return _EntryCard(entry: e)
-                              .animate()
-                              .fadeIn(
-                                duration: 250.ms,
-                                delay: (i * 30).ms,
-                              )
-                              .slideY(begin: 0.05, end: 0);
-                        },
-                      ),
-                    ),
-                ],
+      body: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              for (final year in grouped.keys)
+                SliverStickyHeader(
+                  header: _YearHeader(year: year),
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      for (final month in grouped[year]!.keys)
+                        SliverStickyHeader(
+                          header: _MonthHeader(year: year, month: month),
+                          sliver: SliverList.builder(
+                            itemCount: grouped[year]![month]!.length,
+                            itemBuilder: (ctx, i) {
+                              final e = grouped[year]![month]![i];
+                              return _EntryCard(entry: e)
+                                  .animate()
+                                  .fadeIn(
+                                    duration: 250.ms,
+                                    delay: (i * 30).ms,
+                                  )
+                                  .slideY(begin: 0.05, end: 0);
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
+          if (_indexEntries.isNotEmpty)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: _ScrollScrubber(
+                entries: _indexEntries,
+                controller: _scrollController,
+                totalEstimatedHeight: _totalEstimatedHeight,
               ),
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
@@ -371,8 +476,8 @@ class _EntryCard extends StatelessWidget {
                 children: [
                   Text(
                     entry.title,
-                    style: tt.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -433,6 +538,252 @@ class _TagChip extends StatelessWidget {
         '#$tag',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: fg,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+}
+
+// ─── Scroll scrubber ──────────────────────────────────────────────────────────
+
+class _ScrollScrubber extends StatefulWidget {
+  const _ScrollScrubber({
+    required this.entries,
+    required this.controller,
+    required this.totalEstimatedHeight,
+  });
+
+  final List<_IndexEntry> entries;
+  final ScrollController controller;
+  final double totalEstimatedHeight;
+
+  @override
+  State<_ScrollScrubber> createState() => _ScrollScrubberState();
+}
+
+class _ScrollScrubberState extends State<_ScrollScrubber> {
+  bool _isDragging = false;
+  int _activeIndex = 0;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onScroll);
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_isDragging) return;
+    if (!widget.controller.hasClients) return;
+    final offset = widget.controller.offset;
+    int best = 0;
+    for (int i = 0; i < widget.entries.length; i++) {
+      if (widget.entries[i].estimatedOffset <= offset) {
+        best = i;
+      } else {
+        break;
+      }
+    }
+    if (_activeIndex != best) setState(() => _activeIndex = best);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details, double barHeight) {
+    final fraction =
+        (details.localPosition.dy / barHeight).clamp(0.0, 1.0);
+    final targetOffset = fraction * widget.totalEstimatedHeight;
+
+    int best = 0;
+    double bestDist = double.infinity;
+    for (int i = 0; i < widget.entries.length; i++) {
+      final d = (widget.entries[i].estimatedOffset - targetOffset).abs();
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+
+    setState(() {
+      _isDragging = true;
+      _activeIndex = best;
+    });
+
+    if (widget.controller.hasClients) {
+      widget.controller.jumpTo(
+        widget.entries[best].estimatedOffset
+            .clamp(0, widget.controller.position.maxScrollExtent),
+      );
+    }
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _isDragging = false);
+    });
+  }
+
+  double _bubbleTop(double barHeight) {
+    if (widget.entries.isEmpty || widget.totalEstimatedHeight <= 0) return 0;
+    final fraction =
+        widget.entries[_activeIndex].estimatedOffset / widget.totalEstimatedHeight;
+    return (fraction * barHeight - 16).clamp(0.0, barHeight - 32);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final barHeight = constraints.maxHeight;
+
+        return SizedBox(
+          width: 52,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onVerticalDragStart: (_) => setState(() => _isDragging = true),
+            onVerticalDragUpdate: (d) => _onDragUpdate(d, barHeight),
+            onVerticalDragEnd: _onDragEnd,
+            child: Stack(
+              alignment: Alignment.centerRight,
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedOpacity(
+                  opacity: _isDragging ? 1.0 : 0.55,
+                  duration: const Duration(milliseconds: 200),
+                  child: CustomPaint(
+                    size: Size(28, barHeight),
+                    painter: _ScrubberPainter(
+                      entries: widget.entries,
+                      activeIndex: _activeIndex,
+                      totalEstimatedHeight: widget.totalEstimatedHeight,
+                      barHeight: barHeight,
+                      color: cs.onSurface,
+                      activeColor: cs.primary,
+                    ),
+                  ),
+                ),
+                if (_isDragging)
+                  Positioned(
+                    top: _bubbleTop(barHeight),
+                    right: 32,
+                    child: _BubbleLabel(
+                      label: widget.entries[_activeIndex].label,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Scrubber painter ─────────────────────────────────────────────────────────
+
+class _ScrubberPainter extends CustomPainter {
+  _ScrubberPainter({
+    required this.entries,
+    required this.activeIndex,
+    required this.totalEstimatedHeight,
+    required this.barHeight,
+    required this.color,
+    required this.activeColor,
+  });
+
+  final List<_IndexEntry> entries;
+  final int activeIndex;
+  final double totalEstimatedHeight;
+  final double barHeight;
+  final Color color;
+  final Color activeColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width - 10;
+
+    // Track line
+    canvas.drawLine(
+      Offset(cx, 0),
+      Offset(cx, size.height),
+      Paint()
+        ..color = color.withValues(alpha: 0.15)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
+    );
+
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final fraction = totalEstimatedHeight > 0
+          ? (entry.estimatedOffset / totalEstimatedHeight).clamp(0.0, 1.0)
+          : 0.0;
+      final y = fraction * size.height;
+      final isActive = i == activeIndex;
+
+      if (entry.isYear) {
+        canvas.drawLine(
+          Offset(cx - (isActive ? 8 : 5), y),
+          Offset(cx + 2, y),
+          Paint()
+            ..color =
+                isActive ? activeColor : color.withValues(alpha: 0.55)
+            ..strokeWidth = isActive ? 2.0 : 1.5
+            ..strokeCap = StrokeCap.round,
+        );
+      } else {
+        canvas.drawCircle(
+          Offset(cx, y),
+          isActive ? 3.5 : 2.0,
+          Paint()
+            ..color =
+                isActive ? activeColor : color.withValues(alpha: 0.45)
+            ..style = PaintingStyle.fill,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ScrubberPainter old) =>
+      old.activeIndex != activeIndex || old.barHeight != barHeight;
+}
+
+// ─── Bubble label ─────────────────────────────────────────────────────────────
+
+class _BubbleLabel extends StatelessWidget {
+  const _BubbleLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.inverseSurface.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: cs.onInverseSurface,
               fontWeight: FontWeight.w600,
             ),
       ),
