@@ -95,7 +95,12 @@
       "Bash(python3 /Users/sebastian.kroll/Documents/git/diary/.claude/skills/ui-ux-pro-max/scripts/search.py \"multiline text input dialog scrollable dark mode\" --domain ux -n 4)",
       "Bash(git add *)",
       "Bash(git push *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"AI voice diary journal dark mode privacy\" --design-system -p \"Mein KI-Tagebuch\" -f markdown)",
+      "Bash(git -C \"d:/programming/git/diary\" status)",
+      "Bash(git -C \"d:/programming/git/diary\" diff)",
+      "Bash(git -C \"d:/programming/git/diary\" log --oneline -5)",
+      "Bash(git -C \"d:/programming/git/diary\" add CLAUDE.md .claude/settings.json flutter/lib/features/history/presentation/history_screen.dart flutter/lib/features/splash/presentation/splash_screen.dart flutter/assets/icon/icon2-no-bg.png doc/icon2-no-bg.png doc/icon2.jpg)"
     ]
   }
 }

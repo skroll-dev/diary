@@ -21,6 +21,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final AnimationController _logoController;
   late final AnimationController _textController;
   late final AnimationController _exitController;
+  late final AnimationController _pulseController;
 
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
@@ -28,6 +29,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final Animation<Offset> _nameSlide;
   late final Animation<double> _sloganOpacity;
   late final Animation<double> _exitOpacity;
+  late final Animation<double> _pulseScale;
 
   @override
   void initState() {
@@ -44,6 +46,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _exitController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
+    );
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
     );
 
     _logoScale = Tween(begin: 0.75, end: 1.0).animate(
@@ -72,6 +78,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _exitOpacity = Tween(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
     );
+    _pulseScale = Tween(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     _runSequence();
   }
@@ -82,6 +91,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 100));
     _textController.forward();
 
+    _pulseController.repeat(reverse: true);
+
     // Run min-1s hold + DB check in parallel
     final results = await Future.wait([
       Future.delayed(const Duration(milliseconds: 1200)),
@@ -91,6 +102,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final destination = results[1] as _Destination;
 
     // Exit
+    _pulseController.stop();
     await _exitController.forward();
     if (mounted) _navigate(destination);
   }
@@ -156,6 +168,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _logoController.dispose();
     _textController.dispose();
     _exitController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -172,27 +185,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               children: [
                 // Logo
                 ScaleTransition(
-                  scale: _logoScale,
-                  child: FadeTransition(
-                    opacity: _logoOpacity,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4A90D9).withValues(alpha: 0.35),
-                            blurRadius: 40,
-                            spreadRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
+                  scale: _pulseScale,
+                  child: ScaleTransition(
+                    scale: _logoScale,
+                    child: FadeTransition(
+                      opacity: _logoOpacity,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C3158),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF4A90D9).withValues(alpha: 0.22),
+                              blurRadius: 36,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(18),
                         child: Image.asset(
-                          'assets/icon/icon.jpg',
-                          fit: BoxFit.cover,
+                          'assets/icon/icon2-no-bg.png',
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),

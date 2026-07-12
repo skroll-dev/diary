@@ -125,6 +125,9 @@ Flutter 3.44.1+ (Dart 3.12+) required — `record ^7.0.0` needs Dart SDK `^3.12.
 | `/topics` | `TopicsReviewScreen` | `TopicsArgs` (named record — see below) |
 | `/entry/:date` | `EntryScreen` | — |
 | `/history` | `HistoryScreen` | — |
+| `/analytics` | `AnalyticsScreen` | — |
+
+Shell navigation (Heute / Verlauf / Analyse) is handled by `StatefulShellRoute.indexedStack` in `app_router.dart`, rendered by `shared/widgets/main_shell.dart`.
 
 `TopicsArgs` (defined in `app_router.dart`):
 ```dart
@@ -195,6 +198,8 @@ Always run `dart run build_runner build` after changing `app_database.dart`.
 
 `shared/widgets/recording_controls.dart` — `RecordingControls` (ConsumerStatefulWidget) + `WaveformPainter`. Handles recording start/stop, waveform animation, timer, transcription (web WS + native HTTP), processing state. Calls `onComplete(String rawTranscript)` when done. Used by both `RecordingScreen` and the `TopicsReviewScreen` overlay.
 
+`shared/widgets/main_shell.dart` — `MainShell` wraps `StatefulNavigationShell` (GoRouter) with a slide-from-bottom entrance animation. Hosts `_NavBar` (3 items: Heute/mic, Verlauf/history, Analyse/bar_chart) with `_NavItem` animated via `TweenAnimationBuilder<Color?>`, `AnimatedScale`, and `AnimatedDefaultTextStyle`. Haptic feedback on tab tap.
+
 #### TopicsReviewScreen — Living Diary Entry
 
 The screen is the **Tageseintrag** — the growing diary entry for the day. Key design:
@@ -223,7 +228,8 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 | `RecordingScreen` | Complete — real audio pipeline, web + native |
 | `TopicsReviewScreen` | Complete — Living Diary design, overlay continuations, transcript edit/delete, merge pipeline |
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
-| `HistoryScreen` | Skeleton |
+| `HistoryScreen` | Complete — sticky Year/Month headers (`flutter_sticky_header: ^0.8.0`), 10-year mock data, right-side scroll scrubber (`_ScrollScrubber` / `_ScrubberPainter` CustomPainter with year ticks + month dots, tap + drag support) |
+| `AnalyticsScreen` | Skeleton ("Kommt bald" placeholder) |
 | `settings/` | Folder exists, no route wired yet |
 
 ### ai-proxy (`ai-proxy/app/`)

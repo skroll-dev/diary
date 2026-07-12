@@ -595,11 +595,9 @@ class _ScrollScrubberState extends State<_ScrollScrubber> {
     if (_activeIndex != best) setState(() => _activeIndex = best);
   }
 
-  void _onDragUpdate(DragUpdateDetails details, double barHeight) {
-    final fraction =
-        (details.localPosition.dy / barHeight).clamp(0.0, 1.0);
+  int _bestIndex(double dy, double barHeight) {
+    final fraction = (dy / barHeight).clamp(0.0, 1.0);
     final targetOffset = fraction * widget.totalEstimatedHeight;
-
     int best = 0;
     double bestDist = double.infinity;
     for (int i = 0; i < widget.entries.length; i++) {
@@ -609,18 +607,30 @@ class _ScrollScrubberState extends State<_ScrollScrubber> {
         best = i;
       }
     }
+    return best;
+  }
 
+  void _jumpTo(int index) {
+    if (!widget.controller.hasClients) return;
+    widget.controller.jumpTo(
+      widget.entries[index].estimatedOffset
+          .clamp(0, widget.controller.position.maxScrollExtent),
+    );
+  }
+
+  void _onTap(TapDownDetails details, double barHeight) {
+    final best = _bestIndex(details.localPosition.dy, barHeight);
+    setState(() => _activeIndex = best);
+    _jumpTo(best);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details, double barHeight) {
+    final best = _bestIndex(details.localPosition.dy, barHeight);
     setState(() {
       _isDragging = true;
       _activeIndex = best;
     });
-
-    if (widget.controller.hasClients) {
-      widget.controller.jumpTo(
-        widget.entries[best].estimatedOffset
-            .clamp(0, widget.controller.position.maxScrollExtent),
-      );
-    }
+    _jumpTo(best);
   }
 
   void _onDragEnd(DragEndDetails _) {
@@ -628,13 +638,6 @@ class _ScrollScrubberState extends State<_ScrollScrubber> {
     _hideTimer = Timer(const Duration(milliseconds: 1200), () {
       if (mounted) setState(() => _isDragging = false);
     });
-  }
-
-  double _bubbleTop(double barHeight) {
-    if (widget.entries.isEmpty || widget.totalEstimatedHeight <= 0) return 0;
-    final fraction =
-        widget.entries[_activeIndex].estimatedOffset / widget.totalEstimatedHeight;
-    return (fraction * barHeight - 16).clamp(0.0, barHeight - 32);
   }
 
   @override
@@ -649,37 +652,24 @@ class _ScrollScrubberState extends State<_ScrollScrubber> {
           width: 52,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
+            onTapDown: (d) => _onTap(d, barHeight),
             onVerticalDragStart: (_) => setState(() => _isDragging = true),
             onVerticalDragUpdate: (d) => _onDragUpdate(d, barHeight),
             onVerticalDragEnd: _onDragEnd,
-            child: Stack(
-              alignment: Alignment.centerRight,
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedOpacity(
-                  opacity: _isDragging ? 1.0 : 0.55,
-                  duration: const Duration(milliseconds: 200),
-                  child: CustomPaint(
-                    size: Size(28, barHeight),
-                    painter: _ScrubberPainter(
-                      entries: widget.entries,
-                      activeIndex: _activeIndex,
-                      totalEstimatedHeight: widget.totalEstimatedHeight,
-                      barHeight: barHeight,
-                      color: cs.onSurface,
-                      activeColor: cs.primary,
-                    ),
-                  ),
+            child: AnimatedOpacity(
+              opacity: _isDragging ? 1.0 : 0.45,
+              duration: const Duration(milliseconds: 200),
+              child: CustomPaint(
+                size: Size(52, barHeight),
+                painter: _ScrubberPainter(
+                  entries: widget.entries,
+                  activeIndex: _activeIndex,
+                  totalEstimatedHeight: widget.totalEstimatedHeight,
+                  barHeight: barHeight,
+                  color: cs.onSurface,
+                  activeColor: cs.primary,
                 ),
-                if (_isDragging)
-                  Positioned(
-                    top: _bubbleTop(barHeight),
-                    right: 32,
-                    child: _BubbleLabel(
-                      label: widget.entries[_activeIndex].label,
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         );
@@ -709,7 +699,8 @@ class _ScrubberPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width - 10;
+    // Track runs along the right edge; year labels paint to the left of it.
+    final cx = size.width - 10; // = 42 with the 52px canvas
 
     // Track line
     canvas.drawLine(
@@ -730,15 +721,39 @@ class _ScrubberPainter extends CustomPainter {
       final isActive = i == activeIndex;
 
       if (entry.isYear) {
+        final tickColor =
+            isActive ? activeColor : color.withValues(alpha: 0.65);
+
+        // Tick: fixed left anchor so it never overlaps the label.
+        // Active state is expressed via color/weight only, not geometry.
+        const tickLeft = 12.0; // distance left of cx where tick starts
         canvas.drawLine(
-          Offset(cx - (isActive ? 8 : 5), y),
-          Offset(cx + 2, y),
+          Offset(cx - tickLeft, y),
+          Offset(cx + 3, y),
           Paint()
-            ..color =
-                isActive ? activeColor : color.withValues(alpha: 0.55)
-            ..strokeWidth = isActive ? 2.0 : 1.5
+            ..color = tickColor
+            ..strokeWidth = isActive ? 2.5 : 2.0
             ..strokeCap = StrokeCap.round,
         );
+
+        // Year label with 4 px breathing room before the tick (Material 4dp unit).
+        const labelGap = 4.0;
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '${entry.year}',
+            style: TextStyle(
+              color: tickColor,
+              fontSize: 9.0,
+              fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+              letterSpacing: -0.5,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final tickLeftX = cx - tickLeft;
+        final textX = (tickLeftX - labelGap - tp.width).clamp(1.0, tickLeftX - labelGap);
+        final textY = (y - tp.height / 2).clamp(0.0, size.height - tp.height);
+        tp.paint(canvas, Offset(textX, textY));
       } else {
         canvas.drawCircle(
           Offset(cx, y),
@@ -754,39 +769,9 @@ class _ScrubberPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScrubberPainter old) =>
-      old.activeIndex != activeIndex || old.barHeight != barHeight;
+      old.activeIndex != activeIndex ||
+      old.barHeight != barHeight ||
+      old.color != color ||
+      old.activeColor != activeColor;
 }
 
-// ─── Bubble label ─────────────────────────────────────────────────────────────
-
-class _BubbleLabel extends StatelessWidget {
-  const _BubbleLabel({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: cs.inverseSurface.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: cs.onInverseSurface,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
-}
