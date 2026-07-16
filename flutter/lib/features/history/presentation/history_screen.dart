@@ -38,6 +38,7 @@ class _EntryPreview {
     required this.paletteIndex,
     this.allTopics = const [],
     this.entryDate = '',
+    this.createdTime = '',
   });
 
   final DateTime date;
@@ -48,7 +49,8 @@ class _EntryPreview {
   final List<String> tags;
   final int paletteIndex;
   final List<Map<String, dynamic>> allTopics;
-  final String entryDate; // raw yyyy-MM-dd string for DB operations
+  final String entryDate;
+  final String createdTime; // "HH:mm Uhr" — shown when durationSeconds == 0
 }
 
 // ─── Index entry (for scrubber) ───────────────────────────────────────────────
@@ -268,7 +270,18 @@ const _monthNames = [
 String _formatEntryDate(DateTime dt) =>
     '${_weekdays[dt.weekday]}, ${dt.day}. ${_monthNames[dt.month]}';
 
+bool _isToday(DateTime dt) {
+  final now = DateTime.now();
+  return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+}
+
 String _formatDuration(int seconds) => '${(seconds / 60).round()} Min';
+
+String _formatCreatedTime(String iso) {
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return '';
+  return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} Uhr';
+}
 
 String _moodEmoji(Mood m) => switch (m) {
       Mood.happy => '😊',
@@ -334,6 +347,7 @@ _EntryPreview _toPreview(db.Entry e, int index) {
     paletteIndex: index % 5,
     allTopics: topics,
     entryDate: e.date,
+    createdTime: _formatCreatedTime(e.createdAt),
   );
 }
 
@@ -402,10 +416,23 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             itemCount: grouped[year]![month]!.length,
                             itemBuilder: (ctx, i) {
                               final e = grouped[year]![month]![i];
-                              return _EntryCard(entry: e)
+                              final today = _isToday(e.date);
+                              var card = _EntryCard(entry: e)
                                   .animate()
                                   .fadeIn(duration: 250.ms, delay: (i * 30).ms)
                                   .slideY(begin: 0.05, end: 0);
+                              if (today) {
+                                card = card
+                                    .then(delay: 250.ms)
+                                    .shimmer(
+                                      duration: 700.ms,
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.18),
+                                    );
+                              }
+                              return card;
                             },
                           ),
                         ),
@@ -585,12 +612,21 @@ class _EntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final today = _isToday(entry.date);
 
     return Card(
-      elevation: 2,
+      elevation: today ? 3 : 2,
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: today
+            ? BorderSide(color: cs.primary.withValues(alpha: 0.4), width: 1.5)
+            : BorderSide.none,
+      ),
+      color: today
+          ? Color.alphaBlend(
+              cs.primary.withValues(alpha: 0.05), cs.surfaceContainerLow)
+          : cs.surfaceContainerLow,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
@@ -603,7 +639,7 @@ class _EntryCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: cs.primaryContainer,
+                  color: today ? cs.primary : cs.primaryContainer,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
@@ -623,8 +659,20 @@ class _EntryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_formatEntryDate(entry.date)} · ${_formatDuration(entry.durationSeconds)}',
-                      style: tt.labelSmall?.copyWith(color: cs.outline),
+                      () {
+                        final dur = entry.durationSeconds > 0
+                            ? _formatDuration(entry.durationSeconds)
+                            : entry.createdTime.isNotEmpty
+                                ? entry.createdTime
+                                : '–';
+                        return today
+                            ? 'Heute · $dur'
+                            : '${_formatEntryDate(entry.date)} · $dur';
+                      }(),
+                      style: tt.labelSmall?.copyWith(
+                        color: today ? cs.primary : cs.outline,
+                        fontWeight: today ? FontWeight.w600 : FontWeight.w400,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(

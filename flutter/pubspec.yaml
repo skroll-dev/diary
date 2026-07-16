@@ -1,7 +1,7 @@
 name: ai_tagebuch
 description: AI-gestütztes Sprach-Tagebuch – Codename Mein KI-Tagebuch
 publish_to: "none"
-version: 0.4.14+22
+version: 0.4.15+23
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
