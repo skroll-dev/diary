@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/gdpr_export_client.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -164,6 +165,26 @@ class _ProfileBody extends ConsumerWidget {
                 textStyle: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
+            const SizedBox(height: 36),
+
+            // ── Danger zone ──────────────────────────────────────────────────
+            _SectionLabel('Gefahrenzone', cs: cs, tt: tt),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _confirmWipeAllData(context, ref),
+              icon: Icon(Icons.delete_forever_rounded, color: cs.error, size: 18),
+              label: Text(
+                'Alle Daten unwiderruflich löschen',
+                style: TextStyle(color: cs.error),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: BorderSide(color: cs.error),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                textStyle: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
           ],
         );
       },
@@ -214,7 +235,7 @@ class _ProfileBody extends ConsumerWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Abmelden?'),
           content: const Text(
-              'Du wirst abgemeldet. Deine Einträge bleiben auf diesem Gerät gespeichert.'),
+              'Du wirst abgemeldet. Deine Einträge werden von diesem Gerät gelöscht, bleiben aber sicher in deinem Konto gespeichert.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -230,9 +251,120 @@ class _ProfileBody extends ConsumerWidget {
       },
     );
     if (confirmed != true) return;
-    await ref.read(entryRepositoryProvider).clearUserData();
+    await ref.read(entryRepositoryProvider).clearAllLocalData();
     await ref.read(authServiceProvider.notifier).signOut();
     if (context.mounted) context.go('/');
+  }
+
+  Future<void> _confirmWipeAllData(BuildContext context, WidgetRef ref) async {
+    final ctrl = TextEditingController();
+    const confirmWord = 'LÖSCHEN';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final match = ctrl.text.trim().toUpperCase() == confirmWord;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Bist du absolut sicher?',
+                  style: TextStyle(color: cs.error, fontWeight: FontWeight.w700)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Alle deine Tagebucheinträge werden dauerhaft gelöscht — auf diesem Gerät und in der Cloud. Dein Konto wird ebenfalls vollständig entfernt. Das kann NICHT rückgängig gemacht werden.',
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Gib "$confirmWord" ein, um zu bestätigen:',
+                      style: Theme.of(ctx).textTheme.bodySmall),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: ctrl,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(hintText: confirmWord),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Abbrechen'),
+                ),
+                TextButton(
+                  onPressed: match ? () => Navigator.of(ctx).pop(true) : null,
+                  style: TextButton.styleFrom(foregroundColor: cs.error),
+                  child: const Text('Endgültig löschen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    ctrl.dispose();
+    if (confirmed != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Theme.of(ctx).colorScheme.primary),
+                  const SizedBox(height: 20),
+                  Text('Alle Daten werden gelöscht …',
+                      style: Theme.of(ctx).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Remote deletion first — only wipe local data once the account and
+      // its Firestore data are confirmed gone, so a failed request never
+      // loses data that only existed on this device.
+      await ref.read(gdprExportClientProvider).deleteAccount();
+      await ref.read(entryRepositoryProvider).clearAllLocalData();
+      await ref.read(authServiceProvider.notifier).signOut();
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        context.go('/');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Löschen fehlgeschlagen'),
+            content: Text('Deine Daten konnten nicht gelöscht werden: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 }
 

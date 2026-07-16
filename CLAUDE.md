@@ -66,13 +66,26 @@ LOG_LEVEL=debug        # debug | info | warning | error
 
 The service account key JSON lives at `ai-proxy/credentials.json` (gitignored — matched by `*credentials*.json`). Download it from GCP Console → IAM → Service Accounts → Keys → Add Key. In Cloud Run, `GOOGLE_APPLICATION_CREDENTIALS` is not needed — the service account is attached to the revision directly.
 
+#### gdpr-export `.env` (gitignored, local dev only)
+
+```env
+ENV=development        # keeps /docs (Swagger UI) enabled locally
+GCP_PROJECT=diary-6fa61
+GOOGLE_APPLICATION_CREDENTIALS=./credentials.json   # service account key for local auth
+```
+
+`gdpr-export` has no App Check bypass logic of its own — every route verifies the caller's Firebase ID token directly (`_get_uid`), so `ENV` only affects the `/docs` route. It can reuse the same service account key as `ai-proxy` (copy `ai-proxy/credentials.json` to `gdpr-export/credentials.json`) for local Firestore/Storage access, but `DELETE /account` additionally calls `auth.delete_user()`, which needs the **Firebase Authentication Admin** IAM role — grant it to whichever service account you use if that call fails locally with a permission error.
+
 ### Deployment (CI/CD)
 
 GitHub Actions auto-deploy on push to `main`:
 - `ai-proxy/` changes → Cloud Run (`europe-west3`) via `.github/workflows/deploy-ai-proxy.yml`
+- `gdpr-export/` changes → Cloud Run (`europe-west3`) via `.github/workflows/deploy-gdpr-export.yml`
 - `flutter/` changes → Firebase Hosting via `.github/workflows/deploy-web.yml`
 
-Required GitHub repository secrets: `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_OPTIONS_DART`, `PROXY_BASE_URL`.
+Both `ai-proxy` and `gdpr-export` deploy with `--allow-unauthenticated` — each route verifies the caller's Firebase ID token itself (`_get_uid` in `gdpr-export`, the App Check/auth middleware in `ai-proxy`), so Cloud Run IAM does not gate access.
+
+Required GitHub repository secrets: `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_OPTIONS_DART`, `PROXY_BASE_URL`, `GDPR_EXPORT_BASE_URL`.
 
 ```bash
 # Manually update Cloud Run env vars
@@ -253,7 +266,7 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 ### gdpr-export (`gdpr-export/app/`)
 
-FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON ZIP, or deletes the account and all associated Firestore documents.
+FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON ZIP, or deletes the account and all associated Firestore documents (`DELETE /account` also deletes the Firebase Auth user via the Admin SDK). Called from Flutter via `shared/services/gdpr_export_client.dart` (`GdprExportClient.deleteAccount()`), wired to the "Alle Daten unwiderruflich löschen" danger-zone action on `ProfileScreen` (type-to-confirm dialog, then clears Drift/`history_synced_*` prefs via `EntryRepository.clearAllLocalData()` and signs out).
 
 ### Agent Skills
 

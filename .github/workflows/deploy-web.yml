@@ -38,7 +38,8 @@ jobs:
         run: |
           flutter build web \
             --release \
-            --dart-define=PROXY_BASE_URL=${{ secrets.PROXY_BASE_URL }}
+            --dart-define=PROXY_BASE_URL=${{ secrets.PROXY_BASE_URL }} \
+            --dart-define=GDPR_EXPORT_BASE_URL=${{ secrets.GDPR_EXPORT_BASE_URL }}
         working-directory: flutter
 
       - name: Deploy to Firebase Hosting

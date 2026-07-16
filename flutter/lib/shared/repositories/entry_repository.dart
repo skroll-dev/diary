@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
@@ -300,18 +301,23 @@ class EntryRepository {
     unawaited(_deleteFromFirestore(uid: user.uid, date: date));
   }
 
-  Future<void> clearUserData() async {
-    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
-    await (_db.delete(_db.rawTranscripts)
-          ..where((t) => t.entryId.isInQuery(
-                _db.selectOnly(_db.entries, distinct: true)
-                  ..addColumns([_db.entries.id])
-                  ..where(_db.entries.userId.equals(user.uid)),
-              )))
-        .go();
-    await (_db.delete(_db.entries)
-          ..where((e) => e.userId.equals(user.uid)))
-        .go();
+  /// Wipes every locally cached entry/transcript on this device (all users,
+  /// not just the current one — catches orphaned rows left behind by an
+  /// anonymous session that never got linked, see [getOrphanedEntryForDate]).
+  /// Call on sign-out so a shared/reused device doesn't keep a previous
+  /// account's diary readable locally. Also clears the per-account
+  /// "history synced" flags so a later login re-triggers a full re-sync
+  /// from Firestore instead of assuming the (now-empty) local DB is current.
+  Future<void> clearAllLocalData() async {
+    await _db.delete(_db.rawTranscripts).go();
+    await _db.delete(_db.entries).go();
+
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('history_synced_')) {
+        await prefs.remove(key);
+      }
+    }
   }
 
   Future<Entry?> getLocalEntryForDate(String date) async {
@@ -414,57 +420,122 @@ class EntryRepository {
       print('[EntryRepository] sync: Firestore doc.exists=${doc.exists}');
       if (!doc.exists) return false;
 
-      final data = doc.data()!;
-      final entryId = data['id'] as String? ?? _uuid.v4();
-      final now = DateTime.now().toIso8601String();
-
-      // Firestore stores followUpQuestions and topics as native lists;
-      // Drift stores them as JSON strings.
-      final fqRaw = data['followUpQuestions'];
-      final followUpJson = fqRaw is List ? jsonEncode(fqRaw) : (fqRaw as String? ?? '[]');
-      final topicsRaw = data['topics'];
-      final topicsJson = topicsRaw is List ? jsonEncode(topicsRaw) : (topicsRaw as String? ?? '[]');
-
-      await _db.into(_db.entries).insert(
-        EntriesCompanion.insert(
-          id: entryId,
-          userId: user.uid,
-          date: date,
-          bodyMarkdown: data['bodyMarkdown'] as String? ?? '',
-          mood: Value(data['mood'] as String? ?? 'neutral'),
-          moodScore: Value((data['moodScore'] as num?)?.toDouble() ?? 0.0),
-          durationSeconds: (data['durationSeconds'] as num?)?.toInt() ?? 0,
-          language: Value(data['language'] as String? ?? 'de'),
-          version: Value(1),
-          followUpQuestions: Value(followUpJson),
-          topics: Value(topicsJson),
-          createdAt: _tsToString(data['createdAt'], now),
-          updatedAt: _tsToString(data['updatedAt'], now),
-          synced: Value(true),
-        ),
-      );
-
-      final rawTranscripts = data['rawTranscripts'] as List<dynamic>?;
-      if (rawTranscripts != null) {
-        for (final t in rawTranscripts) {
-          final m = t as Map<String, dynamic>;
-          await _db.into(_db.rawTranscripts).insert(
-            RawTranscriptsCompanion.insert(
-              id: m['id'] as String? ?? _uuid.v4(),
-              entryId: entryId,
-              content: m['raw'] as String? ?? '',
-              normalizedContent: Value(m['normalized'] as String? ?? ''),
-              reason: Value(m['reason'] as String? ?? 'initial'),
-              createdAt: _tsToString(m['createdAt'], now),
-            ),
-          );
-        }
-      }
+      await _insertEntryFromFirestoreDoc(doc, user.uid, date);
       return true;
     } catch (e, st) {
       // ignore: avoid_print
       print('[EntryRepository] syncEntryFromFirestoreIfMissing failed: $e\n$st');
       return false;
+    }
+  }
+
+  // ── Firestore → Drift bulk sync (full history, e.g. on login) ───────────────
+
+  /// Fetches every entry doc under `users/{uid}/entries` and inserts any that
+  /// are missing locally. Never overwrites a date that already exists in
+  /// Drift. Reports (loaded, total) progress after each doc is processed —
+  /// [onProgress] is called once with (0, total) before the loop starts.
+  Future<int> syncAllEntriesFromFirestore({
+    void Function(int loaded, int total)? onProgress,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('entries')
+        .get();
+
+    final total = snapshot.docs.length;
+    onProgress?.call(0, total);
+    if (total == 0) return 0;
+
+    final localDates = (await (_db.select(_db.entries)
+              ..where((e) => e.userId.equals(user.uid)))
+            .get())
+        .map((e) => e.date)
+        .toSet();
+
+    var inserted = 0;
+    var loaded = 0;
+    for (final doc in snapshot.docs) {
+      if (!localDates.contains(doc.id)) {
+        try {
+          await _insertEntryFromFirestoreDoc(doc, user.uid, doc.id);
+          inserted++;
+        } catch (e, st) {
+          // ignore: avoid_print
+          print('[EntryRepository] syncAllEntriesFromFirestore: failed for ${doc.id}: $e\n$st');
+        }
+      }
+      loaded++;
+      onProgress?.call(loaded, total);
+    }
+    return inserted;
+  }
+
+  Future<bool> hasHistorySynced(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('history_synced_$uid') ?? false;
+  }
+
+  Future<void> markHistorySynced(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('history_synced_$uid', true);
+  }
+
+  // ── Shared Firestore doc → Drift row conversion ──────────────────────────────
+
+  Future<void> _insertEntryFromFirestoreDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+    String uid,
+    String date,
+  ) async {
+    final data = doc.data()!;
+    final entryId = data['id'] as String? ?? _uuid.v4();
+    final now = DateTime.now().toIso8601String();
+
+    // Firestore stores followUpQuestions and topics as native lists;
+    // Drift stores them as JSON strings.
+    final fqRaw = data['followUpQuestions'];
+    final followUpJson = fqRaw is List ? jsonEncode(fqRaw) : (fqRaw as String? ?? '[]');
+    final topicsRaw = data['topics'];
+    final topicsJson = topicsRaw is List ? jsonEncode(topicsRaw) : (topicsRaw as String? ?? '[]');
+
+    await _db.into(_db.entries).insert(
+      EntriesCompanion.insert(
+        id: entryId,
+        userId: uid,
+        date: date,
+        bodyMarkdown: data['bodyMarkdown'] as String? ?? '',
+        mood: Value(data['mood'] as String? ?? 'neutral'),
+        moodScore: Value((data['moodScore'] as num?)?.toDouble() ?? 0.0),
+        durationSeconds: (data['durationSeconds'] as num?)?.toInt() ?? 0,
+        language: Value(data['language'] as String? ?? 'de'),
+        version: Value(1),
+        followUpQuestions: Value(followUpJson),
+        topics: Value(topicsJson),
+        createdAt: _tsToString(data['createdAt'], now),
+        updatedAt: _tsToString(data['updatedAt'], now),
+        synced: Value(true),
+      ),
+    );
+
+    final rawTranscripts = data['rawTranscripts'] as List<dynamic>?;
+    if (rawTranscripts != null) {
+      for (final t in rawTranscripts) {
+        final m = t as Map<String, dynamic>;
+        await _db.into(_db.rawTranscripts).insert(
+          RawTranscriptsCompanion.insert(
+            id: m['id'] as String? ?? _uuid.v4(),
+            entryId: entryId,
+            content: m['raw'] as String? ?? '',
+            normalizedContent: Value(m['normalized'] as String? ?? ''),
+            reason: Value(m['reason'] as String? ?? 'initial'),
+            createdAt: _tsToString(m['createdAt'], now),
+          ),
+        );
+      }
     }
   }
 

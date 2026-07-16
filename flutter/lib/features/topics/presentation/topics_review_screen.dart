@@ -12,6 +12,7 @@ import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/proxy_client.dart';
+import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
 
@@ -432,6 +433,8 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     if (ref.read(authServiceProvider.notifier).isAnonymous) {
       final success = await showAuthSheet(context);
       if (!success || !mounted) return;
+      await runHistorySyncWithProgress(context, ref);
+      if (!mounted) return;
     }
     if (mounted) context.go('/history');
   }

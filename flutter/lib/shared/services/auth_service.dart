@@ -168,7 +168,11 @@ class AuthService extends _$AuthService {
   Future<bool> handleGoogleRedirectResult() async {
     try {
       final result = await FirebaseAuth.instance.getRedirectResult();
-      if (result.user == null) return false;
+      if (result.user == null) {
+        debugPrint(
+            '[GoogleRedirect] getRedirectResult() returned no user — no pending redirect was found (providerId=${result.credential?.providerId}, operationType=${result.additionalUserInfo?.providerId})');
+        return false;
+      }
       _updateState(result.user!);
       return true;
     } on FirebaseAuthException catch (e) {

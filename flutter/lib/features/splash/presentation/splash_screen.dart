@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/proxy_client.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final Animation<double> _sloganOpacity;
   late final Animation<double> _exitOpacity;
   late final Animation<double> _pulseScale;
+
+  bool _isSyncingHistory = false;
+  int _historyLoaded = 0;
+  int _historyTotal = 0;
 
   @override
   void initState() {
@@ -93,10 +98,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _pulseController.repeat(reverse: true);
 
-    // Run min-1s hold + DB check in parallel
+    // Run min-1s hold + DB check + (if needed) full history sync in parallel
     final results = await Future.wait([
       Future.delayed(const Duration(milliseconds: 1200)),
       _checkTodaysEntry(),
+      _syncFullHistoryIfNeeded(),
     ]);
 
     final destination = results[1] as _Destination;
@@ -130,6 +136,36 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       );
     } catch (_) {
       return const _Destination.recording();
+    }
+  }
+
+  // One-time (per device, per account) backfill of full entry history from
+  // Firestore — covers reinstalls / new devices for an already-logged-in
+  // account. Anonymous accounts and already-synced devices are a no-op.
+  Future<void> _syncFullHistoryIfNeeded() async {
+    try {
+      final user = await ref.read(authServiceProvider.notifier).getUser();
+      if (user.isAnonymous) return;
+
+      final repo = ref.read(entryRepositoryProvider);
+      if (await repo.hasHistorySynced(user.uid)) return;
+
+      if (mounted) setState(() => _isSyncingHistory = true);
+      await repo.syncAllEntriesFromFirestore(
+        onProgress: (loaded, total) {
+          if (mounted) {
+            setState(() {
+              _historyLoaded = loaded;
+              _historyTotal = total;
+            });
+          }
+        },
+      );
+      await repo.markHistorySynced(user.uid);
+    } catch (_) {
+      // Best-effort — today's entry check still proceeds independently.
+    } finally {
+      if (mounted) setState(() => _isSyncingHistory = false);
     }
   }
 
@@ -244,6 +280,38 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           color: Colors.white.withValues(alpha: 0.5),
                           letterSpacing: 0.5,
                         ),
+                  ),
+                ),
+                // Full-history sync progress (only visible during a one-time
+                // per-device backfill for an already-logged-in account)
+                AnimatedOpacity(
+                  opacity: _isSyncingHistory ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: LinearProgressIndicator(
+                            value: _historyTotal == 0
+                                ? null
+                                : _historyLoaded / _historyTotal,
+                            color: const Color(0xFF4A90D9),
+                            backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _historyTotal == 0
+                              ? 'Einträge werden gesucht …'
+                              : 'Lade deine Einträge … $_historyLoaded/$_historyTotal',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.45),
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

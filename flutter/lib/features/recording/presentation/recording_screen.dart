@@ -20,6 +20,7 @@ import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/recording_service.dart';
 import '../../auth/presentation/auth_sheet.dart';
+import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/live_transcript_display.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
@@ -439,6 +440,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final success = await showAuthSheet(context, isDismissible: true);
     _authSheetOpen = false;
     if (!success || !mounted) return;
+    await runHistorySyncWithProgress(context, ref);
+    if (!mounted) return;
     await _checkForExistingTodayEntry();
   }
 
@@ -742,7 +745,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                 _authSheetOpen = true;
                 final success = await showAuthSheet(context, isDismissible: true);
                 _authSheetOpen = false;
-                if (success && mounted) await _checkForExistingTodayEntry();
+                if (!success || !mounted) return;
+                await runHistorySyncWithProgress(context, ref);
+                if (!mounted) return;
+                await _checkForExistingTodayEntry();
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),

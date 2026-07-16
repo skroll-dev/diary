@@ -55,7 +55,10 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
     ref
         .read(authServiceProvider.notifier)
         .handleGoogleRedirectResult()
-        .catchError((_) => false);
+        .catchError((e, st) {
+      debugPrint('[GoogleRedirect] handleGoogleRedirectResult failed: $e\n$st');
+      return false;
+    });
   }
 
   void _handleEmailLinkError(Object e) {
