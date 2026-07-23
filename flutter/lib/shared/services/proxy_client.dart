@@ -63,7 +63,7 @@ class EntryDto {
 
 const _baseUrl = String.fromEnvironment(
   'PROXY_BASE_URL',
-  defaultValue: 'http://localhost:8080',
+  defaultValue: 'https://ai-proxy-918937960824.europe-west3.run.app',
 );
 
 class ProxyClient {

@@ -106,7 +106,18 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
 
   Future<void> _start() async {
     final svc = ref.read(recordingServiceProvider);
-    await svc.start();
+    try {
+      await svc.start();
+    } on RecordingPermissionDenied {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mikrofon-Zugriff wird benötigt, um Einträge aufzunehmen.'),
+          ),
+        );
+      }
+      return;
+    }
     if (kIsWeb) {
       _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
         svc.webAudioStream,

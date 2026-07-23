@@ -40,6 +40,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
   bool _emailSent = false;
   String? _errorMessage;
   StreamSubscription<User?>? _authSub;
+  bool _popped = false;
 
   @override
   void initState() {
@@ -49,9 +50,19 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
     // this listener fires and dismisses the sheet.
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null && !user.isAnonymous && mounted) {
-        Navigator.of(context).pop(true);
+        _closeSheet(true);
       }
     });
+  }
+
+  // The auth-state listener above and the sign-in handlers below can both
+  // race to close the sheet after the same sign-in completes. Only the first
+  // pop may run — a second pop on an already-closed route falls through to
+  // the root navigator and pops a real page off the stack.
+  void _closeSheet(bool result) {
+    if (_popped || !mounted) return;
+    _popped = true;
+    Navigator.of(context).pop(result);
   }
 
   @override
@@ -70,9 +81,9 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
     });
     try {
       await ref.read(authServiceProvider.notifier).linkWithGoogle();
-      if (mounted) Navigator.of(context).pop(true);
+      _closeSheet(true);
     } on UidChangedNotice {
-      if (mounted) Navigator.of(context).pop(true);
+      _closeSheet(true);
     } on GoogleCancelledException {
       // user cancelled — silent
     } on FirebaseAuthException catch (e) {
@@ -97,13 +108,13 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
         await ref
             .read(authServiceProvider.notifier)
             .signInWithPassword(email, 'tester');
-        if (mounted) Navigator.of(context).pop(true);
+        _closeSheet(true);
         return;
       }
       await ref.read(authServiceProvider.notifier).sendEmailLink(email);
       if (mounted) setState(() => _emailSent = true);
     } on UidChangedNotice {
-      if (mounted) Navigator.of(context).pop(true);
+      _closeSheet(true);
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _localizeError(e));
     } finally {

@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 
 // ─── Palette (mirrors _topicPalette in topics_review_screen.dart) ────────────
@@ -295,6 +296,10 @@ String _moodEmoji(Mood m) => switch (m) {
 // ─── Real-data provider ───────────────────────────────────────────────────────
 
 final _historyEntriesProvider = StreamProvider<List<db.Entry>>((ref) {
+  // watchAllEntries() resolves the current uid once, at subscription time —
+  // re-watch on auth state changes (e.g. anonymous → signed-in) so the query
+  // picks up the new uid instead of staying stuck on the old one.
+  ref.watch(authServiceProvider);
   return ref.watch(entryRepositoryProvider).watchAllEntries();
 });
 

@@ -134,11 +134,13 @@ Flutter 3.44.1+ (Dart 3.12+) required — `record ^7.0.0` needs Dart SDK `^3.12.
 
 | Path | Screen | GoRouter `extra` |
 |---|---|---|
+| `/splash` | `SplashScreen` | — (`initialLocation`; decides where to land) |
 | `/` | `RecordingScreen` | `RecordingContext?` (defaults to `FreshRecording`) |
 | `/topics` | `TopicsReviewScreen` | `TopicsArgs` (named record — see below) |
 | `/entry/:date` | `EntryScreen` | — |
 | `/history` | `HistoryScreen` | — |
 | `/analytics` | `AnalyticsScreen` | — |
+| `/profile` | `ProfileScreen` | — |
 
 Shell navigation (Heute / Verlauf / Analyse) is handled by `StatefulShellRoute.indexedStack` in `app_router.dart`, rendered by `shared/widgets/main_shell.dart`.
 
@@ -193,19 +195,28 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 3. `setState(...)` — UI updates immediately with new topics/questions
 4. `EntryRepository.mergeEntry(...)` — DB sync, fire-and-forget (must not block UI)
 
-#### Data model — Drift schema v2
+#### Data model — Drift schema v3
 
 **Entries table:**
 - Core: `id`, `userId`, `date`, `bodyMarkdown`, `mood`, `moodScore`, `durationSeconds`, `language`, `version`, `createdAt`, `updatedAt`, `synced`
 - Added in v2: `followUpQuestions` (JSON string), `topics` (JSON string)
+- Added in v3: `tags` (JSON string) — see `EntryRepository.getAllTags()`
 
 **RawTranscripts table:**
 - Core: `id`, `entryId`, `content` (raw STT — never shown to user), `createdAt`
 - Added in v2: `normalizedContent` (user-editable, the primary display text), `reason` (`'initial'` | `'followUp:<hint>'` | `'continuation'`)
 
-`EntryRepository` methods: `saveEntry`, `mergeEntry`, `updateEntry`, `updateTranscript`, `deleteTranscript`, `getTranscriptsForDate`.
+`EntryRepository` methods: `saveEntry`, `mergeEntry`, `updateEntry`, `updateTranscript`, `deleteTranscript`, `getTranscriptsForDate`, `watchAllEntries`, `getOrphanedEntryForDate`, `syncEntryFromFirestoreIfMissing`, `syncAllEntriesFromFirestore`, `hasHistorySynced`/`markHistorySynced`.
 
 Always run `dart run build_runner build` after changing `app_database.dart`.
+
+#### History sync (remote → local backfill)
+
+Firestore is the durable store; Drift is local-only per device, so a new device or a fresh anonymous→real-account login needs a one-time backfill:
+- `SplashScreen._syncFullHistoryIfNeeded()` — runs once per (device, account) on cold start via `repo.hasHistorySynced(uid)`; no-op for anonymous users.
+- `runHistorySyncWithProgress()` (`shared/widgets/history_sync_dialog.dart`) — same backfill triggered right after an interactive sign-in (`RecordingScreen`/`TopicsReviewScreen`), with a progress dialog.
+- Both call `EntryRepository.syncAllEntriesFromFirestore()`, then `markHistorySynced(uid)` so it only runs once per account per device.
+- **Gotcha:** `EntryRepository.watchAllEntries()` resolves `FirebaseAuth.instance.currentUser` once, at stream-subscription time, and filters the Drift watch query to that uid forever. Any `StreamProvider` built from it (e.g. `HistoryScreen`'s `_historyEntriesProvider`) must also `ref.watch(authServiceProvider)` so it re-subscribes with the new uid after a login — otherwise newly-synced entries never appear until the app is restarted.
 
 #### Shared widgets
 
@@ -233,6 +244,7 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 - `ProxyClient` skips `Authorization` header when `_baseUrl` contains `localhost`
 - `record` package web path: `AudioEncoder.pcm16bits` only — all other encoders throw at runtime
 - `TopicDto.text` is complete chapter prose — never truncated or summarized
+- `_AuthSheetState` (`features/auth/presentation/auth_sheet.dart`) can dismiss itself from two independent places — the `authStateChanges` listener (deep-link email sign-in) and the sign-in button handlers (`UidChangedNotice` after an anonymous→existing-account uid swap). Both must route through `_closeSheet()`, which is guarded by a `_popped` flag: a second `Navigator.pop()` on an already-closed sheet (with `useRootNavigator: true`) falls through and pops a real page off the GoRouter stack instead.
 
 #### Current implementation state
 
@@ -241,8 +253,9 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 | `RecordingScreen` | Complete — real audio pipeline, web + native |
 | `TopicsReviewScreen` | Complete — Living Diary design, overlay continuations, transcript edit/delete, merge pipeline |
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
-| `HistoryScreen` | Complete — sticky Year/Month headers (`flutter_sticky_header: ^0.8.0`), 10-year mock data, right-side scroll scrubber (`_ScrollScrubber` / `_ScrubberPainter` CustomPainter with year ticks + month dots, tap + drag support) |
+| `HistoryScreen` | Complete — real Drift data via `_historyEntriesProvider` (reactive stream, user-scoped), sticky Year/Month headers (`flutter_sticky_header: ^0.8.0`), right-side scroll scrubber (`_ScrollScrubber` / `_ScrubberPainter` CustomPainter with year ticks + month dots, tap + drag support), topic detail sheet, entry deletion. `useFakeHistoryProvider` toggles mock data for design work |
 | `AnalyticsScreen` | Skeleton ("Kommt bald" placeholder) |
+| `ProfileScreen` | Complete — display name, sign-in state, GDPR danger zone (export/delete via `gdpr-export`) |
 | `settings/` | Folder exists, no route wired yet |
 
 ### ai-proxy (`ai-proxy/app/`)
@@ -270,14 +283,9 @@ FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON 
 
 ### Agent Skills
 
-Skills in `.claude/skills/`. **Before writing code for a relevant domain, read the matching `SKILL.md` first.**
-
-Key skills:
-- `firebase-firestore` — mandatory for any Firestore work (security rules, queries, indexes)
-- `flutter-apply-architecture-best-practices` — Riverpod + layered architecture patterns
-- `cloud-run-basics` — deploying/updating Cloud Run services
-- `gemini-api` — Vertex AI / Gemini SDK patterns
-- `ui-ux-pro-max` — design system, color/typography, UX patterns (invoke via `/ui-ux-pro-max` skill)
+Two separate skill directories exist — check both before writing code for a relevant domain:
+- `.claude/skills/` — Claude Code skills for this project (currently `ui-ux-pro-max`: design system, color/typography, UX patterns).
+- `.agents/skills/` — the broader Open Agent Skills catalog (Firebase, Cloud Run, Gemini, Flutter/Dart patterns, Xcode). Full list and the mandatory-use rules (e.g. `firebase-firestore` for any Firestore work) are documented in `AGENTS.md` — read that file's table before starting Firebase/Flutter/GCP work.
 
 ## Key Constraints
 
@@ -285,4 +293,4 @@ Key skills:
 - **Firebase App Check** is required on all ai-proxy routes in production. Anonymous auth must be enabled in the Firebase console (`diary-6fa61` → Authentication → Sign-in method).
 - **Web audio:** `kIsWeb` must gate any `local_auth` usage. The `record` package works on web, but only `AudioEncoder.pcm16bits` is supported for streaming.
 - **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.
-- **Drift schema changes** require a migration in `app_database.dart` (`MigrationStrategy.onUpgrade`) and `dart run build_runner build` afterwards. Current schema version: **2**.
+- **Drift schema changes** require a migration in `app_database.dart` (`MigrationStrategy.onUpgrade`) and `dart run build_runner build` afterwards. Current schema version: **3**.

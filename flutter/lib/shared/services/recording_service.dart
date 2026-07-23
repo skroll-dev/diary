@@ -9,6 +9,8 @@ part 'recording_service.g.dart';
 
 typedef AudioData = ({Uint8List bytes, String contentType});
 
+class RecordingPermissionDenied implements Exception {}
+
 class RecordingService {
   final _recorder = AudioRecorder();
   String? _tempPath;
@@ -30,11 +32,24 @@ class RecordingService {
         ),
       );
     } else {
+      // Native: start() does not request RECORD_AUDIO itself — without this,
+      // AudioRecord init fails silently on Android (status -1).
+      if (!await _recorder.hasPermission()) {
+        throw RecordingPermissionDenied();
+      }
       final dir = await getTemporaryDirectory();
       _tempPath =
-          '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
+      // WAV/PCM, not AAC-in-MP4: some Android vendors' hardware AAC encoders
+      // produce MP4 containers that Chirp 3's AutoDetectDecodingConfig
+      // silently fails to decode (0 results, no error) even though the file
+      // is valid and plays back fine locally. WAV sidesteps that entirely.
       await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000),
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
         path: _tempPath!,
       );
     }
@@ -57,7 +72,7 @@ class RecordingService {
     final path = await _recorder.stop();
     final bytes = await readAndDeleteFile(_tempPath ?? path ?? '');
     _tempPath = null;
-    return (bytes: bytes, contentType: 'audio/m4a');
+    return (bytes: bytes, contentType: 'audio/wav');
   }
 
   Future<void> dispose() => _recorder.dispose();

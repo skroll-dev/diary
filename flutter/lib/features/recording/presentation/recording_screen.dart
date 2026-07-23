@@ -140,7 +140,18 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   Future<void> _startRecording() async {
     final svc = ref.read(recordingServiceProvider);
-    await svc.start();
+    try {
+      await svc.start();
+    } on RecordingPermissionDenied {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mikrofon-Zugriff wird benötigt, um Einträge aufzunehmen.'),
+          ),
+        );
+      }
+      return;
+    }
     // Reset transcripts here in case a previous session's late callbacks wrote
     // stale text after a cancel.
     _confirmedTranscript = '';
