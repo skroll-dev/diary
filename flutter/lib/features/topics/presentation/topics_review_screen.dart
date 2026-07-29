@@ -439,6 +439,80 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     if (mounted) context.go('/history');
   }
 
+  // ── Back navigation — the entry already exists locally at this point
+  // (saveEntry ran back on RecordingScreen), so leaving via the back button
+  // must not silently abandon it half-synced. Ask the user to either finish
+  // it (same as "Eintrag abschließen") or discard it outright.
+
+  Future<void> _handleBackPressed() async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        final tt = Theme.of(ctx).textTheme;
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Eintrag noch nicht abgeschlossen',
+              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+          content: Text(
+            'Möchtest du deinen Eintrag speichern oder verwerfen?',
+            style: tt.bodyMedium,
+          ),
+          actionsPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('delete'),
+              style: TextButton.styleFrom(foregroundColor: cs.error),
+              child: const Text('Verwerfen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (action == null || action == 'cancel' || !mounted) return;
+
+    if (action == 'delete') {
+      await ref.read(entryRepositoryProvider).deleteEntryForDate(_isoDate);
+      if (mounted) _leaveScreen();
+      return;
+    }
+
+    // action == 'save' — same finalize path as "Eintrag abschließen",
+    // then continue the back-navigation the user originally asked for.
+    if (ref.read(authServiceProvider.notifier).isAnonymous) {
+      final success = await showAuthSheet(context);
+      if (!success || !mounted) return;
+      await runHistorySyncWithProgress(context, ref);
+      if (!mounted) return;
+    } else {
+      await ref.read(entryRepositoryProvider).flushPendingSyncs();
+      if (!mounted) return;
+    }
+    if (mounted) _leaveScreen();
+  }
+
+  // context.pop() throws if this screen isn't on top of a pushed route (e.g.
+  // reached directly, or the stack was lost on a web refresh) — fall back to
+  // the recording screen in that case instead of crashing.
+  void _leaveScreen() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
+
   // ── Von vorne anfangen ────────────────────────────────────────────────────────
 
   Future<void> _confirmDeleteAll() async {
@@ -513,7 +587,13 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackPressed();
+      },
+      child: Scaffold(
       backgroundColor: cs.surface,
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -535,7 +615,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                           children: [
                             if (context.canPop())
                               IconButton(
-                                onPressed: () => context.pop(),
+                                onPressed: _handleBackPressed,
                                 icon: Icon(Icons.arrow_back_ios_new_rounded,
                                     size: 20, color: cs.onSurface),
                                 tooltip: 'Zurück',
@@ -761,6 +841,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               ),
             ),
         ],
+      ),
       ),
     );
   }

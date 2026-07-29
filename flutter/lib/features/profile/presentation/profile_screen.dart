@@ -250,10 +250,43 @@ class _ProfileBody extends ConsumerWidget {
         );
       },
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Theme.of(ctx).colorScheme.primary),
+                  const SizedBox(height: 20),
+                  Text('Einträge werden gesichert …',
+                      style: Theme.of(ctx).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Make sure every entry has actually reached Firestore before wiping the
+    // local copy — saveEntry/mergeEntry sync in the background, so a very
+    // recent entry can still be in flight at this point.
+    await ref.read(entryRepositoryProvider).flushPendingSyncs();
     await ref.read(entryRepositoryProvider).clearAllLocalData();
     await ref.read(authServiceProvider.notifier).signOut();
-    if (context.mounted) context.go('/');
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      context.go('/');
+    }
   }
 
   Future<void> _confirmWipeAllData(BuildContext context, WidgetRef ref) async {

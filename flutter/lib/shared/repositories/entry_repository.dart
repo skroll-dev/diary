@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -301,6 +302,64 @@ class EntryRepository {
     unawaited(_deleteFromFirestore(uid: user.uid, date: date));
   }
 
+  /// Pushes every entry that hasn't reached Firestore yet (`synced == false`)
+  /// for [uid] (defaults to the current user). `saveEntry`/`mergeEntry` fire
+  /// their Firestore writes unawaited for a snappy UI, so an entry can still
+  /// be in flight — or have failed silently — when the user signs out.
+  /// [clearAllLocalData] wipes local Drift rows unconditionally, so any
+  /// entry that hasn't actually landed in Firestore by then is lost for
+  /// good. Call this and await it before clearing local data.
+  Future<void> flushPendingSyncs({String? uid}) async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    final targetUid = uid ?? user.uid;
+
+    final pending = await (_db.select(_db.entries)
+          ..where((e) => e.userId.equals(targetUid) & e.synced.equals(false)))
+        .get();
+    if (pending.isEmpty) return;
+
+    for (final entry in pending) {
+      try {
+        final transcripts = await getTranscriptsForEntry(entry.id);
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(targetUid)
+            .collection('entries')
+            .doc(entry.date)
+            .set({
+          'id': entry.id,
+          'userId': targetUid,
+          'date': entry.date,
+          'bodyMarkdown': entry.bodyMarkdown,
+          'mood': entry.mood,
+          'moodScore': entry.moodScore,
+          'followUpQuestions': jsonDecode(entry.followUpQuestions),
+          'topics': jsonDecode(entry.topics),
+          'tags': jsonDecode(entry.tags),
+          'durationSeconds': entry.durationSeconds,
+          'language': entry.language,
+          'version': entry.version,
+          'createdAt': entry.createdAt,
+          'updatedAt': entry.updatedAt,
+          'rawTranscripts': transcripts
+              .map((t) => {
+                    'id': t.id,
+                    'raw': t.content,
+                    'normalized': t.normalizedContent,
+                    'reason': t.reason,
+                    'createdAt': t.createdAt,
+                  })
+              .toList(),
+        }, SetOptions(merge: true));
+
+        await (_db.update(_db.entries)..where((e) => e.id.equals(entry.id)))
+            .write(const EntriesCompanion(synced: Value(true)));
+      } catch (e) {
+        debugPrint('[EntryRepository] flushPendingSyncs failed for ${entry.date}: $e');
+      }
+    }
+  }
+
   /// Wipes every locally cached entry/transcript on this device (all users,
   /// not just the current one — catches orphaned rows left behind by an
   /// anonymous session that never got linked, see [getOrphanedEntryForDate]).
@@ -574,8 +633,8 @@ class EntryRepository {
           .collection('entries')
           .doc(date)
           .delete();
-    } catch (_) {
-      // Best-effort — document may not exist if sync never completed
+    } catch (e) {
+      debugPrint('[EntryRepository] _deleteFromFirestore failed for $date: $e');
     }
   }
 
@@ -631,7 +690,8 @@ class EntryRepository {
       await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
           .write(const EntriesCompanion(synced: Value(true)));
     } catch (e) {
-      // Best-effort — remains unsynced until next save
+      debugPrint('[EntryRepository] _syncToFirestore failed for $date: $e');
+      // Best-effort — remains unsynced until next save or flushPendingSyncs()
     }
   }
 
@@ -679,7 +739,8 @@ class EntryRepository {
       await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
           .write(const EntriesCompanion(synced: Value(true)));
     } catch (e) {
-      // Best-effort
+      debugPrint('[EntryRepository] _updateFirestore failed for $date: $e');
+      // Best-effort — remains unsynced until next save or flushPendingSyncs()
     }
   }
 }
