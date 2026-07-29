@@ -229,35 +229,78 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mein KI-Tagebuch denkt nach …', 0.56, 1.0);
+      // RecordingScreen is reachable with today's entry already saved (e.g.
+      // navigating back from TopicsReviewScreen and recording again) —
+      // saveEntry always inserts a fresh row, so blindly calling it here
+      // would create a second `entries` row for the same date/user. Merge
+      // into the existing entry instead, same as TopicsReviewScreen's
+      // "Ergänzen" flow.
+      final existingEntry =
+          await ref.read(entryRepositoryProvider).getLocalEntryForDate(isoDate);
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
-      final entry = await ref.read(proxyClientProvider).generateEntry(
-        normalizedText,
-        existingTags: existingTags,
-      );
-      topics = entry.topics;
-      bodyMarkdown = entry.bodyMarkdown;
-      mood = entry.mood;
-      moodScore = entry.moodScore;
-      followUpQuestions = entry.followUpQuestions;
-      _completeStep(1.0);
-      debugPrint('[Pipeline] generate: ${sw.elapsedMilliseconds}ms');
-      sw.reset(); sw.start();
 
-      await ref.read(entryRepositoryProvider).saveEntry(
-            date: isoDate,
-            rawTranscript: rawTranscript,
-            normalizedText: normalizedText,
-            durationSeconds: durationSec,
-            bodyMarkdown: bodyMarkdown,
-            mood: mood,
-            moodScore: moodScore,
-            followUpQuestions: followUpQuestions,
-            topics: topics,
-            tags: entry.tags,
-            transcriptReason: reason,
-          );
-      debugPrint('[Pipeline] save: ${sw.elapsedMilliseconds}ms');
+      if (existingEntry != null) {
+        _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.56, 1.0);
+        final previousQuestions =
+            (jsonDecode(existingEntry.followUpQuestions) as List).cast<String>();
+        final entry = await ref.read(proxyClientProvider).mergeEntry(
+              existingBody: existingEntry.bodyMarkdown,
+              newTranscript: normalizedText,
+              previousQuestions: previousQuestions,
+              existingTags: existingTags,
+            );
+        topics = entry.topics;
+        bodyMarkdown = entry.bodyMarkdown;
+        mood = entry.mood;
+        moodScore = entry.moodScore;
+        followUpQuestions = entry.followUpQuestions;
+        _completeStep(1.0);
+        debugPrint('[Pipeline] merge: ${sw.elapsedMilliseconds}ms');
+        sw.reset(); sw.start();
+
+        await ref.read(entryRepositoryProvider).mergeEntry(
+              date: isoDate,
+              rawTranscript: rawTranscript,
+              normalizedText: normalizedText,
+              bodyMarkdown: entry.bodyMarkdown,
+              mood: entry.mood,
+              moodScore: entry.moodScore,
+              followUpQuestions: entry.followUpQuestions,
+              topics: entry.topics,
+              tags: entry.tags,
+              transcriptReason: 'continuation',
+            );
+        debugPrint('[Pipeline] save (merged): ${sw.elapsedMilliseconds}ms');
+      } else {
+        _setStep('Mein KI-Tagebuch denkt nach …', 0.56, 1.0);
+        final entry = await ref.read(proxyClientProvider).generateEntry(
+          normalizedText,
+          existingTags: existingTags,
+        );
+        topics = entry.topics;
+        bodyMarkdown = entry.bodyMarkdown;
+        mood = entry.mood;
+        moodScore = entry.moodScore;
+        followUpQuestions = entry.followUpQuestions;
+        _completeStep(1.0);
+        debugPrint('[Pipeline] generate: ${sw.elapsedMilliseconds}ms');
+        sw.reset(); sw.start();
+
+        await ref.read(entryRepositoryProvider).saveEntry(
+              date: isoDate,
+              rawTranscript: rawTranscript,
+              normalizedText: normalizedText,
+              durationSeconds: durationSec,
+              bodyMarkdown: bodyMarkdown,
+              mood: mood,
+              moodScore: moodScore,
+              followUpQuestions: followUpQuestions,
+              topics: topics,
+              tags: entry.tags,
+              transcriptReason: reason,
+            );
+        debugPrint('[Pipeline] save: ${sw.elapsedMilliseconds}ms');
+      }
     } catch (e) {
       debugPrint('[RecordingScreen] pipeline error: $e');
     }
@@ -337,8 +380,63 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mein KI-Tagebuch denkt nach …', 0.31, 1.0);
+      // Same duplicate-row guard as _stopRecording — merge into today's
+      // entry if one already exists instead of inserting a second row.
+      final existingEntryTyped =
+          await ref.read(entryRepositoryProvider).getLocalEntryForDate(isoDate);
       final existingTagsTyped = await ref.read(entryRepositoryProvider).getAllTags();
+
+      if (existingEntryTyped != null) {
+        _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.31, 1.0);
+        final previousQuestionsTyped =
+            (jsonDecode(existingEntryTyped.followUpQuestions) as List)
+                .cast<String>();
+        final entry = await ref.read(proxyClientProvider).mergeEntry(
+              existingBody: existingEntryTyped.bodyMarkdown,
+              newTranscript: normalizedText,
+              previousQuestions: previousQuestionsTyped,
+              existingTags: existingTagsTyped,
+            );
+        topics = entry.topics;
+        bodyMarkdown = entry.bodyMarkdown;
+        mood = entry.mood;
+        moodScore = entry.moodScore;
+        followUpQuestions = entry.followUpQuestions;
+        _completeStep(1.0);
+        debugPrint('[Pipeline] merge (typed): ${sw.elapsedMilliseconds}ms');
+        sw.reset(); sw.start();
+
+        await ref.read(entryRepositoryProvider).mergeEntry(
+              date: isoDate,
+              rawTranscript: rawTranscript,
+              normalizedText: normalizedText,
+              bodyMarkdown: entry.bodyMarkdown,
+              mood: entry.mood,
+              moodScore: entry.moodScore,
+              followUpQuestions: entry.followUpQuestions,
+              topics: entry.topics,
+              tags: entry.tags,
+              transcriptReason: 'continuation',
+            );
+        debugPrint('[Pipeline] save (typed, merged): ${sw.elapsedMilliseconds}ms');
+        if (mounted) {
+          setState(() => _state = _RecordingState.idle);
+          context.push('/topics', extra: (
+            date: date,
+            duration: '00:00',
+            topics: topics,
+            normalizedTranscript: normalizedText,
+            bodyMarkdown: bodyMarkdown,
+            mood: mood,
+            moodScore: moodScore,
+            followUpQuestions: followUpQuestions,
+            transcriptReason: 'continuation',
+          ));
+        }
+        return;
+      }
+
+      _setStep('Mein KI-Tagebuch denkt nach …', 0.31, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(
         normalizedText,
         existingTags: existingTagsTyped,

@@ -26,7 +26,11 @@ https://ai-proxy-918937960824.europe-west3.run.app
 
 so a plain `flutter run` on an emulator or physical device reaches the real backend with no local networking setup (no `10.0.2.2`, no LAN IP, no `uvicorn --host 0.0.0.0`). That endpoint runs without `ENV=development`, so `verify_app_check` (`ai-proxy/app/services/auth.py` — despite the name, it just verifies a Firebase Auth ID token, not real App Check) enforces auth on every route. `ProxyClient._dio()` only skips sending the `Authorization` header when the base URL contains `localhost`/`127.0.0.1`; against the remote URL it always attaches `Bearer <Firebase ID token>`, and anonymous auth warms up automatically on native launch (`main.dart`, `!kIsWeb` branch), so this works out of the box.
 
-`GDPR_EXPORT_BASE_URL` (`gdpr_export_client.dart`) still defaults to `http://localhost:8081` — no remote `gdpr-export` URL has been wired in yet. That only matters for the Profile screen's export/delete-account actions; the core recording pipeline doesn't touch it.
+`GDPR_EXPORT_BASE_URL` (`gdpr_export_client.dart`) now defaults to the deployed Cloud Run instance (fixed 2026-07-29, GitHub issue #4 — it previously defaulted to `http://localhost:8081`, so every release build's "Alle Daten unwiderruflich löschen" failed with `SocketException: Connection refused`):
+
+```
+https://gdpr-export-z4vu65i3aa-ey.a.run.app
+```
 
 To point at a **local** ai-proxy instead (e.g. testing an unreleased backend change), the old local-networking rules still apply since `localhost` means the device itself on Android:
 

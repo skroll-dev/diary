@@ -146,7 +146,9 @@ class EntryRepository {
 
     // Find the existing entry for this date
     final existing = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
+          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
+          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+          ..limit(1))
         .getSingleOrNull();
 
     if (existing == null) {
@@ -289,15 +291,20 @@ class EntryRepository {
 
   Future<void> deleteEntryForDate(String date) async {
     final user = await _auth.getUser();
-    final entry = await (_db.select(_db.entries)
+    // Select+delete-per-row (rather than a single WHERE-scoped delete) so
+    // this also cleans up any duplicate rows a device may have accumulated
+    // for this date — see the entries.synced/duplicate-row bug in issue #4.
+    final entries = await (_db.select(_db.entries)
           ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
-        .getSingleOrNull();
-    if (entry == null) return;
-    await (_db.delete(_db.rawTranscripts)
-          ..where((t) => t.entryId.equals(entry.id)))
-        .go();
+        .get();
+    if (entries.isEmpty) return;
+    for (final entry in entries) {
+      await (_db.delete(_db.rawTranscripts)
+            ..where((t) => t.entryId.equals(entry.id)))
+          .go();
+    }
     await (_db.delete(_db.entries)
-          ..where((e) => e.id.equals(entry.id)))
+          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
         .go();
     unawaited(_deleteFromFirestore(uid: user.uid, date: date));
   }
@@ -460,7 +467,9 @@ class EntryRepository {
 
     // Fast path — already in Drift
     final existing = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
+          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
+          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+          ..limit(1))
         .getSingleOrNull();
     if (existing != null) {
       // ignore: avoid_print
@@ -611,7 +620,9 @@ class EntryRepository {
   Future<List<RawTranscript>> getTranscriptsForDate(String date) async {
     final user = await _auth.getUser();
     final entry = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
+          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
+          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+          ..limit(1))
         .getSingleOrNull();
     if (entry == null) return [];
     return (_db.select(_db.rawTranscripts)

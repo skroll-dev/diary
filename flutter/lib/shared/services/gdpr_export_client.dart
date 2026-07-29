@@ -7,7 +7,7 @@ part 'gdpr_export_client.g.dart';
 
 const _baseUrl = String.fromEnvironment(
   'GDPR_EXPORT_BASE_URL',
-  defaultValue: 'http://localhost:8081',
+  defaultValue: 'https://gdpr-export-z4vu65i3aa-ey.a.run.app',
 );
 
 class GdprExportClient {

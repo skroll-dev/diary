@@ -290,57 +290,12 @@ class _ProfileBody extends ConsumerWidget {
   }
 
   Future<void> _confirmWipeAllData(BuildContext context, WidgetRef ref) async {
-    final ctrl = TextEditingController();
     const confirmWord = 'LÖSCHEN';
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            final match = ctrl.text.trim().toUpperCase() == confirmWord;
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Bist du absolut sicher?',
-                  style: TextStyle(color: cs.error, fontWeight: FontWeight.w700)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Alle deine Tagebucheinträge werden dauerhaft gelöscht — auf diesem Gerät und in der Cloud. Dein Konto wird ebenfalls vollständig entfernt. Das kann NICHT rückgängig gemacht werden.',
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Gib "$confirmWord" ein, um zu bestätigen:',
-                      style: Theme.of(ctx).textTheme.bodySmall),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(hintText: confirmWord),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Abbrechen'),
-                ),
-                TextButton(
-                  onPressed: match ? () => Navigator.of(ctx).pop(true) : null,
-                  style: TextButton.styleFrom(foregroundColor: cs.error),
-                  child: const Text('Endgültig löschen'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => const _WipeConfirmDialog(confirmWord: confirmWord),
     );
-    ctrl.dispose();
     if (confirmed != true || !context.mounted) return;
 
     showDialog<void>(
@@ -433,6 +388,72 @@ String _moodLabel(String mood) => switch (mood) {
       'mixed' => '🤔 Gemischt',
       _ => '😐 Neutral',
     };
+
+// ── Wipe-all-data confirmation dialog ───────────────────────────────────────────
+
+// Owns its TextEditingController via State so Flutter disposes it as part of
+// the widget's own lifecycle. Disposing it manually right after showDialog()
+// returns races the dialog's closing transition (still rebuilding this
+// TextField for a few more frames) and throws "used after being disposed".
+class _WipeConfirmDialog extends StatefulWidget {
+  const _WipeConfirmDialog({required this.confirmWord});
+  final String confirmWord;
+
+  @override
+  State<_WipeConfirmDialog> createState() => _WipeConfirmDialogState();
+}
+
+class _WipeConfirmDialogState extends State<_WipeConfirmDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final match = _ctrl.text.trim().toUpperCase() == widget.confirmWord;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text('Bist du absolut sicher?',
+          style: TextStyle(color: cs.error, fontWeight: FontWeight.w700)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Alle deine Tagebucheinträge werden dauerhaft gelöscht — auf diesem Gerät und in der Cloud. Dein Konto wird ebenfalls vollständig entfernt. Das kann NICHT rückgängig gemacht werden.',
+          ),
+          const SizedBox(height: 16),
+          Text('Gib "${widget.confirmWord}" ein, um zu bestätigen:',
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(hintText: widget.confirmWord),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        TextButton(
+          onPressed: match ? () => Navigator.of(context).pop(true) : null,
+          style: TextButton.styleFrom(foregroundColor: cs.error),
+          child: const Text('Endgültig löschen'),
+        ),
+      ],
+    );
+  }
+}
 
 // ── Small components ──────────────────────────────────────────────────────────
 
