@@ -98,3 +98,25 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
 Uses the same `release` signing config as `build appbundle`. If install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, uninstall any existing debug-signed copy first. If it fails with `INSTALL_FAILED_OLDER_SDK`, the device is below `flutter.minSdkVersion`.
+
+## Distributing a build via GitHub Releases
+
+No Play Store listing yet, so ad-hoc builds (e.g. for colleague testing) go out as a GitHub release with the signed APK attached:
+
+```bash
+flutter build apk --release
+gh release create "v$(grep '^version:' pubspec.yaml | sed 's/version: //')" \
+  build/app/outputs/flutter-apk/app-release.apk \
+  --repo skroll-dev/diary \
+  --title "v<version>" \
+  --notes "<what changed, plus install instructions>"
+```
+
+Tag and title are the `pubspec.yaml` version string (e.g. `v0.4.17+25`); the only asset is `app-release.apk` (not the per-ABI split APKs also produced under `flutter-apk/`, and not `.aab` — that format isn't directly installable). Release notes should call out which GitHub issues the build fixes and give install steps ("download `app-release.apk` to the device and open it; enable 'install unknown apps' if prompted").
+
+Release history:
+
+| Tag | Date | Notes |
+|---|---|---|
+| [`v0.4.15+23`](https://github.com/skroll-dev/diary/releases/tag/v0.4.15%2B23) | 2026-07-23 | First signed release build — package-ID fix, release signing, WAV audio pipeline. |
+| [`v0.4.17+25`](https://github.com/skroll-dev/diary/releases/tag/v0.4.17%2B25) | 2026-07-30 | Fixes #3 (entries lost on sign-out) and #4 (GDPR delete-account pointed at `localhost`), plus a duplicate-entry crash and a dialog-disposal crash found while testing #4. |
