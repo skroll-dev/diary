@@ -280,12 +280,23 @@ class _ProfileBody extends ConsumerWidget {
     // Make sure every entry has actually reached Firestore before wiping the
     // local copy — saveEntry/mergeEntry sync in the background, so a very
     // recent entry can still be in flight at this point.
-    await ref.read(entryRepositoryProvider).flushPendingSyncs();
-    await ref.read(entryRepositoryProvider).clearAllLocalData();
-    await ref.read(authServiceProvider.notifier).signOut();
-    if (context.mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-      context.go('/');
+    try {
+      await ref.read(entryRepositoryProvider).flushPendingSyncs();
+      await ref.read(entryRepositoryProvider).clearAllLocalData();
+      await ref.read(authServiceProvider.notifier).signOut();
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        context.go('/');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Abmelden fehlgeschlagen. Bitte erneut versuchen.'),
+          ),
+        );
+      }
     }
   }
 

@@ -196,7 +196,18 @@ class AuthService extends _$AuthService {
 
   Future<void> signOut() async {
     await FirebaseAuth.instance.signOut();
-    final cred = await FirebaseAuth.instance.signInAnonymously();
+    // Calling signInAnonymously() immediately after signOut() occasionally
+    // throws a spurious [firebase_auth/internal-error] on iOS — a known
+    // Firebase iOS SDK race during session teardown. One retry after a brief
+    // delay clears it; a real failure (e.g. no network) still surfaces.
+    UserCredential cred;
+    try {
+      cred = await FirebaseAuth.instance.signInAnonymously();
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'internal-error') rethrow;
+      await Future.delayed(const Duration(milliseconds: 400));
+      cred = await FirebaseAuth.instance.signInAnonymously();
+    }
     _updateState(cred.user!);
   }
 

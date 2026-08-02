@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **AI Tagebuch** (codename: Mein KI-Tagebuch) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini. All data stays in the EU.
 
 - **Firebase project:** `diary-6fa61`
-- **Bundle ID:** `com.diary.app`
+- **Bundle ID:** iOS `com.diary.skroll.app`, Android `com.ai.diary.app` (diverged 2026-08-02 — `com.diary.app` was already claimed by another team in App Store Connect; Android kept its old ID until then, both platforms share the `diary-6fa61` Firebase project via separate app registrations)
 - **Target platforms:** iOS (min 15.0), Android, Web (full recording support via WebSocket streaming)
 
 ## Commands

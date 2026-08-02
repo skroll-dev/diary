@@ -640,37 +640,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     if (entry == null) return;
 
-    final topics = (jsonDecode(entry.topics) as List)
-        .map((t) => TopicDto.fromJson(t as Map<String, dynamic>))
-        .toList();
-    final questions =
-        (jsonDecode(entry.followUpQuestions) as List).cast<String>();
-
-    final now = DateTime.now();
-    const weekdays = [
-      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-      'Freitag', 'Samstag', 'Sonntag'
-    ];
-    const months = [
-      '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-    ];
-    final dateLabel =
-        '${weekdays[now.weekday]}, ${now.day}. ${months[now.month]}';
-
-    if (mounted) {
-      context.push('/topics', extra: (
-        date: dateLabel,
-        duration: '',
-        topics: topics,
-        normalizedTranscript: '',
-        bodyMarkdown: entry.bodyMarkdown,
-        mood: entry.mood,
-        moodScore: entry.moodScore,
-        followUpQuestions: questions,
-        transcriptReason: 'initial',
-      ));
-    }
+    // An entry for today already exists — jump to the diary history instead
+    // of re-opening the topics review flow, which is for a just-finished
+    // recording, not for browsing an already-saved entry.
+    if (mounted) context.go('/history');
   }
 
   String get _transcriptReason => switch (widget.recordingContext) {
@@ -1017,6 +990,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       children: [
         Stack(
           alignment: Alignment.center,
+          clipBehavior: Clip.none,
           children: [
             // Layout anchor — transitions once on start/stop, never on pulse frames.
             AnimatedContainer(
@@ -1070,6 +1044,44 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                     key: ValueKey(isRecording),
                     color: cs.onPrimary,
                     size: isRecording ? 26 : 38,
+                  ),
+                ),
+              ),
+            ),
+            // Keyboard badge — overlaps the mic circle's lower-right edge.
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                scale: isRecording ? 0.0 : 1.0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 220),
+                  opacity: isRecording ? 0.0 : 1.0,
+                  child: Semantics(
+                    button: true,
+                    label: 'Text statt Sprache eingeben',
+                    child: Material(
+                      color: cs.surfaceContainerHigh,
+                      shape: CircleBorder(
+                        side: BorderSide(color: cs.surface, width: 3),
+                      ),
+                      elevation: 2,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: isRecording ? null : _showTranscriptDialog,
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Icon(
+                            Icons.keyboard_alt_outlined,
+                            color: cs.onSurfaceVariant,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),

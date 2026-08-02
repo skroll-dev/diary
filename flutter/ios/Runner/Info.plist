@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -54,7 +56,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.918937960824-s772520aq0leu190nff158hd7qi66he0</string>
+				<string>com.googleusercontent.apps.918937960824-s7rdm162lmoj6ec35do3r1bhvim9re45</string>
 			</array>
 		</dict>
 	</array>

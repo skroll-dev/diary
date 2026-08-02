@@ -4,7 +4,9 @@ The app has run on Web only so far. This is the setup for running it natively on
 
 ## Fixed before this could work
 
-**`applicationId`/`namespace` mismatch (fixed 2026-07-23):** `android/app/build.gradle.kts` declared `com.ai.diary.app`, but `google-services.json` and `MainActivity.kt` (`android/app/src/main/kotlin/com/diary/app/MainActivity.kt`) both use `com.diary.app` — the real bundle ID (matches iOS, see `CLAUDE.md`). With the mismatch, `Firebase.initializeApp()` would have crashed on launch with "No matching client found for package name". Both `namespace` and `applicationId` in `build.gradle.kts` now read `com.diary.app`.
+**`applicationId`/`namespace` mismatch (fixed 2026-07-23):** `android/app/build.gradle.kts` declared `com.ai.diary.app`, but `google-services.json` and `MainActivity.kt` (`android/app/src/main/kotlin/com/diary/app/MainActivity.kt`) both use `com.diary.app` — the bundle ID Android and iOS shared at the time. With the mismatch, `Firebase.initializeApp()` would have crashed on launch with "No matching client found for package name". Both `namespace` and `applicationId` in `build.gradle.kts` were set to `com.diary.app` to fix it.
+
+**Bundle ID diverged from iOS (2026-08-02):** `com.diary.app` turned out to already be claimed by another team in App Store Connect, so iOS was renamed to `com.diary.skroll.app` (see `IOS_README.md`). Rather than leave Android on an ID iOS could never use, Android's `applicationId`/`namespace` were moved to `com.ai.diary.app` — ironically the same string the original mismatch fix moved away from, this time deliberately and consistently across `build.gradle.kts`, `MainActivity.kt`'s package + folder path, and a freshly regenerated `google-services.json` (new Firebase Android app, SHA-1 fingerprints re-registered for both the debug keystore and `doc/certs/android/upload-keystore.jks` so Google Sign-In keeps working). Both platforms still share the `diary-6fa61` Firebase project, just as separate per-platform app registrations. **Consequence:** existing installs from the GitHub Releases (`v0.4.15+23`, `v0.4.17+25`, built as `com.diary.app`) cannot update in place — Android treats a changed `applicationId` as a different app. Anyone on those builds needs to uninstall and reinstall the new `com.ai.diary.app` release; any diary entries already synced to Firestore are unaffected and reappear after signing back in.
 
 **Missing microphone permission request (fixed 2026-07-23):** `RecordingService.start()` (`recording_service.dart`) called `_recorder.start()`/`startStream()` directly without ever requesting `RECORD_AUDIO`. On Web this never mattered (the browser handles its own mic prompt), but on Android nothing was ever asking, so `AudioRecord` failed to initialize (`AudioFlinger could not create record track, status: -1`). Native `start()` now calls `await _recorder.hasPermission()` first and throws `RecordingPermissionDenied` if refused; both call sites (`recording_screen.dart`, `recording_controls.dart`) catch it and show a snackbar instead of crashing the pipeline.
 
@@ -14,7 +16,7 @@ The app has run on Web only so far. This is the setup for running it natively on
 
 - Android Studio + an emulator image, **or** a physical device with USB debugging enabled
 - `flutter doctor` shows no blocking Android toolchain issues
-- `android/app/google-services.json` already exists in this repo and already contains a `com.diary.app` client — no `flutterfire configure` needed just to get Android running
+- `android/app/google-services.json` already exists in this repo and already contains a `com.ai.diary.app` client — no `flutterfire configure` needed just to get Android running
 
 ## Backend reachability
 

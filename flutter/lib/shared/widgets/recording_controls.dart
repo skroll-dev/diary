@@ -314,6 +314,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
         if (!isProcessing) ...[
           Stack(
             alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
               // Layout anchor — fixed size so the pulse ring (Positioned) never
               // causes 60fps layout thrashing on the parent Column.
@@ -374,6 +375,44 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                       key: ValueKey(isRecording),
                       color: cs.onPrimary,
                       size: isRecording ? 26 : 36,
+                    ),
+                  ),
+                ),
+              ),
+              // Keyboard badge — overlaps the mic circle's lower-right edge.
+              Positioned(
+                right: -6,
+                bottom: -6,
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOut,
+                  scale: isRecording ? 0.0 : 1.0,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 220),
+                    opacity: isRecording ? 0.0 : 1.0,
+                    child: Semantics(
+                      button: true,
+                      label: 'Text statt Sprache eingeben',
+                      child: Material(
+                        color: cs.surfaceContainerHigh,
+                        shape: CircleBorder(
+                          side: BorderSide(color: cs.surface, width: 3),
+                        ),
+                        elevation: 2,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: isRecording ? null : _showTypeDialog,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Icon(
+                              Icons.keyboard_alt_outlined,
+                              color: cs.onSurfaceVariant,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

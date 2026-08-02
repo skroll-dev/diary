@@ -569,6 +569,8 @@ class EntryRepository {
     final followUpJson = fqRaw is List ? jsonEncode(fqRaw) : (fqRaw as String? ?? '[]');
     final topicsRaw = data['topics'];
     final topicsJson = topicsRaw is List ? jsonEncode(topicsRaw) : (topicsRaw as String? ?? '[]');
+    final tagsRaw = data['tags'];
+    final tagsJson = tagsRaw is List ? jsonEncode(tagsRaw) : (tagsRaw as String? ?? '[]');
 
     await _db.into(_db.entries).insert(
       EntriesCompanion.insert(
@@ -583,6 +585,7 @@ class EntryRepository {
         version: Value(1),
         followUpQuestions: Value(followUpJson),
         topics: Value(topicsJson),
+        tags: Value(tagsJson),
         createdAt: _tsToString(data['createdAt'], now),
         updatedAt: _tsToString(data['updatedAt'], now),
         synced: Value(true),
