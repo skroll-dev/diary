@@ -122,3 +122,4 @@ Release history:
 |---|---|---|
 | [`v0.4.15+23`](https://github.com/skroll-dev/diary/releases/tag/v0.4.15%2B23) | 2026-07-23 | First signed release build — package-ID fix, release signing, WAV audio pipeline. |
 | [`v0.4.17+25`](https://github.com/skroll-dev/diary/releases/tag/v0.4.17%2B25) | 2026-07-30 | Fixes #3 (entries lost on sign-out) and #4 (GDPR delete-account pointed at `localhost`), plus a duplicate-entry crash and a dialog-disposal crash found while testing #4. |
+| [`v0.4.19+27`](https://github.com/skroll-dev/diary/releases/tag/v0.4.19%2B27) | 2026-08-15 | Fixes email magic-link sign-in on Android (deep-link routing race) and iOS (missing Universal Links config); adds a sign-in success confirmation. |
