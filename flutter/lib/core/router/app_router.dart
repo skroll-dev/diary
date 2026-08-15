@@ -27,6 +27,18 @@ typedef TopicsArgs = ({
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
+    // On Android/iOS, the platform can report the raw incoming email-link
+    // sign-in URL (e.g. https://diary-6fa61.firebaseapp.com/__/auth/links?...)
+    // as the initial route before app_links/auth_service finish handling it
+    // in the background. Redirect any such unrecognized absolute-URL route to
+    // splash instead of letting go_router throw "no routes for location".
+    redirect: (context, state) {
+      final uri = state.uri;
+      if (uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        return '/splash';
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',

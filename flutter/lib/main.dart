@@ -46,6 +46,7 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
       ref
           .read(authServiceProvider.notifier)
           .completeEmailLinkSignIn(link)
+          .then((_) => ref.read(authLinkSuccessProvider.notifier).set())
           .catchError((e) => _handleEmailLinkError(e));
     }
   }
@@ -80,6 +81,7 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
       ref
           .read(authServiceProvider.notifier)
           .completeEmailLinkSignIn(link)
+          .then((_) => ref.read(authLinkSuccessProvider.notifier).set())
           .catchError((_) {});
     }
   }

@@ -74,8 +74,8 @@ class AuthService extends _$AuthService {
     final settings = ActionCodeSettings(
       url: continueUrl,
       handleCodeInApp: true,
-      iOSBundleId: 'com.diary.app',
-      androidPackageName: 'com.diary.app',
+      iOSBundleId: 'com.diary.skroll.app',
+      androidPackageName: 'com.ai.diary.app',
       androidInstallApp: false,
       androidMinimumVersion: '1',
     );

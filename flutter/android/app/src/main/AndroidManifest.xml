@@ -39,6 +39,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Disable Flutter's built-in deep-link forwarding to the initial route.
+             We handle the /__/auth/links App Link ourselves via app_links in main.dart;
+             leaving this enabled races GoRouter's initialLocation and the raw Firebase
+             auth URL gets parsed as a route, throwing "no routes for location". -->
+        <meta-data
+            android:name="flutter_deeplinking_enabled"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

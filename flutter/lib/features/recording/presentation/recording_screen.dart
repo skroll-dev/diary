@@ -105,6 +105,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         ref.read(authLinkErrorProvider.notifier).clear();
         _showAuthLinkErrorDialog(error);
       }
+      if (ref.read(authLinkSuccessProvider) && mounted) {
+        ref.read(authLinkSuccessProvider.notifier).clear();
+        _showAuthLinkSuccessSnackBar();
+      }
     });
   }
 
@@ -544,6 +548,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     );
   }
 
+  void _showAuthLinkSuccessSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Anmeldung erfolgreich! Willkommen zurück.'),
+      ),
+    );
+  }
+
   Future<void> _onSignInTap() async {
     _authSheetOpen = true;
     final success = await showAuthSheet(context, isDismissible: true);
@@ -679,6 +691,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       if (error == null || !mounted) return;
       ref.read(authLinkErrorProvider.notifier).clear();
       _showAuthLinkErrorDialog(error);
+    });
+    ref.listen<bool>(authLinkSuccessProvider, (_, success) {
+      if (!success || !mounted) return;
+      ref.read(authLinkSuccessProvider.notifier).clear();
+      _showAuthLinkSuccessSnackBar();
     });
 
     return Scaffold(
