@@ -902,6 +902,21 @@ class _EntryDetailSheet extends ConsumerWidget {
                     const SizedBox(height: 28),
                     Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
                     const SizedBox(height: 8),
+                    if (_isToday(entry.date)) ...[
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            context.push('/topics');
+                          },
+                          icon: Icon(Icons.edit_outlined,
+                              color: cs.primary, size: 18),
+                          label: Text('Eintrag editieren',
+                              style: TextStyle(color: cs.primary)),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Center(
                       child: TextButton.icon(
                         onPressed: () => _confirmDelete(context, ref),

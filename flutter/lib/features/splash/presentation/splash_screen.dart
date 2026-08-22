@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +7,6 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
-import '../../../shared/services/proxy_client.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -119,23 +117,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       final repo = ref.read(entryRepositoryProvider);
       await repo.syncEntryFromFirestoreIfMissing(isoDate);
       final entry = await repo.getLocalEntryForDate(isoDate);
-      if (entry == null) return const _Destination.recording();
-
-      final topics = (jsonDecode(entry.topics) as List)
-          .map((t) => TopicDto.fromJson(t as Map<String, dynamic>))
-          .toList();
-      final questions =
-          (jsonDecode(entry.followUpQuestions) as List).cast<String>();
-
-      return _Destination.topics(
-        bodyMarkdown: entry.bodyMarkdown,
-        mood: entry.mood,
-        moodScore: entry.moodScore,
-        followUpQuestions: questions,
-        topics: topics,
-      );
+      // Today already has a saved entry — land on the "Mein Tagebuch"
+      // overview with it highlighted, not back in the post-recording review
+      // flow (that's only entered right after finishing a recording).
+      return entry == null ? _Destination.recording : _Destination.history;
     } catch (_) {
-      return const _Destination.recording();
+      return _Destination.recording;
     }
   }
 
@@ -170,32 +157,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   void _navigate(_Destination dest) {
-    if (dest.goToTopics) {
-      final now = DateTime.now();
-      const weekdays = [
-        '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-        'Freitag', 'Samstag', 'Sonntag'
-      ];
-      const months = [
-        '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-      ];
-      final dateLabel =
-          '${weekdays[now.weekday]}, ${now.day}. ${months[now.month]}';
-
-      context.go('/topics', extra: (
-        date: dateLabel,
-        duration: '',
-        topics: dest.topics!,
-        normalizedTranscript: '',
-        bodyMarkdown: dest.bodyMarkdown!,
-        mood: dest.mood!,
-        moodScore: dest.moodScore!,
-        followUpQuestions: dest.followUpQuestions!,
-        transcriptReason: 'initial',
-      ));
-    } else {
-      context.go('/');
+    switch (dest) {
+      case _Destination.history:
+        context.go('/history');
+      case _Destination.recording:
+        context.go('/');
     }
   }
 
@@ -325,27 +291,4 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
 // ── Destination ───────────────────────────────────────────────────────────────
 
-class _Destination {
-  const _Destination.recording()
-      : goToTopics = false,
-        topics = null,
-        bodyMarkdown = null,
-        mood = null,
-        moodScore = null,
-        followUpQuestions = null;
-
-  const _Destination.topics({
-    required List<TopicDto> this.topics,
-    required String this.bodyMarkdown,
-    required String this.mood,
-    required double this.moodScore,
-    required List<String> this.followUpQuestions,
-  }) : goToTopics = true;
-
-  final bool goToTopics;
-  final List<TopicDto>? topics;
-  final String? bodyMarkdown;
-  final String? mood;
-  final double? moodScore;
-  final List<String>? followUpQuestions;
-}
+enum _Destination { recording, history }

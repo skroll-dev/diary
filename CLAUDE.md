@@ -244,6 +244,7 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 - `ProxyClient` skips `Authorization` header when `_baseUrl` contains `localhost`
 - `record` package web path: `AudioEncoder.pcm16bits` only — all other encoders throw at runtime
 - `TopicDto.text` is complete chapter prose — never truncated or summarized
+- Transcript length is capped at `kMaxTranscriptChars` (`shared/constants/transcript_limits.dart`, 20,000) — must stay in sync with `MAX_TRANSCRIPT_CHARS` in `ai-proxy/app/routes/entries.py`, which applies the same value to all of `normalize`/`generate`/`merge`'s string fields. `TopicsReviewScreen` disables new recordings at 90% of the cap and, on the rare 422 that slips through anyway (`ProxyValidationException` in `proxy_client.dart`), reopens `showTranscriptInputSheet` pre-filled with the offending text for an edit-and-resend.
 - `_AuthSheetState` (`features/auth/presentation/auth_sheet.dart`) can dismiss itself from two independent places — the `authStateChanges` listener (deep-link email sign-in) and the sign-in button handlers (`UidChangedNotice` after an anonymous→existing-account uid swap). Both must route through `_closeSheet()`, which is guarded by a `_popped` flag: a second `Navigator.pop()` on an already-closed sheet (with `useRootNavigator: true`) falls through and pops a real page off the GoRouter stack instead.
 
 #### Current implementation state
