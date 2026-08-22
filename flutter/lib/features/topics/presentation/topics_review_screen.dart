@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../auth/presentation/auth_sheet.dart';
 import '../../recording/recording_context.dart';
@@ -70,6 +69,7 @@ const _topicPalette = [
 class TopicsReviewScreen extends ConsumerStatefulWidget {
   const TopicsReviewScreen({
     super.key,
+    required this.entryId,
     this.date = '',
     this.duration = '',
     this.topics = const [],
@@ -81,6 +81,7 @@ class TopicsReviewScreen extends ConsumerStatefulWidget {
     this.transcriptReason = 'initial',
   });
 
+  final String entryId;
   final String date;
   final String duration;
   final List<TopicDto> topics;
@@ -105,7 +106,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   late String _bodyMarkdown;
   late String _mood;
   late double _moodScore;
-  late String _isoDate;
+  late final String _entryId = widget.entryId;
 
   bool _isRecordingsExpanded = false;
   bool _isRegenerating = false;
@@ -127,7 +128,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   @override
   void initState() {
     super.initState();
-    _isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _bodyMarkdown = widget.bodyMarkdown;
     _mood = widget.mood;
     _moodScore = widget.moodScore;
@@ -149,14 +149,15 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     // Load DB transcript IDs so edit/delete can target the right rows
     _loadTranscriptIds();
 
-    // On web refresh state.extra is lost — reload today's entry from Drift
+    // On web refresh state.extra is lost — reload this entry from Drift
     if (_topics.isEmpty) _loadFromDbIfEmpty();
   }
 
   Future<void> _loadFromDbIfEmpty() async {
+    if (_entryId.isEmpty) return;
     try {
       final repo = ref.read(entryRepositoryProvider);
-      final entry = await repo.getLocalEntryForDate(_isoDate);
+      final entry = await repo.getEntryById(_entryId);
       if (entry == null || !mounted) return;
 
       final topicDtos = (jsonDecode(entry.topics) as List)
@@ -165,7 +166,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       final questions = (jsonDecode(entry.followUpQuestions) as List)
           .map((e) => e as String)
           .toList();
-      final transcripts = await repo.getTranscriptsForDate(_isoDate);
+      final transcripts = await repo.getTranscriptsForEntry(_entryId);
 
       setState(() {
         _bodyMarkdown = entry.bodyMarkdown;
@@ -184,10 +185,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   }
 
   Future<void> _loadTranscriptIds() async {
+    if (_entryId.isEmpty) return;
     try {
       final rows = await ref
           .read(entryRepositoryProvider)
-          .getTranscriptsForDate(_isoDate);
+          .getTranscriptsForEntry(_entryId);
       if (!mounted || rows.isEmpty) return;
       setState(() {
         if (_recordings.isEmpty) {
@@ -330,7 +332,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       }
 
       unawaited(ref.read(entryRepositoryProvider).mergeEntry(
-            date: _isoDate,
+            entryId: _entryId,
             rawTranscript: rawTranscript,
             normalizedText: normalized,
             bodyMarkdown: entry.bodyMarkdown,
@@ -444,7 +446,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       _completeRegenStep(1.0);
       debugPrint('[Pipeline] re-derive: ${sw.elapsedMilliseconds}ms');
       await ref.read(entryRepositoryProvider).updateEntry(
-            date: _isoDate,
+            entryId: _entryId,
             bodyMarkdown: entry.bodyMarkdown,
             mood: entry.mood,
             moodScore: entry.moodScore,
@@ -540,7 +542,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     if (action == null || action == 'cancel' || !mounted) return;
 
     if (action == 'delete') {
-      await ref.read(entryRepositoryProvider).deleteEntryForDate(_isoDate);
+      await ref.read(entryRepositoryProvider).deleteEntryById(_entryId);
       if (mounted) _leaveScreen();
       return;
     }
@@ -579,7 +581,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       confirmLabel: 'Alles löschen',
     );
     if (confirmed && mounted) {
-      await ref.read(entryRepositoryProvider).deleteEntryForDate(_isoDate);
+      await ref.read(entryRepositoryProvider).deleteEntryById(_entryId);
       if (mounted) context.go('/');
     }
   }
@@ -827,7 +829,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   OutlinedButton.icon(
                     onPressed: _isNearTranscriptLimit
                         ? null
-                        : () => _showRecordingOverlay(const ContinuingEntry()),
+                        : () => _showRecordingOverlay(
+                              ContinuingEntry(entryId: _entryId),
+                            ),
                     icon: const Icon(Icons.mic_none_rounded, size: 18),
                     label: const Text('Eintrag vertiefen'),
                     style: OutlinedButton.styleFrom(
@@ -1035,6 +1039,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 ? null
                 : () => _showRecordingOverlay(
                       ExtendingTopic(
+                        entryId: _entryId,
                         topicTitle: 'Mein KI-Tagebuch fragt',
                         followUpHint: _followUpQuestions[i],
                       ),

@@ -13,6 +13,7 @@ import '../../shared/services/proxy_client.dart' show TopicDto;
 import '../../shared/widgets/main_shell.dart';
 
 typedef TopicsArgs = ({
+  String entryId,
   String date,
   String duration,
   List<TopicDto> topics,
@@ -88,6 +89,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final args = state.extra as TopicsArgs?;
           return TopicsReviewScreen(
+            entryId: args?.entryId ?? state.uri.queryParameters['entryId'] ?? '',
             date: args?.date ?? '',
             duration: args?.duration ?? '',
             topics: args?.topics ?? [],

@@ -94,7 +94,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         // Only handle here when recording screen is on top — sign-in from
         // topics/entry screens handles the post-login navigation themselves.
         final location = GoRouter.of(context).routerDelegate.currentConfiguration.uri.path;
-        if (location == '/') _checkForExistingTodayEntry();
+        if (location == '/') _reparentOrphanEntryIfAny();
       }
     });
     // ref.listen only fires on changes; if the error was set before this
@@ -191,6 +191,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     });
   }
 
+  /// The entry to merge into, if this recording is extending/answering an
+  /// already-open entry rather than starting a brand-new one.
+  String? get _targetEntryId => switch (widget.recordingContext) {
+        ExtendingTopic(:final entryId) => entryId,
+        ContinuingEntry(:final entryId) => entryId,
+        FreshRecording() => null,
+      };
+
   Future<void> _stopRecording() async {
     _timer?.cancel();
     _waveController.stop();
@@ -203,6 +211,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final durationSec = _seconds;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final reason = _transcriptReason;
+    final targetEntryId = _targetEntryId;
 
     var topics = <TopicDto>[];
     var normalizedText = '';
@@ -210,6 +219,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     var mood = 'neutral';
     var moodScore = 0.0;
     var followUpQuestions = <String>[];
+    var entryId = '';
 
     try {
       final sw = Stopwatch()..start();
@@ -233,22 +243,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      // RecordingScreen is reachable with today's entry already saved (e.g.
-      // navigating back from TopicsReviewScreen and recording again) —
-      // saveEntry always inserts a fresh row, so blindly calling it here
-      // would create a second `entries` row for the same date/user. Merge
-      // into the existing entry instead, same as TopicsReviewScreen's
-      // "Ergänzen" flow.
-      final existingEntry =
-          await ref.read(entryRepositoryProvider).getLocalEntryForDate(isoDate);
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
 
-      if (existingEntry != null) {
+      if (targetEntryId != null) {
+        final existingEntry =
+            await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
         _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.56, 1.0);
-        final previousQuestions =
-            (jsonDecode(existingEntry.followUpQuestions) as List).cast<String>();
+        final previousQuestions = existingEntry != null
+            ? (jsonDecode(existingEntry.followUpQuestions) as List).cast<String>()
+            : <String>[];
         final entry = await ref.read(proxyClientProvider).mergeEntry(
-              existingBody: existingEntry.bodyMarkdown,
+              existingBody: existingEntry?.bodyMarkdown ?? '',
               newTranscript: normalizedText,
               previousQuestions: previousQuestions,
               existingTags: existingTags,
@@ -262,8 +267,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         debugPrint('[Pipeline] merge: ${sw.elapsedMilliseconds}ms');
         sw.reset(); sw.start();
 
-        await ref.read(entryRepositoryProvider).mergeEntry(
-              date: isoDate,
+        entryId = await ref.read(entryRepositoryProvider).mergeEntry(
+              entryId: targetEntryId,
               rawTranscript: rawTranscript,
               normalizedText: normalizedText,
               bodyMarkdown: entry.bodyMarkdown,
@@ -290,7 +295,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         debugPrint('[Pipeline] generate: ${sw.elapsedMilliseconds}ms');
         sw.reset(); sw.start();
 
-        await ref.read(entryRepositoryProvider).saveEntry(
+        entryId = await ref.read(entryRepositoryProvider).saveEntry(
               date: isoDate,
               rawTranscript: rawTranscript,
               normalizedText: normalizedText,
@@ -317,7 +322,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         _confirmedTranscript = '';
         _interimText = '';
       });
-      context.push('/topics', extra: (
+      context.push('/topics?entryId=$entryId', extra: (
+        entryId: entryId,
         date: date,
         duration: duration,
         topics: topics,
@@ -367,6 +373,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final date = _dateLabel;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final reason = _transcriptReason;
+    final targetEntryId = _targetEntryId;
 
     var topics = <TopicDto>[];
     var normalizedText = '';
@@ -374,6 +381,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     var mood = 'neutral';
     var moodScore = 0.0;
     var followUpQuestions = <String>[];
+    var entryId = '';
 
     try {
       final sw = Stopwatch()..start();
@@ -384,19 +392,18 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      // Same duplicate-row guard as _stopRecording — merge into today's
-      // entry if one already exists instead of inserting a second row.
-      final existingEntryTyped =
-          await ref.read(entryRepositoryProvider).getLocalEntryForDate(isoDate);
       final existingTagsTyped = await ref.read(entryRepositoryProvider).getAllTags();
 
-      if (existingEntryTyped != null) {
+      if (targetEntryId != null) {
+        final existingEntryTyped =
+            await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
         _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.31, 1.0);
-        final previousQuestionsTyped =
-            (jsonDecode(existingEntryTyped.followUpQuestions) as List)
-                .cast<String>();
+        final previousQuestionsTyped = existingEntryTyped != null
+            ? (jsonDecode(existingEntryTyped.followUpQuestions) as List)
+                .cast<String>()
+            : <String>[];
         final entry = await ref.read(proxyClientProvider).mergeEntry(
-              existingBody: existingEntryTyped.bodyMarkdown,
+              existingBody: existingEntryTyped?.bodyMarkdown ?? '',
               newTranscript: normalizedText,
               previousQuestions: previousQuestionsTyped,
               existingTags: existingTagsTyped,
@@ -410,8 +417,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         debugPrint('[Pipeline] merge (typed): ${sw.elapsedMilliseconds}ms');
         sw.reset(); sw.start();
 
-        await ref.read(entryRepositoryProvider).mergeEntry(
-              date: isoDate,
+        entryId = await ref.read(entryRepositoryProvider).mergeEntry(
+              entryId: targetEntryId,
               rawTranscript: rawTranscript,
               normalizedText: normalizedText,
               bodyMarkdown: entry.bodyMarkdown,
@@ -425,7 +432,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         debugPrint('[Pipeline] save (typed, merged): ${sw.elapsedMilliseconds}ms');
         if (mounted) {
           setState(() => _state = _RecordingState.idle);
-          context.push('/topics', extra: (
+          context.push('/topics?entryId=$entryId', extra: (
+            entryId: entryId,
             date: date,
             duration: '00:00',
             topics: topics,
@@ -454,7 +462,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       debugPrint('[Pipeline] generate (typed): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      await ref.read(entryRepositoryProvider).saveEntry(
+      entryId = await ref.read(entryRepositoryProvider).saveEntry(
             date: isoDate,
             rawTranscript: rawTranscript,
             normalizedText: normalizedText,
@@ -474,7 +482,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
     if (mounted) {
       setState(() => _state = _RecordingState.idle);
-      context.push('/topics', extra: (
+      context.push('/topics?entryId=$entryId', extra: (
+        entryId: entryId,
         date: date,
         duration: '00:00',
         topics: topics,
@@ -563,99 +572,29 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     if (!success || !mounted) return;
     await runHistorySyncWithProgress(context, ref);
     if (!mounted) return;
-    await _checkForExistingTodayEntry();
+    await _reparentOrphanEntryIfAny();
   }
 
-  Future<void> _checkForExistingTodayEntry() async {
+  /// After a sign-in, an entry recorded during the preceding anonymous
+  /// session (if any) becomes one of the now-signed-in account's own
+  /// independent entries — reparented in place, never merged into another
+  /// entry's content, since a day can hold any number of separate entries.
+  /// Heute always stays on this screen, ready for a fresh recording.
+  Future<void> _reparentOrphanEntryIfAny() async {
     if (_checkingEntry) return;
     if (!mounted) return;
     _checkingEntry = true;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: Center(
-          child: Card(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                      color: Theme.of(ctx).colorScheme.primary),
-                  const SizedBox(height: 20),
-                  Text('Eintrag wird geladen …',
-                      style: Theme.of(ctx).textTheme.bodyMedium),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
 
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final repo = ref.read(entryRepositoryProvider);
     final currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-    // Detect recording made as anonymous user before this sign-in.
     final orphan = await repo.getOrphanedEntryForDate(isoDate, currentUid);
-
-    await repo.syncEntryFromFirestoreIfMissing(isoDate);
-    var entry = await repo.getLocalEntryForDate(isoDate);
-
-    // If we recorded as anonymous AND the account already has an entry today,
-    // merge them so nothing is lost.
-    if (orphan != null && entry != null) {
-      final orphanTranscripts = await repo.getTranscriptsForEntry(orphan.id);
-      final combined = orphanTranscripts
-          .map((t) => t.normalizedContent.isNotEmpty ? t.normalizedContent : t.content)
-          .where((s) => s.isNotEmpty)
-          .join('\n\n');
-      if (combined.isNotEmpty) {
-        try {
-          final merged = await ref.read(proxyClientProvider).mergeEntry(
-                existingBody: entry.bodyMarkdown,
-                newTranscript: combined,
-                previousQuestions:
-                    (jsonDecode(entry.followUpQuestions) as List).cast<String>(),
-              );
-          await repo.mergeEntry(
-            date: isoDate,
-            rawTranscript: combined,
-            normalizedText: combined,
-            bodyMarkdown: merged.bodyMarkdown,
-            mood: merged.mood,
-            moodScore: merged.moodScore,
-            followUpQuestions: merged.followUpQuestions,
-            topics: merged.topics,
-            transcriptReason: 'continuation',
-          );
-          entry = await repo.getLocalEntryForDate(isoDate);
-        } catch (_) {
-          // Merge failed — fall through and show the cloud entry unchanged.
-        }
-      }
-      // Clean up the orphaned anonymous entry.
-      unawaited(repo.deleteEntryById(orphan.id).catchError((_) {}));
+    if (orphan != null) {
+      await repo.reparentEntryToUser(orphan.id, currentUid);
     }
 
     _checkingEntry = false;
-    if (!mounted) return;
-    final nav = Navigator.of(context, rootNavigator: true);
-    if (nav.canPop()) nav.pop();
-
-    if (entry == null) return;
-
-    // An entry for today already exists — jump to the diary history instead
-    // of re-opening the topics review flow, which is for a just-finished
-    // recording, not for browsing an already-saved entry.
-    if (mounted) context.go('/history');
   }
 
   String get _transcriptReason => switch (widget.recordingContext) {
@@ -847,7 +786,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                 if (!success || !mounted) return;
                 await runHistorySyncWithProgress(context, ref);
                 if (!mounted) return;
-                await _checkForExistingTodayEntry();
+                await _reparentOrphanEntryIfAny();
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),

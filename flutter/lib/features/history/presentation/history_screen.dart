@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/proxy_client.dart' show TopicDto;
 import '../../../shared/widgets/profile_avatar_button.dart';
 
 // ─── Palette (mirrors _topicPalette in topics_review_screen.dart) ────────────
@@ -40,6 +41,7 @@ class _EntryPreview {
     this.allTopics = const [],
     this.entryDate = '',
     this.createdTime = '',
+    this.rawEntry,
   });
 
   final DateTime date;
@@ -52,6 +54,9 @@ class _EntryPreview {
   final List<Map<String, dynamic>> allTopics;
   final String entryDate;
   final String createdTime; // "HH:mm Uhr" — shown when durationSeconds == 0
+  // Full Drift row, needed for id-based edit/delete. Null only for the
+  // mock-data (dev "Fake Verlauf-Daten") path.
+  final db.Entry? rawEntry;
 }
 
 // ─── Index entry (for scrubber) ───────────────────────────────────────────────
@@ -203,6 +208,15 @@ Map<int, Map<int, List<_EntryPreview>>> _groupEntries(
 const _kYearHeaderH = 57.0;
 const _kMonthHeaderH = 44.0;
 const _kCardH = 130.0;
+const _kDayDividerH = 28.0;
+
+int _uniqueDayCount(List<_EntryPreview> entries) {
+  final days = <DateTime>{};
+  for (final e in entries) {
+    days.add(DateTime(e.date.year, e.date.month, e.date.day));
+  }
+  return days.length;
+}
 
 const _monthNamesShort = [
   '',
@@ -242,7 +256,9 @@ const _monthNamesShort = [
         estimatedOffset: offset,
       ));
       offset += _kMonthHeaderH;
-      offset += grouped[year]![month]!.length * _kCardH;
+      final monthEntries = grouped[year]![month]!;
+      offset += monthEntries.length * _kCardH;
+      offset += _uniqueDayCount(monthEntries) * _kDayDividerH;
     }
   }
 
@@ -275,6 +291,9 @@ bool _isToday(DateTime dt) {
   final now = DateTime.now();
   return dt.year == now.year && dt.month == now.month && dt.day == now.day;
 }
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 String _formatDuration(int seconds) => '${(seconds / 60).round()} Min';
 
@@ -353,6 +372,7 @@ _EntryPreview _toPreview(db.Entry e, int index) {
     allTopics: topics,
     entryDate: e.date,
     createdTime: _formatCreatedTime(e.createdAt),
+    rawEntry: e,
   );
 }
 
@@ -404,6 +424,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: _appBar(context),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.go('/'),
+        tooltip: 'Neuer Eintrag',
+        child: const Icon(Icons.add_rounded),
+      ),
       body: Stack(
         children: [
           CustomScrollView(
@@ -420,8 +445,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           sliver: SliverList.builder(
                             itemCount: grouped[year]![month]!.length,
                             itemBuilder: (ctx, i) {
-                              final e = grouped[year]![month]![i];
+                              final monthEntries = grouped[year]![month]!;
+                              final e = monthEntries[i];
                               final today = _isToday(e.date);
+                              final isFirstOfDay = i == 0 ||
+                                  !_isSameDay(
+                                      monthEntries[i - 1].date, e.date);
                               var card = _EntryCard(entry: e)
                                   .animate()
                                   .fadeIn(duration: 250.ms, delay: (i * 30).ms)
@@ -437,7 +466,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                           .withValues(alpha: 0.18),
                                     );
                               }
-                              return card;
+                              if (!isFirstOfDay) return card;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _DayDivider(date: e.date),
+                                  card,
+                                ],
+                              );
                             },
                           ),
                         ),
@@ -591,6 +627,32 @@ class _MonthHeader extends StatelessWidget {
             color: cs.primary,
             letterSpacing: 0.1,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Day divider (groups multiple same-day entries) ──────────────────────────
+
+class _DayDivider extends StatelessWidget {
+  const _DayDivider({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final label = _isToday(date) ? 'Heute' : _formatEntryDate(date);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(
+        label,
+        style: tt.labelSmall?.copyWith(
+          color: cs.outline,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -787,8 +849,9 @@ class _EntryDetailSheet extends ConsumerWidget {
       ),
     );
 
-    if (confirmed == true && context.mounted) {
-      await ref.read(entryRepositoryProvider).deleteEntryForDate(entry.entryDate);
+    final id = entry.rawEntry?.id;
+    if (confirmed == true && id != null && context.mounted) {
+      await ref.read(entryRepositoryProvider).deleteEntryById(id);
       if (context.mounted) Navigator.of(context).pop();
     }
   }
@@ -902,12 +965,29 @@ class _EntryDetailSheet extends ConsumerWidget {
                     const SizedBox(height: 28),
                     Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
                     const SizedBox(height: 8),
-                    if (_isToday(entry.date)) ...[
+                    if (entry.rawEntry != null) ...[
                       Center(
                         child: TextButton.icon(
                           onPressed: () {
+                            final e = entry.rawEntry!;
                             Navigator.of(context).pop();
-                            context.push('/topics');
+                            context.push('/topics?entryId=${e.id}', extra: (
+                              entryId: e.id,
+                              date: _formatEntryDate(entry.date),
+                              duration: entry.durationSeconds > 0
+                                  ? _formatDuration(entry.durationSeconds)
+                                  : '',
+                              topics: entry.allTopics
+                                  .map((t) => TopicDto.fromJson(t))
+                                  .toList(),
+                              normalizedTranscript: '',
+                              bodyMarkdown: e.bodyMarkdown,
+                              mood: e.mood,
+                              moodScore: e.moodScore,
+                              followUpQuestions:
+                                  _parseTags(e.followUpQuestions),
+                              transcriptReason: 'initial',
+                            ));
                           },
                           icon: Icon(Icons.edit_outlined,
                               color: cs.primary, size: 18),

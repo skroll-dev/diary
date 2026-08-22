@@ -54,7 +54,7 @@ class EntryRepository {
 
   // ── Save new entry (first recording of the day) ─────────────────────────────
 
-  Future<void> saveEntry({
+  Future<String> saveEntry({
     required String date,
     required String rawTranscript,
     required String normalizedText,
@@ -121,12 +121,14 @@ class EntryRepository {
       durationSeconds: durationSeconds,
       now: now,
     ));
+
+    return entryId;
   }
 
-  // ── Merge new recording into existing day entry ─────────────────────────────
+  // ── Merge new recording into an existing entry ───────────────────────────────
 
   Future<String> mergeEntry({
-    required String date,
+    required String entryId,
     required String rawTranscript,
     required String normalizedText,
     required String bodyMarkdown,
@@ -144,33 +146,14 @@ class EntryRepository {
     final questionsJson = jsonEncode(followUpQuestions);
     final tagsJson = jsonEncode(tags);
 
-    // Find the existing entry for this date
-    final existing = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
-          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
-          ..limit(1))
-        .getSingleOrNull();
-
+    final existing = await getEntryById(entryId);
     if (existing == null) {
-      // Shouldn't happen, but fall back to saveEntry
-      await saveEntry(
-        date: date,
-        rawTranscript: rawTranscript,
-        normalizedText: normalizedText,
-        durationSeconds: 0,
-        bodyMarkdown: bodyMarkdown,
-        mood: mood,
-        moodScore: moodScore,
-        followUpQuestions: followUpQuestions,
-        topics: topics,
-        transcriptReason: transcriptReason,
-      );
-      return date;
+      debugPrint('[EntryRepository] mergeEntry: no entry found for id $entryId');
+      return entryId;
     }
 
     await _db.transaction(() async {
-      await (_db.update(_db.entries)
-            ..where((e) => e.id.equals(existing.id)))
+      await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
           .write(EntriesCompanion(
             bodyMarkdown: Value(bodyMarkdown),
             mood: Value(mood),
@@ -184,7 +167,7 @@ class EntryRepository {
       await _db.into(_db.rawTranscripts).insert(
             RawTranscriptsCompanion.insert(
               id: transcriptId,
-              entryId: existing.id,
+              entryId: entryId,
               content: rawTranscript,
               normalizedContent: Value(normalizedText),
               reason: Value(transcriptReason),
@@ -195,8 +178,7 @@ class EntryRepository {
 
     unawaited(_updateFirestore(
       uid: user.uid,
-      entryId: existing.id,
-      date: date,
+      entryId: entryId,
       bodyMarkdown: bodyMarkdown,
       mood: mood,
       moodScore: moodScore,
@@ -210,13 +192,13 @@ class EntryRepository {
       now: now,
     ));
 
-    return existing.id;
+    return entryId;
   }
 
   // ── Update entry fields after re-derivation ─────────────────────────────────
 
   Future<void> updateEntry({
-    required String date,
+    required String entryId,
     required String bodyMarkdown,
     required String mood,
     required double moodScore,
@@ -224,14 +206,12 @@ class EntryRepository {
     required List<TopicDto> topics,
     List<String> tags = const [],
   }) async {
-    final user = await _auth.getUser();
     final now = DateTime.now().toIso8601String();
     final topicsJson = jsonEncode(topics.map((t) => t.toJson()).toList());
     final questionsJson = jsonEncode(followUpQuestions);
     final tagsJson = jsonEncode(tags);
 
-    await (_db.update(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
+    await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
         .write(EntriesCompanion(
           bodyMarkdown: Value(bodyMarkdown),
           mood: Value(mood),
@@ -289,26 +269,6 @@ class EntryRepository {
 
   // ── Delete the full entry for a date (transcripts first, then entry) ─────────
 
-  Future<void> deleteEntryForDate(String date) async {
-    final user = await _auth.getUser();
-    // Select+delete-per-row (rather than a single WHERE-scoped delete) so
-    // this also cleans up any duplicate rows a device may have accumulated
-    // for this date — see the entries.synced/duplicate-row bug in issue #4.
-    final entries = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
-        .get();
-    if (entries.isEmpty) return;
-    for (final entry in entries) {
-      await (_db.delete(_db.rawTranscripts)
-            ..where((t) => t.entryId.equals(entry.id)))
-          .go();
-    }
-    await (_db.delete(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid)))
-        .go();
-    unawaited(_deleteFromFirestore(uid: user.uid, date: date));
-  }
-
   /// Pushes every entry that hasn't reached Firestore yet (`synced == false`)
   /// for [uid] (defaults to the current user). `saveEntry`/`mergeEntry` fire
   /// their Firestore writes unawaited for a snappy UI, so an entry can still
@@ -327,44 +287,51 @@ class EntryRepository {
 
     for (final entry in pending) {
       try {
-        final transcripts = await getTranscriptsForEntry(entry.id);
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(targetUid)
-            .collection('entries')
-            .doc(entry.date)
-            .set({
-          'id': entry.id,
-          'userId': targetUid,
-          'date': entry.date,
-          'bodyMarkdown': entry.bodyMarkdown,
-          'mood': entry.mood,
-          'moodScore': entry.moodScore,
-          'followUpQuestions': jsonDecode(entry.followUpQuestions),
-          'topics': jsonDecode(entry.topics),
-          'tags': jsonDecode(entry.tags),
-          'durationSeconds': entry.durationSeconds,
-          'language': entry.language,
-          'version': entry.version,
-          'createdAt': entry.createdAt,
-          'updatedAt': entry.updatedAt,
-          'rawTranscripts': transcripts
-              .map((t) => {
-                    'id': t.id,
-                    'raw': t.content,
-                    'normalized': t.normalizedContent,
-                    'reason': t.reason,
-                    'createdAt': t.createdAt,
-                  })
-              .toList(),
-        }, SetOptions(merge: true));
-
-        await (_db.update(_db.entries)..where((e) => e.id.equals(entry.id)))
-            .write(const EntriesCompanion(synced: Value(true)));
+        await _pushEntryToFirestore(entry, targetUid);
       } catch (e) {
-        debugPrint('[EntryRepository] flushPendingSyncs failed for ${entry.date}: $e');
+        debugPrint('[EntryRepository] flushPendingSyncs failed for ${entry.id}: $e');
       }
     }
+  }
+
+  /// Writes the full state of [entry] (plus its transcripts) to
+  /// `users/{targetUid}/entries/{entry.id}` and marks it synced. Shared by
+  /// [flushPendingSyncs] and [reparentEntryToUser].
+  Future<void> _pushEntryToFirestore(Entry entry, String targetUid) async {
+    final transcripts = await getTranscriptsForEntry(entry.id);
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUid)
+        .collection('entries')
+        .doc(entry.id)
+        .set({
+      'id': entry.id,
+      'userId': targetUid,
+      'date': entry.date,
+      'bodyMarkdown': entry.bodyMarkdown,
+      'mood': entry.mood,
+      'moodScore': entry.moodScore,
+      'followUpQuestions': jsonDecode(entry.followUpQuestions),
+      'topics': jsonDecode(entry.topics),
+      'tags': jsonDecode(entry.tags),
+      'durationSeconds': entry.durationSeconds,
+      'language': entry.language,
+      'version': entry.version,
+      'createdAt': entry.createdAt,
+      'updatedAt': entry.updatedAt,
+      'rawTranscripts': transcripts
+          .map((t) => {
+                'id': t.id,
+                'raw': t.content,
+                'normalized': t.normalizedContent,
+                'reason': t.reason,
+                'createdAt': t.createdAt,
+              })
+          .toList(),
+    }, SetOptions(merge: true));
+
+    await (_db.update(_db.entries)..where((e) => e.id.equals(entry.id)))
+        .write(const EntriesCompanion(synced: Value(true)));
   }
 
   /// Wipes every locally cached entry/transcript on this device (all users,
@@ -386,15 +353,6 @@ class EntryRepository {
     }
   }
 
-  Future<Entry?> getLocalEntryForDate(String date) async {
-    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
-    return (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
-          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
-          ..limit(1))
-        .getSingleOrNull();
-  }
-
   /// Returns a local entry for [date] recorded under a DIFFERENT user (e.g. an
   /// anonymous session that was active before sign-in). Used to detect conflicts.
   Future<Entry?> getOrphanedEntryForDate(String date, String currentUid) async {
@@ -413,12 +371,33 @@ class EntryRepository {
   }
 
   Future<void> deleteEntryById(String entryId) async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
     await (_db.delete(_db.rawTranscripts)
           ..where((t) => t.entryId.equals(entryId)))
         .go();
     await (_db.delete(_db.entries)
           ..where((e) => e.id.equals(entryId)))
         .go();
+    unawaited(_deleteFromFirestore(uid: user.uid, entryId: entryId));
+  }
+
+  Future<Entry?> getEntryById(String entryId) {
+    return (_db.select(_db.entries)..where((e) => e.id.equals(entryId)))
+        .getSingleOrNull();
+  }
+
+  /// Reassigns a locally-orphaned entry (recorded under a previous anonymous
+  /// session, see [getOrphanedEntryForDate]) to the now-signed-in [newUserId],
+  /// and pushes it to that account's Firestore collection as its own
+  /// independent entry — it is never merged into another entry's content.
+  Future<void> reparentEntryToUser(String entryId, String newUserId) async {
+    await (_db.update(_db.entries)..where((e) => e.id.equals(entryId))).write(
+      EntriesCompanion(userId: Value(newUserId), synced: const Value(false)),
+    );
+    final entry = await getEntryById(entryId);
+    if (entry != null) {
+      unawaited(_pushEntryToFirestore(entry, newUserId));
+    }
   }
 
   Future<int> getEntryCount() async {
@@ -453,56 +432,17 @@ class EntryRepository {
     );
   }
 
-  // ── Firestore → Drift sync-down ──────────────────────────────────────────────
-
-  // Returns true if an entry for [date] exists (already in Drift or synced from
-  // Firestore). Inserts into Drift on first call so TopicsReviewScreen can pick
-  // it up via its existing _loadFromDbIfEmpty path.
-  Future<bool> syncEntryFromFirestoreIfMissing(String date) async {
-    // Use FirebaseAuth.instance.currentUser directly — Riverpod state can lag
-    // behind immediately after a sign-in that changes the UID.
-    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
-    // ignore: avoid_print
-    print('[EntryRepository] sync: date=$date uid=${user.uid} anon=${user.isAnonymous}');
-
-    // Fast path — already in Drift
-    final existing = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
-          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) {
-      // ignore: avoid_print
-      print('[EntryRepository] sync: found in Drift, skipping Firestore');
-      return true;
-    }
-
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('entries')
-          .doc(date)
-          .get();
-      // ignore: avoid_print
-      print('[EntryRepository] sync: Firestore doc.exists=${doc.exists}');
-      if (!doc.exists) return false;
-
-      await _insertEntryFromFirestoreDoc(doc, user.uid, date);
-      return true;
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('[EntryRepository] syncEntryFromFirestoreIfMissing failed: $e\n$st');
-      return false;
-    }
-  }
-
   // ── Firestore → Drift bulk sync (full history, e.g. on login) ───────────────
 
   /// Fetches every entry doc under `users/{uid}/entries` and inserts any that
-  /// are missing locally. Never overwrites a date that already exists in
-  /// Drift. Reports (loaded, total) progress after each doc is processed —
-  /// [onProgress] is called once with (0, total) before the loop starts.
+  /// are missing locally. Doc IDs are entry ids for docs written after the
+  /// multi-entry-per-day migration, but may still be legacy date strings for
+  /// older docs — either way `data['id']` is the authoritative entry id, so
+  /// dedup and insertion key off that (falling back to `doc.id`/`doc data
+  /// date` for docs written before the `id`/`date` fields existed). Never
+  /// overwrites an entry that already exists locally. Reports (loaded,
+  /// total) progress after each doc is processed — [onProgress] is called
+  /// once with (0, total) before the loop starts.
   Future<int> syncAllEntriesFromFirestore({
     void Function(int loaded, int total)? onProgress,
   }) async {
@@ -518,18 +458,21 @@ class EntryRepository {
     onProgress?.call(0, total);
     if (total == 0) return 0;
 
-    final localDates = (await (_db.select(_db.entries)
+    final localEntryIds = (await (_db.select(_db.entries)
               ..where((e) => e.userId.equals(user.uid)))
             .get())
-        .map((e) => e.date)
+        .map((e) => e.id)
         .toSet();
 
     var inserted = 0;
     var loaded = 0;
     for (final doc in snapshot.docs) {
-      if (!localDates.contains(doc.id)) {
+      final data = doc.data();
+      final resolvedEntryId = data['id'] as String? ?? doc.id;
+      if (!localEntryIds.contains(resolvedEntryId)) {
         try {
-          await _insertEntryFromFirestoreDoc(doc, user.uid, doc.id);
+          final resolvedDate = data['date'] as String? ?? doc.id;
+          await _insertEntryFromFirestoreDoc(doc, user.uid, resolvedDate);
           inserted++;
         } catch (e, st) {
           // ignore: avoid_print
@@ -618,37 +561,21 @@ class EntryRepository {
     return fallback;
   }
 
-  // ── Read helpers for re-derivation ───────────────────────────────────────────
-
-  Future<List<RawTranscript>> getTranscriptsForDate(String date) async {
-    final user = await _auth.getUser();
-    final entry = await (_db.select(_db.entries)
-          ..where((e) => e.date.equals(date) & e.userId.equals(user.uid))
-          ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
-          ..limit(1))
-        .getSingleOrNull();
-    if (entry == null) return [];
-    return (_db.select(_db.rawTranscripts)
-          ..where((t) => t.entryId.equals(entry.id))
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .get();
-  }
-
   // ── Firestore sync ────────────────────────────────────────────────────────────
 
   Future<void> _deleteFromFirestore({
     required String uid,
-    required String date,
+    required String entryId,
   }) async {
     try {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('entries')
-          .doc(date)
+          .doc(entryId)
           .delete();
     } catch (e) {
-      debugPrint('[EntryRepository] _deleteFromFirestore failed for $date: $e');
+      debugPrint('[EntryRepository] _deleteFromFirestore failed for $entryId: $e');
     }
   }
 
@@ -674,7 +601,7 @@ class EntryRepository {
           .collection('users')
           .doc(uid)
           .collection('entries')
-          .doc(date)
+          .doc(entryId)
           .set({
         'id': entryId,
         'userId': uid,
@@ -704,7 +631,7 @@ class EntryRepository {
       await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
           .write(const EntriesCompanion(synced: Value(true)));
     } catch (e) {
-      debugPrint('[EntryRepository] _syncToFirestore failed for $date: $e');
+      debugPrint('[EntryRepository] _syncToFirestore failed for $entryId: $e');
       // Best-effort — remains unsynced until next save or flushPendingSyncs()
     }
   }
@@ -712,7 +639,6 @@ class EntryRepository {
   Future<void> _updateFirestore({
     required String uid,
     required String entryId,
-    required String date,
     required String bodyMarkdown,
     required String mood,
     required double moodScore,
@@ -730,7 +656,7 @@ class EntryRepository {
           .collection('users')
           .doc(uid)
           .collection('entries')
-          .doc(date)
+          .doc(entryId)
           .set({
         'bodyMarkdown': bodyMarkdown,
         'mood': mood,
@@ -753,7 +679,7 @@ class EntryRepository {
       await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
           .write(const EntriesCompanion(synced: Value(true)));
     } catch (e) {
-      debugPrint('[EntryRepository] _updateFirestore failed for $date: $e');
+      debugPrint('[EntryRepository] _updateFirestore failed for $entryId: $e');
       // Best-effort — remains unsynced until next save or flushPendingSyncs()
     }
   }

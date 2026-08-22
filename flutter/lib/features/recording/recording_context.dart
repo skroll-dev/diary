@@ -7,7 +7,12 @@ final class FreshRecording extends RecordingContext {
 }
 
 final class ExtendingTopic extends RecordingContext {
-  const ExtendingTopic({required this.topicTitle, this.followUpHint});
+  const ExtendingTopic({
+    required this.entryId,
+    required this.topicTitle,
+    this.followUpHint,
+  });
+  final String entryId;
   final String topicTitle;
   final String? followUpHint;
 }
@@ -15,5 +20,6 @@ final class ExtendingTopic extends RecordingContext {
 /// General continuation — user keeps talking without a specific topic target.
 /// Mein KI-Tagebuch decides which topic(s) the new content belongs to.
 final class ContinuingEntry extends RecordingContext {
-  const ContinuingEntry();
+  const ContinuingEntry({required this.entryId});
+  final String entryId;
 }

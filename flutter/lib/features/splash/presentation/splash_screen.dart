@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
@@ -96,34 +95,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _pulseController.repeat(reverse: true);
 
-    // Run min-1s hold + DB check + (if needed) full history sync in parallel
-    final results = await Future.wait([
+    // Run min-1s hold + (if needed) full history sync in parallel. Heute
+    // always lands ready for a fresh recording — a day can hold any number
+    // of independent entries now, so there's no "already has an entry"
+    // redirect to decide between.
+    await Future.wait([
       Future.delayed(const Duration(milliseconds: 1200)),
-      _checkTodaysEntry(),
       _syncFullHistoryIfNeeded(),
     ]);
-
-    final destination = results[1] as _Destination;
 
     // Exit
     _pulseController.stop();
     await _exitController.forward();
-    if (mounted) _navigate(destination);
-  }
-
-  Future<_Destination> _checkTodaysEntry() async {
-    final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    try {
-      final repo = ref.read(entryRepositoryProvider);
-      await repo.syncEntryFromFirestoreIfMissing(isoDate);
-      final entry = await repo.getLocalEntryForDate(isoDate);
-      // Today already has a saved entry — land on the "Mein Tagebuch"
-      // overview with it highlighted, not back in the post-recording review
-      // flow (that's only entered right after finishing a recording).
-      return entry == null ? _Destination.recording : _Destination.history;
-    } catch (_) {
-      return _Destination.recording;
-    }
+    if (mounted) context.go('/');
   }
 
   // One-time (per device, per account) backfill of full entry history from
@@ -153,15 +137,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       // Best-effort — today's entry check still proceeds independently.
     } finally {
       if (mounted) setState(() => _isSyncingHistory = false);
-    }
-  }
-
-  void _navigate(_Destination dest) {
-    switch (dest) {
-      case _Destination.history:
-        context.go('/history');
-      case _Destination.recording:
-        context.go('/');
     }
   }
 
@@ -288,7 +263,3 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     );
   }
 }
-
-// ── Destination ───────────────────────────────────────────────────────────────
-
-enum _Destination { recording, history }
