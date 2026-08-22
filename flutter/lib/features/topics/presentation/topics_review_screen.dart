@@ -15,6 +15,7 @@ import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
+import '../../../shared/constants/transcript_limits.dart';
 
 // ── Internal data models ───────────────────────────────────────────────────────
 
@@ -113,6 +114,13 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   double _regenPercent = 0.0;
   String _regenStep = '';
   Timer? _regenTimer;
+
+  int get _combinedTranscriptChars =>
+      _recordings.fold(0, (sum, r) => sum + r.normalizedText.length);
+
+  bool get _isNearTranscriptLimit =>
+      _combinedTranscriptChars >=
+      kMaxTranscriptChars * kTranscriptWarnThreshold;
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -333,11 +341,45 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             tags: entry.tags,
             transcriptReason: reason,
           ).then((_) => _loadTranscriptIds()).catchError((_) {}));
+    } on ProxyValidationException catch (e) {
+      if (mounted) setState(() => _isRegenerating = false);
+      await _retryWithEditedText(
+        offendingText: rawTranscript,
+        message: e.message,
+        onRetry: (edited) => _runMergePipeline(edited, ctx),
+      );
+      return;
     } catch (e) {
       debugPrint('[TopicsReviewScreen] merge error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Beim Ergänzen ist etwas schiefgelaufen. Bitte versuche es erneut.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isRegenerating = false);
     }
+  }
+
+  /// Shows the offending text pre-filled in an editable sheet, and retries
+  /// [onRetry] with the user's shortened version if they confirm.
+  Future<void> _retryWithEditedText({
+    required String offendingText,
+    required String message,
+    required Future<void> Function(String edited) onRetry,
+  }) async {
+    if (!mounted) return;
+    final edited = await showTranscriptInputSheet(
+      context,
+      title: 'Text ist zu lang',
+      hint: message,
+      initialValue: offendingText,
+      confirmLabel: 'Erneut senden',
+    );
+    if (edited == null || edited.isEmpty || !mounted) return;
+    await onRetry(edited);
   }
 
   // ── Transcript edit/delete ────────────────────────────────────────────────────
@@ -387,11 +429,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     await _rederiveFromTranscripts();
   }
 
-  Future<void> _rederiveFromTranscripts() async {
+  Future<void> _rederiveFromTranscripts([String? overrideText]) async {
     setState(() => _isRegenerating = true);
+    final combined =
+        overrideText ?? _recordings.map((r) => r.normalizedText).join('\n\n');
     try {
-      final combined =
-          _recordings.map((r) => r.normalizedText).join('\n\n');
       final sw = Stopwatch()..start();
       _setRegenStep('Mein KI-Tagebuch denkt nach …', 0.0, 1.0);
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
@@ -420,8 +462,23 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           _entrance.forward(from: 0.0);
         });
       }
+    } on ProxyValidationException catch (e) {
+      if (mounted) setState(() => _isRegenerating = false);
+      await _retryWithEditedText(
+        offendingText: combined,
+        message: e.message,
+        onRetry: (edited) => _rederiveFromTranscripts(edited),
+      );
+      return;
     } catch (e) {
       debugPrint('[TopicsReviewScreen] re-derive error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Beim Aktualisieren ist etwas schiefgelaufen. Bitte versuche es erneut.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isRegenerating = false);
     }
@@ -756,9 +813,21 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_isNearTranscriptLimit)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Dein Eintrag ist heute schon sehr umfangreich — '
+                        'bitte kürze bestehenden Text, um mehr zu ergänzen.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.error,
+                            ),
+                      ),
+                    ),
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        _showRecordingOverlay(const ContinuingEntry()),
+                    onPressed: _isNearTranscriptLimit
+                        ? null
+                        : () => _showRecordingOverlay(const ContinuingEntry()),
                     icon: const Icon(Icons.mic_none_rounded, size: 18),
                     label: const Text('Eintrag vertiefen'),
                     style: OutlinedButton.styleFrom(
@@ -950,15 +1019,26 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             ],
           ),
         ),
+        if (_isNearTranscriptLimit)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              'Dein Eintrag ist heute schon sehr umfangreich — '
+              'bitte kürze bestehenden Text, um mehr zu ergänzen.',
+              style: tt.bodySmall?.copyWith(color: cs.error),
+            ),
+          ),
         ...List.generate(
           _followUpQuestions.length,
           (i) => InkWell(
-            onTap: () => _showRecordingOverlay(
-              ExtendingTopic(
-                topicTitle: 'Mein KI-Tagebuch fragt',
-                followUpHint: _followUpQuestions[i],
-              ),
-            ),
+            onTap: _isNearTranscriptLimit
+                ? null
+                : () => _showRecordingOverlay(
+                      ExtendingTopic(
+                        topicTitle: 'Mein KI-Tagebuch fragt',
+                        followUpHint: _followUpQuestions[i],
+                      ),
+                    ),
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -968,14 +1048,18 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Icon(Icons.chat_bubble_outline_rounded,
-                        size: 16, color: cs.primary),
+                        size: 16,
+                        color: _isNearTranscriptLimit
+                            ? cs.outline
+                            : cs.primary),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _followUpQuestions[i],
                       style: tt.bodyMedium?.copyWith(
-                        color: cs.onSurface.withValues(alpha: 0.75),
+                        color: cs.onSurface.withValues(
+                            alpha: _isNearTranscriptLimit ? 0.4 : 0.75),
                         fontStyle: FontStyle.italic,
                       ),
                     ),

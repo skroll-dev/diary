@@ -16,11 +16,15 @@ router = APIRouter()
 
 MoodType = Literal["happy", "calm", "neutral", "tense", "sad", "mixed"]
 
+# Must stay in sync with `kMaxTranscriptChars` in
+# flutter/lib/shared/constants/transcript_limits.dart
+MAX_TRANSCRIPT_CHARS = 20_000
+
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
 class NormalizeRequest(BaseModel):
-    transcript: str = Field(..., min_length=5, max_length=8_000)
+    transcript: str = Field(..., min_length=5, max_length=MAX_TRANSCRIPT_CHARS)
 
 
 class NormalizeResponse(BaseModel):
@@ -28,14 +32,14 @@ class NormalizeResponse(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    transcript: str = Field(..., min_length=10, max_length=8_000)
+    transcript: str = Field(..., min_length=10, max_length=MAX_TRANSCRIPT_CHARS)
     language: str = Field(default="de")
     existing_tags: list[str] = Field(default_factory=list)
 
 
 class MergeRequest(BaseModel):
-    existing_entry: str = Field(..., min_length=10, max_length=5_000)
-    new_transcript: str = Field(..., min_length=10, max_length=4_000)
+    existing_entry: str = Field(..., min_length=10, max_length=MAX_TRANSCRIPT_CHARS)
+    new_transcript: str = Field(..., min_length=10, max_length=MAX_TRANSCRIPT_CHARS)
     previous_questions: list[str] = Field(default_factory=list)
     language: str = Field(default="de")
     existing_tags: list[str] = Field(default_factory=list)

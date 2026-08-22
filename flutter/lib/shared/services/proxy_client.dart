@@ -12,6 +12,37 @@ import 'recording_service.dart' show AudioData, RecordingService;
 
 part 'proxy_client.g.dart';
 
+/// Thrown when the backend rejects a request with a 422 Pydantic validation
+/// error (e.g. a transcript exceeding the length limit).
+class ProxyValidationException implements Exception {
+  ProxyValidationException(this.field, this.message);
+  final String field;
+  final String message;
+
+  @override
+  String toString() => 'ProxyValidationException($field: $message)';
+}
+
+/// Parses a FastAPI 422 response body into a [ProxyValidationException], or
+/// rethrows [e] unchanged if it isn't a recognizable validation error.
+Never _rethrowAsValidationError(DioException e) {
+  if (e.response?.statusCode == 422) {
+    final detail = e.response?.data is Map
+        ? (e.response?.data as Map)['detail']
+        : null;
+    if (detail is List && detail.isNotEmpty) {
+      final first = detail.first;
+      if (first is Map) {
+        final loc = first['loc'];
+        final field = (loc is List && loc.isNotEmpty) ? '${loc.last}' : '';
+        final msg = first['msg'] as String? ?? 'Validation error';
+        throw ProxyValidationException(field, msg);
+      }
+    }
+  }
+  throw e;
+}
+
 class TopicDto {
   const TopicDto({
     required this.title,
@@ -213,11 +244,15 @@ class ProxyClient {
 
   Future<String> normalize(String transcript) async {
     final dio = await _dio();
-    final resp = await dio.post(
-      '/entries/normalize',
-      data: {'transcript': transcript},
-    );
-    return resp.data['normalized_text'] as String;
+    try {
+      final resp = await dio.post(
+        '/entries/normalize',
+        data: {'transcript': transcript},
+      );
+      return resp.data['normalized_text'] as String;
+    } on DioException catch (e) {
+      _rethrowAsValidationError(e);
+    }
   }
 
   Future<EntryDto> generateEntry(
@@ -225,14 +260,18 @@ class ProxyClient {
     List<String> existingTags = const [],
   }) async {
     final dio = await _dio();
-    final resp = await dio.post(
-      '/entries/generate',
-      data: {
-        'transcript': transcript,
-        if (existingTags.isNotEmpty) 'existing_tags': existingTags,
-      },
-    );
-    return EntryDto.fromJson(resp.data as Map<String, dynamic>);
+    try {
+      final resp = await dio.post(
+        '/entries/generate',
+        data: {
+          'transcript': transcript,
+          if (existingTags.isNotEmpty) 'existing_tags': existingTags,
+        },
+      );
+      return EntryDto.fromJson(resp.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      _rethrowAsValidationError(e);
+    }
   }
 
   Future<EntryDto> mergeEntry({
@@ -242,16 +281,20 @@ class ProxyClient {
     List<String> existingTags = const [],
   }) async {
     final dio = await _dio();
-    final resp = await dio.post(
-      '/entries/merge',
-      data: {
-        'existing_entry': existingBody,
-        'new_transcript': newTranscript,
-        'previous_questions': previousQuestions,
-        if (existingTags.isNotEmpty) 'existing_tags': existingTags,
-      },
-    );
-    return EntryDto.fromJson(resp.data as Map<String, dynamic>);
+    try {
+      final resp = await dio.post(
+        '/entries/merge',
+        data: {
+          'existing_entry': existingBody,
+          'new_transcript': newTranscript,
+          'previous_questions': previousQuestions,
+          if (existingTags.isNotEmpty) 'existing_tags': existingTags,
+        },
+      );
+      return EntryDto.fromJson(resp.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      _rethrowAsValidationError(e);
+    }
   }
 }
 
