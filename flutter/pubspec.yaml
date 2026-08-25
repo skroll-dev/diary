@@ -57,6 +57,11 @@ dependencies:
   go_router: ^17.2.3
   intl: ^0.20.2
 
+  # Bilder (Eintrag-Anhänge)
+  image_picker: ^1.2.3
+  cached_network_image: ^3.4.1
+  animated_reorderable_list: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

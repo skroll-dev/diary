@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mein Tagebuch – Fotos Mockup</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0e1015;
+            --card: #1a1d26;
+            --card-border: #2a2e3a;
+            --text: #f2f3f6;
+            --subtext: #8a91a6;
+            --purple: #7b74d8;
+            --purple-pill-bg: #2c2a4a;
+            --purple-pill-text: #b4aef0;
+            --tag-bg: #22301f;
+            --tag-text: #8fd07a;
+            --accent: #534AB7;
+            --divider: #23262f;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Segoe UI, Roboto, sans-serif;
+        }
+
+        .phone {
+            max-width: 430px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background: var(--bg);
+            padding: 20px 18px 90px;
+            position: relative;
+        }
+
+        .statusbar {
+            display: flex;
+            justify-content: space-between;
+            font-size: 15px;
+            color: var(--text);
+            font-weight: 600;
+            padding: 2px 2px 18px;
+        }
+
+        .screen-label {
+            text-align: center;
+            color: var(--subtext);
+            font-size: 12px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        h1.title {
+            font-size: 34px;
+            font-weight: 700;
+            margin: 0 0 20px;
+        }
+
+        .date-heading {
+            font-size: 15px;
+            color: var(--subtext);
+            margin: 18px 0 10px;
+            font-weight: 500;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .entry-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .emoji-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #3a6fb0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .entry-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .entry-meta {
+            font-size: 13px;
+            color: #6fa8dc;
+            margin-top: 2px;
+        }
+
+        .entry-text {
+            font-size: 14.5px;
+            line-height: 1.5;
+            color: #d4d7e0;
+            margin: 0 0 12px;
+        }
+
+        /* PHOTO STRIP — new element */
+        .photo-strip {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            margin: 0 0 12px;
+            padding-bottom: 2px;
+        }
+
+        .photo-strip::-webkit-scrollbar {
+            display: none;
+        }
+
+        .photo-thumb {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #3a3f52, #22252e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5b6172;
+            font-size: 22px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--card-border);
+        }
+
+        .photo-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .photo-thumb.more::after {
+            content: attr(data-count);
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 11, 15, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .pill {
+            padding: 7px 14px;
+            border-radius: 20px;
+            font-size: 13.5px;
+            font-weight: 600;
+        }
+
+        .pill.purple {
+            background: var(--purple-pill-bg);
+            color: var(--purple-pill-text);
+        }
+
+        .tag-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: var(--tag-bg);
+            color: var(--tag-text);
+            padding: 6px 13px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* ---- DETAIL SCREEN ---- */
+        .detail-wrap {
+            margin-top: 56px;
+        }
+
+        .back-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--subtext);
+            font-size: 15px;
+            margin-bottom: 16px;
+        }
+
+        .back-row svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 14px 0 18px;
+        }
+
+        .photo-grid .tile {
+            aspect-ratio: 1/1;
+            border-radius: 14px;
+            overflow: hidden;
+            background: linear-gradient(135deg, #3a3f52, #22252e);
+            position: relative;
+        }
+
+        .photo-grid .tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .photo-grid .add-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: 1.5px dashed #3d4150;
+            color: var(--purple);
+            font-size: 12px;
+            font-weight: 600;
+            background: transparent;
+        }
+
+        .photo-grid .add-tile svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .section-label {
+            font-size: 12px;
+            color: var(--subtext);
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin: 22px 0 10px;
+        }
+
+        .fab {
+            position: absolute;
+            right: 18px;
+            bottom: 110px;
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(83, 74, 183, 0.45);
+        }
+
+        .fab svg {
+            width: 26px;
+            height: 26px;
+            stroke: #fff;
+        }
+
+        .tabbar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-width: 430px;
+            margin: 0 auto;
+            background: #0e1015;
+            border-top: 1px solid var(--divider);
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0 26px;
+        }
+
+        .tab {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--subtext);
+        }
+
+        .tab.active {
+            color: #5b93e8;
+        }
+
+        .tab svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .annotation {
+            background: #211f33;
+            border: 1px solid #3a3660;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 12.5px;
+            color: #c3bdf0;
+            line-height: 1.5;
+            margin: 10px 0 22px;
+        }
+
+        .annotation b {
+            color: #e4e1fb;
+        }
+
+        .divider-line {
+            height: 1px;
+            background: var(--divider);
+            margin: 36px 0;
+        }
+
+        .edit-tile {
+            overflow: visible;
+        }
+
+        .edit-tile img {
+            border-radius: 14px;
+        }
+
+        .delete-x {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #e5484d;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+            z-index: 3;
+        }
+
+        .drag-dots {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(20, 22, 28, 0.85);
+            color: #c7cadd;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+            z-index: 3;
+        }
+
+        .edit-tile.lifted {
+            transform: scale(1.06) rotate(-2deg);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+            z-index: 2;
+        }
+
+        .edit-btn {
+            background: var(--purple-pill-bg);
+            color: var(--purple-pill-text);
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 7px 16px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="phone">
+
+        <!-- ============ SCREEN 1: TAGEBUCH-LISTE MIT FOTO-THUMBNAILS ============ -->
+        <div class="screen-label">1 · Tagebuch-Liste — Foto-Streifen in der Karte</div>
+        <h1 class="title">Mein Tagebuch</h1>
+
+        <div class="date-heading">Heute</div>
+
+        <div class="card">
+            <div class="entry-header">
+                <div class="emoji-badge">😊</div>
+                <div>
+                    <p class="entry-title">Joggen und Wohlbefinden</p>
+                    <p class="entry-meta">Heute · 15:06 Uhr</p>
+                </div>
+            </div>
+            <p class="entry-text">Heute Abend bin ich 5 Kilometer durch den Park joggen gewesen. Danach war m…</p>
+
+            <!-- NEU: Foto-Streifen -->
+            <div class="photo-strip">
+                <div class="photo-thumb"><img
+                        src="https://images.unsplash.com/photo-1502904550040-7534597429ae?w=200&h=200&fit=crop" alt="">
+                </div>
+                <div class="photo-thumb"><img
+                        src="https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=200&h=200&fit=crop" alt="">
+                </div>
+                <div class="photo-thumb more" data-count="+2"><img
+                        src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=200&h=200&fit=crop" alt="">
+                </div>
+            </div>
+
+            <div class="pill-row">
+                <span class="pill purple">Joggen und Wohlbefinden</span>
+            </div>
+            <div class="pill-row">
+                <span class="pill purple">Familienzeit mit meiner Schwester</span>
+            </div>
+            <div class="tag-row">
+                <span class="tag">#Sport</span>
+                <span class="tag">#Familie</span>
+                <span class="tag">#Schwester</span>
+                <span class="tag">#Gespräch</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="entry-header">
+                <div class="emoji-badge">😊</div>
+                <div>
+                    <p class="entry-title">Telefonat mit Schwester</p>
+                    <p class="entry-meta">Heute · 15:07 Uhr</p>
+                </div>
+            </div>
+            <p class="entry-text">Heute Abend hatte ich ein langes Telefonat mit meiner Schwester. Wir hab…</p>
+            <!-- kein Foto vorhanden -> kein Streifen, Karte bleibt wie gehabt -->
+            <div class="tag-row">
+                <span class="tag">#Familie</span>
+                <span class="tag">#Schwester</span>
+                <span class="tag">#Gespräch</span>
+            </div>
+        </div>
+
+        <div class="annotation">
+            <b>Warum so:</b> Der Streifen erscheint nur, wenn Fotos existieren — kein leerer Platzhalter bei
+            Text-only-Einträgen. Bei 3+ Fotos zeigt die dritte Kachel ein "+N"-Overlay statt endlosem Scrollen.
+            Reihenfolge bleibt: Titel → Text → Fotos → Themen-Pills → Tags.
+        </div>
+
+        <div class="divider-line"></div>
+
+        <!-- ============ SCREEN 2: DETAILANSICHT MIT FOTO-GRID ============ -->
+        <div class="detail-wrap">
+            <div class="screen-label">2 · Eintrag-Detail — Fotos hinzufügen &amp; ansehen</div>
+
+            <div class="back-row">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Tagebuch
+            </div>
+
+            <div class="entry-header">
+                <div class="emoji-badge">😊</div>
+                <div>
+                    <p class="entry-title">Joggen und Wohlbefinden</p>
+                    <p class="entry-meta">Heute · 15:06 Uhr</p>
+                </div>
+            </div>
+
+            <p class="entry-text" style="margin-top:14px;">Heute Abend bin ich 5 Kilometer durch den Park joggen
+                gewesen. Danach war mir richtig klar im Kopf und ich habe noch lange mit meiner Schwester telefoniert.
+            </p>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <div class="section-label" style="margin:0;">Fotos · 3</div>
+                <span class="edit-btn">Bearbeiten</span>
+            </div>
+            <div class="photo-grid">
+                <div class="tile"><img
+                        src="https://images.unsplash.com/photo-1502904550040-7534597429ae?w=300&h=300&fit=crop" alt="">
+                </div>
+                <div class="tile"><img
+                        src="https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=300&h=300&fit=crop" alt="">
+                </div>
+                <div class="tile"><img
+                        src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300&h=300&fit=crop" alt="">
+                </div>
+                <button class="tile add-tile">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Hinzufügen
+                </button>
+            </div>
+
+            <div class="section-label">Themen</div>
+            <div class="pill-row">
+                <span class="pill purple">Joggen und Wohlbefinden</span>
+            </div>
+            <div class="pill-row">
+                <span class="pill purple">Familienzeit mit meiner Schwester</span>
+            </div>
+
+            <div class="section-label">Tags</div>
+            <div class="tag-row">
+                <span class="tag">#Sport</span>
+                <span class="tag">#Familie</span>
+                <span class="tag">#Schwester</span>
+                <span class="tag">#Gespräch</span>
+            </div>
+
+            <div class="annotation" style="margin-top:24px;">
+                <b>Add-Punkt:</b> Die "Hinzufügen"-Kachel sitzt am Ende des Foto-Grids (max. 3 Spalten) — konsistent mit
+                dem "Eintrag ergänzen"-Muster aus dem Konzept: Fotos werden nach der Aufnahme angehängt, nie während des
+                freien Diktats. Tippen öffnet direkt die native Kamera-/Galerie-Auswahl.
+            </div>
+        </div>
+
+        <div class="divider-line"></div>
+
+        <!-- ============ SCREEN 3: EDIT-MODUS — LÖSCHEN & SORTIEREN ============ -->
+        <div class="detail-wrap" style="margin-top:0;">
+            <div class="screen-label">3 · Bearbeiten-Modus — Löschen &amp; Sortieren</div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <div class="section-label" style="margin:0;">Fotos · 3</div>
+                <span class="edit-btn">Übernehmen</span>
+            </div>
+
+            <div class="photo-grid">
+                <div class="tile edit-tile">
+                    <img src="https://images.unsplash.com/photo-1502904550040-7534597429ae?w=300&h=300&fit=crop" alt="">
+                    <div class="drag-dots">⠿</div>
+                    <div class="delete-x">×</div>
+                </div>
+                <div class="tile edit-tile">
+                    <img src="https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=300&h=300&fit=crop" alt="">
+                    <div class="drag-dots">⠿</div>
+                    <div class="delete-x">×</div>
+                </div>
+                <div class="tile edit-tile lifted">
+                    <img src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300&h=300&fit=crop" alt="">
+                    <div class="drag-dots">⠿</div>
+                    <div class="delete-x">×</div>
+                </div>
+            </div>
+
+            <div class="annotation" style="margin-top:14px;">
+                <b>Interaktion:</b> "Bearbeiten" tippen → jede Kachel zeigt "×" oben rechts (löschen, mit Undo-Toast
+                statt Sicherheitsabfrage) und Drag-Punkte oben links (Long-Press + Ziehen zum Umsortieren, wie in iOS
+                Fotos / Google Photos). Erstes Foto im Grid = Titelbild der Karten-Vorschau. "Fertig" beendet den Modus,
+                kein separater Speichern-Schritt.
+            </div>
+        </div>
+
+        <div class="fab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M12 5v14M5 12h14" />
+            </svg>
+        </div>
+
+    </div>
+
+    <div class="tabbar">
+        <div class="tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                <path d="M19 10v1a7 7 0 01-14 0v-1M12 18v4" />
+            </svg>
+            Heute
+        </div>
+        <div class="tab active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16v16H4z" />
+                <path d="M8 2v4M16 2v4M4 10h16" />
+            </svg>
+            Tagebuch
+        </div>
+        <div class="tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3v18h18" />
+                <path d="M7 15l4-6 4 3 5-8" />
+            </svg>
+            Analyse
+        </div>
+    </div>
+
+</body>
+
+</html>

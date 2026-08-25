@@ -22,6 +22,26 @@ log = structlog.get_logger()
 firebase_admin.initialize_app()
 db = firestore.client()
 
+# Explizit benannt statt storage.bucket() ohne Argument – vermeidet jede
+# Mehrdeutigkeit über die "Default Bucket"-Auflösung des Firebase-Projekts.
+_BUCKET_NAME = "diary-6fa61.firebasestorage.app"
+
+
+def _delete_user_storage_objects(uid: str) -> int:
+    """Löscht alle Bild-Anhänge des Nutzers (users/{uid}/**). Best-effort –
+    ein Fehler hier darf die wichtigere Identitäts-/Datenlöschung nicht
+    blockieren (Art. 17 DSGVO)."""
+    try:
+        bucket = storage.bucket(_BUCKET_NAME)
+        blobs = list(bucket.list_blobs(prefix=f"users/{uid}/"))
+        if blobs:
+            bucket.delete_blobs(blobs)
+        return len(blobs)
+    except Exception as exc:
+        log.warning("storage_cleanup_failed", uid=uid, error=str(exc))
+        return 0
+
+
 app = FastAPI(
     title="AI Tagebuch – gdpr-export",
     version="0.1.0",
@@ -96,7 +116,7 @@ async def request_export(authorization: str = Header(...)):
     buffer.seek(0)
 
     # ZIP in Cloud Storage hochladen (temporär, 7 Tage)
-    bucket = storage.bucket()
+    bucket = storage.bucket(_BUCKET_NAME)
     blob_path = f"exports/{uid}/export_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.zip"
     blob = bucket.blob(blob_path)
     blob.upload_from_file(buffer, content_type="application/zip")
@@ -124,6 +144,10 @@ async def delete_account(authorization: str = Header(...)):
 
     # Nutzer-Dokument löschen
     db.collection("users").document(uid).delete()
+
+    # Bild-Anhänge in Cloud Storage löschen
+    deleted_images = _delete_user_storage_objects(uid)
+    log.info("storage_images_deleted", uid=uid, count=deleted_images)
 
     # Firebase Auth Account löschen
     auth.delete_user(uid)
@@ -162,12 +186,13 @@ async def cleanup_anonymous_users(request: Request):
         ]
 
         if uids_to_delete:
-            # Delete Firestore data before removing Auth accounts
+            # Delete Firestore data and Storage images before removing Auth accounts
             for uid in uids_to_delete:
                 entries_ref = db.collection("users").document(uid).collection("entries")
                 for doc in entries_ref.stream():
                     doc.reference.delete()
                 db.collection("users").document(uid).delete()
+                _delete_user_storage_objects(uid)
 
             result = auth.delete_users(uids_to_delete)
             deleted_count += result.success_count

@@ -1,20 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:animated_reorderable_list/animated_reorderable_list.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../auth/presentation/auth_sheet.dart';
 import '../../recording/recording_context.dart';
+import '../../../shared/constants/image_limits.dart';
+import '../../../shared/models/entry_image.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/image_proxy_client.dart';
+import '../../../shared/widgets/fullscreen_image_viewer.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
+import '../../../shared/widgets/storage_image.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
 import '../../../shared/constants/transcript_limits.dart';
+
+// ── Local upload-in-progress placeholder ────────────────────────────────────
+
+class _UploadingImage {
+  _UploadingImage({required this.id, required this.bytes});
+  final String id;
+  final Uint8List bytes;
+}
 
 // ── Internal data models ───────────────────────────────────────────────────────
 
@@ -111,6 +127,15 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   bool _isRecordingsExpanded = false;
   bool _isRegenerating = false;
 
+  // ── Photos ──────────────────────────────────────────────────────────────────
+  List<EntryImage> _images = [];
+  final List<_UploadingImage> _uploadingImages = [];
+  bool _isEditingPhotos = false;
+  // Resolved fresh from Drift (not widget.date, which is populated
+  // inconsistently across navigation paths) and cached per session.
+  String? _resolvedDate;
+  int? _cachedEntryOrdinal;
+
   // Pipeline progress for the re-generating overlay
   double _regenPercent = 0.0;
   String _regenStep = '';
@@ -151,6 +176,24 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
     // On web refresh state.extra is lost — reload this entry from Drift
     if (_topics.isEmpty) _loadFromDbIfEmpty();
+
+    // Images are never carried via route `extra` (TopicsArgs predates this
+    // feature and attaching photos only ever happens after recording, per
+    // the mockup) — always resolve fresh from Drift, which also gives us the
+    // canonical ISO date for Storage path-building.
+    _loadImagesAndDate();
+  }
+
+  Future<void> _loadImagesAndDate() async {
+    if (_entryId.isEmpty) return;
+    try {
+      final entry = await ref.read(entryRepositoryProvider).getEntryById(_entryId);
+      if (entry == null || !mounted) return;
+      setState(() {
+        _images = parseEntryImages(entry.images);
+        _resolvedDate = entry.date;
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadFromDbIfEmpty() async {
@@ -486,6 +529,277 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     }
   }
 
+  // ── Photos ────────────────────────────────────────────────────────────────────
+
+  Future<void> _showImageSourceSheet() async {
+    final cs = Theme.of(context).colorScheme;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Kamera'),
+                onTap: () => Navigator.of(sheetCtx).pop(ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Fotos'),
+                onTap: () => Navigator.of(sheetCtx).pop(ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    await _pickAndUploadImages(source);
+  }
+
+  int get _totalImageCount => _images.length + _uploadingImages.length;
+
+  Future<void> _pickAndUploadImages(ImageSource source) async {
+    final remaining = kMaxImagesPerEntry - _totalImageCount;
+    if (remaining <= 0) return;
+
+    final picker = ImagePicker();
+    List<XFile> picked;
+    if (source == ImageSource.camera) {
+      final file = await picker.pickImage(source: ImageSource.camera);
+      picked = file != null ? [file] : [];
+    } else {
+      picked = await picker.pickMultiImage(limit: remaining);
+    }
+    if (picked.isEmpty || !mounted) return;
+
+    final date = await _resolveDateForUpload();
+    if (date == null || !mounted) return;
+    _cachedEntryOrdinal ??=
+        await ref.read(entryRepositoryProvider).getEntryOrdinalForDate(date, _entryId);
+    if (!mounted) return;
+
+    for (final file in picked.take(remaining)) {
+      await _uploadOne(file, date);
+    }
+  }
+
+  Future<String?> _resolveDateForUpload() async {
+    if (_resolvedDate != null) return _resolvedDate;
+    await _loadImagesAndDate();
+    return _resolvedDate;
+  }
+
+  Future<void> _uploadOne(XFile file, String date) async {
+    final bytes = await file.readAsBytes();
+    final placeholder = _UploadingImage(id: UniqueKey().toString(), bytes: bytes);
+
+    // Optimistic placeholder — the image genuinely doesn't exist until the
+    // upload returns a Storage path, so this is as early as "UI updates
+    // before awaiting network" can honestly happen here.
+    setState(() => _uploadingImages.add(placeholder));
+
+    try {
+      final image = await ref.read(imageProxyClientProvider).uploadImage(
+            entryId: _entryId,
+            date: date,
+            entryOrdinal: _cachedEntryOrdinal!,
+            existingImageCount: _images.length,
+            bytes: bytes,
+            filename: file.name,
+            contentType: file.mimeType ?? 'image/jpeg',
+          );
+      if (!mounted) return;
+      setState(() {
+        _uploadingImages.removeWhere((u) => u.id == placeholder.id);
+        _images = [..._images, image.copyWith(order: _images.length)];
+      });
+      await ref.read(entryRepositoryProvider).updateEntryImages(
+            entryId: _entryId,
+            images: _images,
+          );
+    } catch (e) {
+      debugPrint('[TopicsReviewScreen] image upload failed: $e');
+      if (!mounted) return;
+      setState(() => _uploadingImages.removeWhere((u) => u.id == placeholder.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Foto konnte nicht hochgeladen werden.')),
+      );
+    }
+  }
+
+  Future<void> _deleteImage(EntryImage target) async {
+    final originalIndex = _images.indexOf(target);
+    if (originalIndex < 0) return;
+
+    setState(() => _images = List.of(_images)..removeAt(originalIndex));
+
+    final messenger = ScaffoldMessenger.of(context);
+    final actionColor = Theme.of(context).colorScheme.inversePrimary;
+    var undone = false;
+
+    // Hand-rolled instead of the single-action SnackBar API so we can offer
+    // both an explicit "Bestätigen" (commit now, don't wait out the timeout)
+    // and "Rückgängig" — both just close the SnackBar early via
+    // hideCurrentSnackBar(); the `undone` flag (not SnackBarClosedReason)
+    // decides afterwards whether to commit.
+    final controller = messenger.showSnackBar(SnackBar(
+      content: Row(
+        children: [
+          const Expanded(child: Text('Foto gelöscht')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: actionColor),
+            onPressed: () => messenger.hideCurrentSnackBar(),
+            child: const Text('Bestätigen'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: actionColor),
+            onPressed: () {
+              undone = true;
+              if (mounted) {
+                setState(() =>
+                    _images = List.of(_images)..insert(originalIndex, target));
+              }
+              messenger.hideCurrentSnackBar();
+            },
+            child: const Text('Rückgängig'),
+          ),
+        ],
+      ),
+    ));
+
+    await controller.closed;
+    if (undone || !mounted) return;
+
+    // Commit: persist the removal and clean up Storage. The Storage delete
+    // is best-effort — a failure there (e.g. an orphaned object from a
+    // previous auth/account) must not surface as an unhandled exception,
+    // matching the fire-and-forget cleanup pattern used elsewhere
+    // (EntryRepository's Firestore syncs, deleteEntryById's image cleanup).
+    await ref
+        .read(entryRepositoryProvider)
+        .updateEntryImages(entryId: _entryId, images: _images);
+    unawaited(ref
+        .read(imageProxyClientProvider)
+        .deleteImages([target.fullPath, target.thumbPath])
+        .catchError((Object e) {
+      debugPrint('[TopicsReviewScreen] image delete cleanup failed: $e');
+    }));
+  }
+
+  // Matches this package's own README example verbatim — unlike raw
+  // Flutter ReorderableListView/SliverReorderableList, its onReorder indices
+  // are already pre-adjusted for a direct removeAt/insert, no manual
+  // "if (oldIndex < newIndex) newIndex -= 1" off-by-one correction needed.
+  void _onReorderImages(int oldIndex, int newIndex) {
+    setState(() {
+      final item = _images.removeAt(oldIndex);
+      _images.insert(newIndex, item);
+      for (var i = 0; i < _images.length; i++) {
+        _images[i] = _images[i].copyWith(order: i);
+      }
+    });
+    unawaited(ref
+        .read(entryRepositoryProvider)
+        .updateEntryImages(entryId: _entryId, images: _images));
+  }
+
+  Widget _buildPhotosSection(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    Widget tileFor(EntryImage img) => _PhotoTile(
+          key: ValueKey(img.fullPath),
+          objectPath: img.thumbPath,
+          isEditing: _isEditingPhotos,
+          onTap: _isEditingPhotos
+              ? null
+              : () => FullscreenImageViewer.open(context,
+                  images: _images, initialIndex: _images.indexOf(img)),
+          onDelete: () => _deleteImage(img),
+        );
+
+    const gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 3,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Fotos · ${_images.length}',
+                style: tt.labelMedium?.copyWith(color: cs.onSurface)),
+            const Spacer(),
+            if (_images.isNotEmpty)
+              TextButton(
+                onPressed: () =>
+                    setState(() => _isEditingPhotos = !_isEditingPhotos),
+                child: Text(_isEditingPhotos ? 'Fertig' : 'Bearbeiten'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Two separate rendering paths rather than one mixed-type grid:
+        // AnimatedReorderableGridView's `items` list is homogeneously typed
+        // (List<EntryImage>), so it can't also host the "Hinzufügen" add-tile
+        // or in-flight upload placeholders — and it never needs to, since
+        // editing and adding are mutually exclusive states here already.
+        if (_isEditingPhotos)
+          AnimatedReorderableGridView<EntryImage>(
+            items: _images,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            sliverGridDelegate: gridDelegate,
+            isSameItem: (a, b) => a.fullPath == b.fullPath,
+            itemBuilder: (context, index) => tileFor(_images[index]),
+            onReorder: _onReorderImages,
+            // The drag gesture's own completion already animates the new
+            // order; enableSwap's same-length diff pass (which re-detects
+            // "swapped" pairs whenever the `items` list we hand back via
+            // setState differs from the previous build) then runs AGAIN on
+            // top of that and can call moveItem for both directions of a
+            // detected pair, undoing the very reorder that just happened.
+            // Pure reordering doesn't need this reconciliation — inserts/
+            // removes (upload/delete) go through the length-changing branch
+            // below it, which is unaffected.
+            enableSwap: false,
+          )
+        else
+          GridView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: gridDelegate,
+            children: [
+              for (final img in _images) tileFor(img),
+              for (final u in _uploadingImages)
+                KeyedSubtree(
+                  key: ValueKey(u.id),
+                  child: _UploadingTile(bytes: u.bytes),
+                ),
+              if (_totalImageCount < kMaxImagesPerEntry)
+                _AddPhotoTile(
+                  key: const ValueKey('add-photo-tile'),
+                  onTap: _showImageSourceSheet,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
   // ── Finish entry ─────────────────────────────────────────────────────────────
 
   Future<void> _handleFinishEntry() async {
@@ -779,11 +1093,23 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                             ),
                           ),
 
+                        // ── Fotos ───────────────────────────────────────────
+                        // Deliberately NOT wrapped in _animated(): the
+                        // reorderable grid measures each tile's on-screen
+                        // position via GlobalKey + localToGlobal() for its
+                        // drag math, which a live SlideTransition/
+                        // FadeTransition ancestor would keep out of sync
+                        // with the actual rendered position.
+                        if (_resolvedDate != null) ...[
+                          _buildPhotosSection(context),
+                          const SizedBox(height: 24),
+                        ],
+
                         // ── Weitere Fragen ─────────────────────────────────
                         if (_followUpQuestions.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           _animated(
-                            _topics.length + 2,
+                            _topics.length + 3,
                             _buildQuestionsSection(context),
                           ),
                         ],
@@ -1329,6 +1655,204 @@ class _TopicCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Photo tile ─────────────────────────────────────────────────────────────────
+
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({
+    super.key,
+    required this.objectPath,
+    required this.isEditing,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final String objectPath;
+  final bool isEditing;
+  final VoidCallback? onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            // onTap is null while editing (see callers) — a GestureDetector
+            // with no active callback registers no recognizer, so it never
+            // competes with the drag detector the ancestor
+            // AnimatedReorderableGridView wraps around this whole tile
+            // (which is what makes the ENTIRE card draggable, not just the
+            // drag-handle icon). Deliberately NOT IgnorePointer here — that
+            // would remove this subtree from hit-testing altogether, which
+            // also hides it from the ancestor's own deferToChild-based hit
+            // detection and breaks dragging over the image area entirely.
+            child: GestureDetector(
+              onTap: onTap,
+              child: StorageImage(objectPath: objectPath),
+            ),
+          ),
+        ),
+        if (isEditing) ...[
+          Positioned(
+            top: 6,
+            right: 6,
+            child: GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.close_rounded,
+                    size: 15, color: Colors.white),
+              ),
+            ),
+          ),
+          const Positioned(
+            top: 6,
+            left: 6,
+            child: _DragHandle(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _DragHandle extends StatelessWidget {
+  const _DragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: const Icon(Icons.drag_indicator_rounded,
+          size: 14, color: Colors.white),
+    );
+  }
+}
+
+class _UploadingTile extends StatelessWidget {
+  const _UploadingTile({required this.bytes});
+  final Uint8List bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.memory(bytes, fit: BoxFit.cover),
+          ),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2.5, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddPhotoTile extends StatelessWidget {
+  const _AddPhotoTile({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: DottedBorderBox(
+        color: cs.primary,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_rounded, size: 22, color: cs.primary),
+            const SizedBox(height: 4),
+            Text('Hinzufügen',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Minimal dashed-border container — avoids pulling in a dependency just for
+/// a single dashed rectangle.
+class DottedBorderBox extends StatelessWidget {
+  const DottedBorderBox({super.key, required this.color, required this.child});
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedBorderPainter(color: color),
+      child: child,
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+        Offset.zero & size, const Radius.circular(14));
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + dashWidth),
+          paint,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) => old.color != color;
 }
 
 // ── Mood chip ──────────────────────────────────────────────────────────────────

@@ -9,13 +9,17 @@ import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 
 import '../../../core/database/app_database.dart' as db;
 import '../../../shared/models/entry.dart';
+import '../../../shared/models/entry_image.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/proxy_client.dart' show TopicDto;
+import '../../../shared/widgets/fullscreen_image_viewer.dart';
+import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
+import '../../../shared/widgets/storage_image.dart';
 
 // ─── Palette (mirrors _topicPalette in topics_review_screen.dart) ────────────
 
@@ -42,6 +46,7 @@ class _EntryPreview {
     this.entryDate = '',
     this.createdTime = '',
     this.rawEntry,
+    this.images = const [],
   });
 
   final DateTime date;
@@ -54,6 +59,9 @@ class _EntryPreview {
   final List<Map<String, dynamic>> allTopics;
   final String entryDate;
   final String createdTime; // "HH:mm Uhr" — shown when durationSeconds == 0
+  // Deliberately empty for mock-data entries — the photo strip only ever
+  // appears when real photos exist, never as a placeholder.
+  final List<EntryImage> images;
   // Full Drift row, needed for id-based edit/delete. Null only for the
   // mock-data (dev "Fake Verlauf-Daten") path.
   final db.Entry? rawEntry;
@@ -373,6 +381,7 @@ _EntryPreview _toPreview(db.Entry e, int index) {
     entryDate: e.date,
     createdTime: _formatCreatedTime(e.createdAt),
     rawEntry: e,
+    images: parseEntryImages(e.images),
   );
 }
 
@@ -414,12 +423,63 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   Widget _buildScaffold(
     BuildContext context,
-    Map<int, Map<int, List<_EntryPreview>>> grouped,
-  ) {
+    Map<int, Map<int, List<_EntryPreview>>> grouped, {
+    Future<void> Function()? onRefresh,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final built = _buildIndex(grouped);
     final indexEntries = built.$1;
     final totalH = built.$2;
+
+    final scrollView = CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        for (final year in grouped.keys)
+          SliverStickyHeader(
+            header: _YearHeader(year: year),
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                for (final month in grouped[year]!.keys)
+                  SliverStickyHeader(
+                    header: _MonthHeader(year: year, month: month),
+                    sliver: SliverList.builder(
+                      itemCount: grouped[year]![month]!.length,
+                      itemBuilder: (ctx, i) {
+                        final monthEntries = grouped[year]![month]!;
+                        final e = monthEntries[i];
+                        final today = _isToday(e.date);
+                        final isFirstOfDay = i == 0 ||
+                            !_isSameDay(monthEntries[i - 1].date, e.date);
+                        var card = _EntryCard(entry: e)
+                            .animate()
+                            .fadeIn(duration: 250.ms, delay: (i * 30).ms)
+                            .slideY(begin: 0.05, end: 0);
+                        if (today) {
+                          card = card.then(delay: 250.ms).shimmer(
+                                duration: 700.ms,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.18),
+                              );
+                        }
+                        if (!isFirstOfDay) return card;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _DayDivider(date: e.date),
+                            card,
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -431,58 +491,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ),
       body: Stack(
         children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              for (final year in grouped.keys)
-                SliverStickyHeader(
-                  header: _YearHeader(year: year),
-                  sliver: SliverMainAxisGroup(
-                    slivers: [
-                      for (final month in grouped[year]!.keys)
-                        SliverStickyHeader(
-                          header: _MonthHeader(year: year, month: month),
-                          sliver: SliverList.builder(
-                            itemCount: grouped[year]![month]!.length,
-                            itemBuilder: (ctx, i) {
-                              final monthEntries = grouped[year]![month]!;
-                              final e = monthEntries[i];
-                              final today = _isToday(e.date);
-                              final isFirstOfDay = i == 0 ||
-                                  !_isSameDay(
-                                      monthEntries[i - 1].date, e.date);
-                              var card = _EntryCard(entry: e)
-                                  .animate()
-                                  .fadeIn(duration: 250.ms, delay: (i * 30).ms)
-                                  .slideY(begin: 0.05, end: 0);
-                              if (today) {
-                                card = card
-                                    .then(delay: 250.ms)
-                                    .shimmer(
-                                      duration: 700.ms,
-                                      color: Theme.of(ctx)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.18),
-                                    );
-                              }
-                              if (!isFirstOfDay) return card;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _DayDivider(date: e.date),
-                                  card,
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            ],
-          ),
+          onRefresh != null
+              ? RefreshIndicator(onRefresh: onRefresh, child: scrollView)
+              : scrollView,
           if (indexEntries.isNotEmpty)
             Positioned(
               right: 0,
@@ -499,38 +510,59 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(
+    BuildContext context, {
+    Future<void> Function()? onRefresh,
+  }) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    return Scaffold(
-      appBar: _appBar(context),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.book_outlined, size: 56, color: cs.outlineVariant),
-            const SizedBox(height: 16),
-            Text(
-              'Noch keine Einträge',
-              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Nimm deinen ersten Tagebucheintrag auf\nund er erscheint hier.',
-              style: tt.bodyMedium?.copyWith(color: cs.outline),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => context.go('/'),
-              icon: const Icon(Icons.mic_rounded),
-              label: const Text('Ersten Eintrag aufnehmen'),
-            ),
-          ],
-        ),
+    final content = Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.book_outlined, size: 56, color: cs.outlineVariant),
+          const SizedBox(height: 16),
+          Text(
+            'Noch keine Einträge',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Nimm deinen ersten Tagebucheintrag auf\nund er erscheint hier.',
+            style: tt.bodyMedium?.copyWith(color: cs.outline),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.mic_rounded),
+            label: const Text('Ersten Eintrag aufnehmen'),
+          ),
+        ],
       ),
     );
+    return Scaffold(
+      appBar: _appBar(context),
+      body: onRefresh == null
+          ? content
+          : RefreshIndicator(
+              onRefresh: onRefresh,
+              child: LayoutBuilder(
+                builder: (context, constraints) => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(
+                      height: constraints.maxHeight,
+                      child: content,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
   }
+
+  Future<void> _handleRefresh() => runHistorySyncWithProgress(context, ref);
 
   @override
   Widget build(BuildContext context) {
@@ -551,13 +583,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         body: const Center(child: Text('Fehler beim Laden')),
       ),
       data: (dbEntries) {
-        if (dbEntries.isEmpty) return _buildEmptyState(context);
+        if (dbEntries.isEmpty) {
+          return _buildEmptyState(context, onRefresh: _handleRefresh);
+        }
         final previews = dbEntries
             .asMap()
             .entries
             .map((e) => _toPreview(e.value, e.key))
             .toList();
-        return _buildScaffold(context, _groupEntries(previews));
+        return _buildScaffold(
+          context,
+          _groupEntries(previews),
+          onRefresh: _handleRefresh,
+        );
       },
     );
   }
@@ -751,6 +789,10 @@ class _EntryCard extends StatelessWidget {
                         height: 1.45,
                       ),
                     ),
+                    if (entry.images.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _PhotoStrip(images: entry.images),
+                    ],
                     if (entry.allTopics.length > 1) ...[
                       const SizedBox(height: 8),
                       Wrap(
@@ -815,6 +857,69 @@ class _TopicChip extends StatelessWidget {
               color: fg,
               fontWeight: FontWeight.w500,
             ),
+      ),
+    );
+  }
+}
+
+// ─── Photo strip (card summary) ───────────────────────────────────────────────
+
+class _PhotoStrip extends StatelessWidget {
+  const _PhotoStrip({required this.images});
+
+  final List<EntryImage> images;
+
+  static const _maxTiles = 3;
+  static const _tileSize = 60.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = images.take(_maxTiles).toList();
+    final overflow = images.length - _maxTiles;
+
+    return SizedBox(
+      height: _tileSize,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        itemCount: shown.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final isLast = i == shown.length - 1;
+          final tile = ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: _tileSize,
+              height: _tileSize,
+              child: StorageImage(objectPath: shown[i].thumbPath),
+            ),
+          );
+          if (!isLast || overflow <= 0) return tile;
+          return Stack(
+            children: [
+              tile,
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '+$overflow',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -947,6 +1052,41 @@ class _EntryDetailSheet extends ConsumerWidget {
                     ),
                     if (i < entry.allTopics.length - 1)
                       const SizedBox(height: 12),
+                  ],
+                  if (entry.images.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      'Fotos · ${entry.images.length}',
+                      style: tt.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.outline,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: entry.images.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemBuilder: (context, i) => ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: GestureDetector(
+                          onTap: () => FullscreenImageViewer.open(
+                            context,
+                            images: entry.images,
+                            initialIndex: i,
+                          ),
+                          child: StorageImage(
+                              objectPath: entry.images[i].fullPath),
+                        ),
+                      ),
+                    ),
                   ],
                   if (entry.tags.isNotEmpty) ...[
                     const SizedBox(height: 20),

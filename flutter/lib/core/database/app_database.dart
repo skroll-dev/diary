@@ -24,6 +24,7 @@ class Entries extends Table {
       text().withDefault(const Constant('[]'))();
   TextColumn get topics => text().withDefault(const Constant('[]'))();
   TextColumn get tags => text().withDefault(const Constant('[]'))();
+  TextColumn get images => text().withDefault(const Constant('[]'))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -47,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(LazyDatabase(() => openDatabaseConnection()));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -65,6 +66,10 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await m.database.customStatement(
                 "ALTER TABLE entries ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+          }
+          if (from < 4) {
+            await m.database.customStatement(
+                "ALTER TABLE entries ADD COLUMN images TEXT NOT NULL DEFAULT '[]'");
           }
         },
       );

@@ -10,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
+import '../models/entry_image.dart';
 import '../services/auth_service.dart';
+import '../services/image_proxy_client.dart';
 import '../services/proxy_client.dart' show TopicDto;
 
 part 'entry_repository.g.dart';
@@ -48,9 +50,10 @@ class ProfileStats {
 }
 
 class EntryRepository {
-  EntryRepository(this._db, this._auth);
+  EntryRepository(this._db, this._auth, this._imageProxy);
   final AppDatabase _db;
   final AuthService _auth;
+  final ImageProxyClient _imageProxy;
 
   // ── Save new entry (first recording of the day) ─────────────────────────────
 
@@ -314,6 +317,7 @@ class EntryRepository {
       'followUpQuestions': jsonDecode(entry.followUpQuestions),
       'topics': jsonDecode(entry.topics),
       'tags': jsonDecode(entry.tags),
+      'images': jsonDecode(entry.images),
       'durationSeconds': entry.durationSeconds,
       'language': entry.language,
       'version': entry.version,
@@ -372,6 +376,7 @@ class EntryRepository {
 
   Future<void> deleteEntryById(String entryId) async {
     final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    final entry = await getEntryById(entryId); // read BEFORE deleting, to know its images
     await (_db.delete(_db.rawTranscripts)
           ..where((t) => t.entryId.equals(entryId)))
         .go();
@@ -379,6 +384,83 @@ class EntryRepository {
           ..where((e) => e.id.equals(entryId)))
         .go();
     unawaited(_deleteFromFirestore(uid: user.uid, entryId: entryId));
+
+    final images = entry != null ? parseEntryImages(entry.images) : const <EntryImage>[];
+    if (images.isNotEmpty) {
+      final paths = images.expand((i) => [i.fullPath, i.thumbPath]).toList();
+      unawaited(_imageProxy.deleteImages(paths).catchError((Object e) {
+        debugPrint('[EntryRepository] deleteEntryById: image cleanup failed for $entryId: $e');
+      }));
+    }
+  }
+
+  // ── Image attachments ────────────────────────────────────────────────────────
+
+  /// Single write path for all image mutations (add/delete/reorder). Writes
+  /// the Drift row, then fires an unawaited partial Firestore merge so a
+  /// concurrent edit elsewhere (e.g. [_updateFirestore]'s continuation-merge
+  /// write, which deliberately omits `images`) can never clobber it.
+  Future<void> updateEntryImages({
+    required String entryId,
+    required List<EntryImage> images,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    final imagesJson = encodeEntryImages(images);
+
+    await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
+        .write(EntriesCompanion(
+          images: Value(imagesJson),
+          updatedAt: Value(now),
+          synced: const Value(false),
+        ));
+
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    unawaited(_syncImagesToFirestore(
+      uid: user.uid,
+      entryId: entryId,
+      images: images,
+      now: now,
+    ));
+  }
+
+  Future<void> _syncImagesToFirestore({
+    required String uid,
+    required String entryId,
+    required List<EntryImage> images,
+    required String now,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('entries')
+          .doc(entryId)
+          .set({
+        'images': images.map((i) => i.toJson()).toList(),
+        'updatedAt': now,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[EntryRepository] _syncImagesToFirestore failed for $entryId: $e');
+      // Best-effort — remains unsynced locally until the next successful sync.
+    }
+  }
+
+  /// Returns the 1-based ordinal of [entryId] among this user's entries
+  /// created on [date] (ordered by createdAt ascending). Used ONLY to build
+  /// a human-browsable Storage folder name (`{date}_entry{ordinal}`) — NEVER
+  /// as a stable identifier or lookup key, since object paths are stored
+  /// verbatim in the `images` column and never reconstructed from it. Can
+  /// drift if entries for the same date are created concurrently on two
+  /// devices, or a later history-sync backfill inserts an older entry —
+  /// accepted as a cosmetic-only limitation.
+  Future<int> getEntryOrdinalForDate(String date, String entryId) async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    final rows = await (_db.select(_db.entries)
+          ..where((e) => e.userId.equals(user.uid) & e.date.equals(date))
+          ..orderBy([(e) => OrderingTerm.asc(e.createdAt)]))
+        .get();
+    final idx = rows.indexWhere((e) => e.id == entryId);
+    return idx >= 0 ? idx + 1 : rows.length + 1;
   }
 
   Future<Entry?> getEntryById(String entryId) {
@@ -514,6 +596,8 @@ class EntryRepository {
     final topicsJson = topicsRaw is List ? jsonEncode(topicsRaw) : (topicsRaw as String? ?? '[]');
     final tagsRaw = data['tags'];
     final tagsJson = tagsRaw is List ? jsonEncode(tagsRaw) : (tagsRaw as String? ?? '[]');
+    final imagesRaw = data['images'];
+    final imagesJson = imagesRaw is List ? jsonEncode(imagesRaw) : (imagesRaw as String? ?? '[]');
 
     await _db.into(_db.entries).insert(
       EntriesCompanion.insert(
@@ -529,6 +613,7 @@ class EntryRepository {
         followUpQuestions: Value(followUpJson),
         topics: Value(topicsJson),
         tags: Value(tagsJson),
+        images: Value(imagesJson),
         createdAt: _tsToString(data['createdAt'], now),
         updatedAt: _tsToString(data['updatedAt'], now),
         synced: Value(true),
@@ -689,4 +774,5 @@ class EntryRepository {
 EntryRepository entryRepository(Ref ref) => EntryRepository(
       ref.watch(appDatabaseProvider),
       ref.read(authServiceProvider.notifier),
+      ref.read(imageProxyClientProvider),
     );
