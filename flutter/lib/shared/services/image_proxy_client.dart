@@ -28,7 +28,7 @@ Never _rethrowAsValidationError(DioException e) {
 
 const _baseUrl = String.fromEnvironment(
   'IMAGE_PROXY_BASE_URL',
-  defaultValue: 'https://image-proxy-918937960824.europe-west3.run.app',
+  defaultValue: 'https://image-proxy-z4vu65i3aa-ey.a.run.app',
 );
 
 class ImageProxyClient {
