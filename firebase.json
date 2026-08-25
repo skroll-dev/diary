@@ -3,6 +3,7 @@
     "rules": "firestore.rules"
   },
   "storage": {
+    "bucket": "diary-6fa61.firebasestorage.app",
     "rules": "storage.rules"
   },
   "hosting": {
