@@ -743,7 +743,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             Text('Fotos · ${_images.length}',
                 style: tt.labelMedium?.copyWith(color: cs.onSurface)),
             const Spacer(),
-            if (_images.isNotEmpty)
+            // Also shown while _isEditingPhotos, even with zero images left —
+            // deleting the last photo mid-edit must not strand the user in
+            // edit mode with no escape hatch back to the "Hinzufügen" tile
+            // (which only renders in the non-editing branch below).
+            if (_images.isNotEmpty || _isEditingPhotos)
               TextButton(
                 onPressed: () =>
                     setState(() => _isEditingPhotos = !_isEditingPhotos),
