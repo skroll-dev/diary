@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -30,6 +31,12 @@ const _tagPalette = [
   (Color(0xFFE3F2FD), Color(0xFF1565C0)),
   (Color(0xFFFCE4EC), Color(0xFFC62828)),
 ];
+
+// Single-accent tag color (mirrors flow-kozept.html's one-chip-type tags).
+// Light pair matches the app's existing light-mode chip look; dark pair
+// mirrors the concept's --accent/--accent-dim (#8A7EF0 at ~20% wash).
+const _accentTagLight = (Color(0xFFEDE9FF), Color(0xFF5E35B1));
+const _accentTagDark = (Color(0x338A7EF0), Color(0xFFC9BFFF));
 
 // ─── Local data model ────────────────────────────────────────────────────────
 
@@ -215,7 +222,7 @@ Map<int, Map<int, List<_EntryPreview>>> _groupEntries(
 
 const _kYearHeaderH = 57.0;
 const _kMonthHeaderH = 44.0;
-const _kCardH = 130.0;
+const _kCardH = 190.0; // blended estimate: hero-photo cards run ~290, no-media ~110
 const _kDayDividerH = 28.0;
 
 int _uniqueDayCount(List<_EntryPreview> entries) {
@@ -318,6 +325,24 @@ String _moodEmoji(Mood m) => switch (m) {
       Mood.sad => '😔',
       Mood.mixed => '🤔',
       _ => '😐',
+    };
+
+Color _moodColor(Mood m) => switch (m) {
+      Mood.happy => const Color(0xFFF9A825),
+      Mood.calm => const Color(0xFF43A047),
+      Mood.tense => const Color(0xFFEF6C00),
+      Mood.sad => const Color(0xFF1565C0),
+      Mood.mixed => const Color(0xFF6A1B9A),
+      _ => const Color(0xFF5C6BC0),
+    };
+
+String _moodLabel(Mood m) => switch (m) {
+      Mood.happy => 'Gut',
+      Mood.calm => 'Ruhig',
+      Mood.tense => 'Angespannt',
+      Mood.sad => 'Traurig',
+      Mood.mixed => 'Gemischt',
+      _ => 'Neutral',
     };
 
 // ─── Real-data provider ───────────────────────────────────────────────────────
@@ -487,6 +512,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/'),
         tooltip: 'Neuer Eintrag',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add_rounded),
       ),
       body: Stack(
@@ -682,15 +708,15 @@ class _DayDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final label = _isToday(date) ? 'Heute' : _formatEntryDate(date);
+    final today = _isToday(date);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
-        label,
+        today ? 'HEUTE' : _formatEntryDate(date),
         style: tt.labelSmall?.copyWith(
           color: cs.outline,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
+          letterSpacing: today ? 0.9 : 0.3,
         ),
       ),
     );
@@ -713,213 +739,324 @@ class _EntryCard extends StatelessWidget {
     );
   }
 
+  String _metaText() {
+    if (entry.durationSeconds > 0) return _formatDuration(entry.durationSeconds);
+    if (entry.createdTime.isNotEmpty) return entry.createdTime;
+    return '–';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final today = _isToday(entry.date);
+    final moodColor = _moodColor(entry.mood);
+    final cardColor = today
+        ? Color.alphaBlend(
+            cs.primary.withValues(alpha: 0.05), cs.surfaceContainerLow)
+        : cs.surfaceContainerLow;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: today
+            ? BorderSide(color: cs.primary.withValues(alpha: 0.4), width: 1.5)
+            : BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      color: cardColor,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
+        child: entry.images.isNotEmpty
+            ? _MediaCardBody(
+                entry: entry,
+                moodColor: moodColor,
+                meta: _metaText(),
+                cardColor: cardColor,
+              )
+            : _CompactCardBody(entry: entry, moodColor: moodColor, meta: _metaText()),
+      ),
+    );
+  }
+}
+
+// ─── Media card body (hero photo) ─────────────────────────────────────────────
+
+class _MediaCardBody extends StatelessWidget {
+  const _MediaCardBody({
+    required this.entry,
+    required this.moodColor,
+    required this.meta,
+    required this.cardColor,
+  });
+
+  final _EntryPreview entry;
+  final Color moodColor;
+  final String meta;
+  final Color cardColor;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final today = _isToday(entry.date);
 
-    return Card(
-      elevation: today ? 3 : 2,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: today
-            ? BorderSide(color: cs.primary.withValues(alpha: 0.4), width: 1.5)
-            : BorderSide.none,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(width: 3, color: moodColor),
+          Expanded(child: _buildContent(context, cs, tt)),
+        ],
       ),
-      color: today
-          ? Color.alphaBlend(
-              cs.primary.withValues(alpha: 0.05), cs.surfaceContainerLow)
-          : cs.surfaceContainerLow,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ColorScheme cs, TextTheme tt) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 190,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Container(
-                width: 44,
-                height: 44,
+              StorageImage(objectPath: entry.images.first.fullPath),
+              // Fades into the card body's own background color (not plain
+              // black) so the photo blends seamlessly into the panel below
+              // instead of ending in a hard-edged seam.
+              DecoratedBox(
                 decoration: BoxDecoration(
-                  color: today ? cs.primary : cs.primaryContainer,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _moodEmoji(entry.mood),
-                  style: const TextStyle(fontSize: 22),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.title,
-                      style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      () {
-                        final dur = entry.durationSeconds > 0
-                            ? _formatDuration(entry.durationSeconds)
-                            : entry.createdTime.isNotEmpty
-                                ? entry.createdTime
-                                : '–';
-                        return today
-                            ? 'Heute · $dur'
-                            : '${_formatEntryDate(entry.date)} · $dur';
-                      }(),
-                      style: tt.labelSmall?.copyWith(
-                        color: today ? cs.primary : cs.outline,
-                        fontWeight: today ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      entry.preview,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        height: 1.45,
-                      ),
-                    ),
-                    if (entry.images.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _PhotoStrip(images: entry.images),
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    stops: const [0.0, 0.55],
+                    colors: [
+                      cardColor,
+                      cardColor.withValues(alpha: 0.0),
                     ],
-                    if (entry.allTopics.length > 1) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: entry.allTopics
-                            .map((t) => _TopicChip(
-                                  label: t['title'] as String? ?? '',
-                                  paletteIndex: entry.paletteIndex,
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                    if (entry.tags.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: entry.tags
-                            .map((t) => _TagChip(
-                                  tag: t,
-                                  paletteIndex: entry.paletteIndex,
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
-              if (entry.allTopics.isNotEmpty)
-                Icon(Icons.chevron_right_rounded,
-                    size: 18, color: cs.outlineVariant),
+              if (entry.images.length > 1)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: _GlassBadge(
+                    child: Text(
+                      '${entry.images.length} Fotos',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                bottom: 12,
+                left: 14,
+                child: _GlassBadge(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: moodColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${_moodEmoji(entry.mood)} ${_moodLabel(entry.mood)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.title,
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(meta, style: tt.labelSmall?.copyWith(color: cs.outline)),
+              const SizedBox(height: 6),
+              Text(
+                entry.preview,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tt.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.45,
+                ),
+              ),
+              if (entry.tags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: entry.tags.map((t) => _TagChip(tag: t)).toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Compact card body (no photo) ──────────────────────────────────────────────
+
+class _CompactCardBody extends StatelessWidget {
+  const _CompactCardBody({
+    required this.entry,
+    required this.moodColor,
+    required this.meta,
+  });
+
+  final _EntryPreview entry;
+  final Color moodColor;
+  final String meta;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(width: 3, color: moodColor),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(13, 14, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.title,
+                          style: tt.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _InlineMoodChip(mood: entry.mood, color: moodColor),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(meta, style: tt.labelSmall?.copyWith(color: cs.outline)),
+                  const SizedBox(height: 6),
+                  Text(
+                    entry.preview,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.45,
+                    ),
+                  ),
+                  if (entry.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children:
+                          entry.tags.map((t) => _TagChip(tag: t)).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Topic chip (card summary) ────────────────────────────────────────────────
+// ─── Inline mood chip (compact card) ──────────────────────────────────────────
 
-class _TopicChip extends StatelessWidget {
-  const _TopicChip({required this.label, required this.paletteIndex});
+class _InlineMoodChip extends StatelessWidget {
+  const _InlineMoodChip({required this.mood, required this.color});
 
-  final String label;
-  final int paletteIndex;
+  final Mood mood;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _tagPalette[paletteIndex % _tagPalette.length];
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg.withValues(alpha: 0.6),
+        color: cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: fg.withValues(alpha: 0.25)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w500,
-            ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${_moodEmoji(mood)} ${_moodLabel(mood)}',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Photo strip (card summary) ───────────────────────────────────────────────
+// ─── Glass badge (hero photo overlay) ─────────────────────────────────────────
 
-class _PhotoStrip extends StatelessWidget {
-  const _PhotoStrip({required this.images});
+class _GlassBadge extends StatelessWidget {
+  const _GlassBadge({required this.child});
 
-  final List<EntryImage> images;
-
-  static const _maxTiles = 3;
-  static const _tileSize = 60.0;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final shown = images.take(_maxTiles).toList();
-    final overflow = images.length - _maxTiles;
-
-    return SizedBox(
-      height: _tileSize,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        shrinkWrap: true,
-        itemCount: shown.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final isLast = i == shown.length - 1;
-          final tile = ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: _tileSize,
-              height: _tileSize,
-              child: StorageImage(objectPath: shown[i].thumbPath),
-            ),
-          );
-          if (!isLast || overflow <= 0) return tile;
-          return Stack(
-            children: [
-              tile,
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '+$overflow',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: child,
+        ),
       ),
     );
   }
@@ -1093,12 +1230,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: entry.tags
-                          .map((t) => _TagChip(
-                                tag: t,
-                                paletteIndex: entry.paletteIndex,
-                              ))
-                          .toList(),
+                      children: entry.tags.map((t) => _TagChip(tag: t)).toList(),
                     ),
                   ],
                   if (entry.entryDate.isNotEmpty) ...[
@@ -1223,14 +1355,14 @@ class _DetailTopicCard extends StatelessWidget {
 // ─── Tag chip ─────────────────────────────────────────────────────────────────
 
 class _TagChip extends StatelessWidget {
-  const _TagChip({required this.tag, required this.paletteIndex});
+  const _TagChip({required this.tag});
 
   final String tag;
-  final int paletteIndex;
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _tagPalette[paletteIndex % _tagPalette.length];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final (bg, fg) = isDark ? _accentTagDark : _accentTagLight;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

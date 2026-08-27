@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tagebuch – Übersicht Redesign</title>
+  <style>
+    :root {
+      --bg: #0E0F13;
+      --surface: #1A1C23;
+      --surface-2: #21232C;
+      --border: #2B2E38;
+      --text: #F2F2F6;
+      --text-dim: #9294A3;
+      --text-faint: #6C6E7C;
+      --accent: #8A7EF0;
+      /* aufgehellte Markenfarbe für Dark Mode */
+      --accent-dim: #8A7EF033;
+      --mood-calm: #6FCF97;
+      --mood-tense: #E0A85C;
+      --mood-neutral: #7C8CB5;
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: -apple-system, "SF Pro Text", Inter, sans-serif;
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .screen {
+      width: 100%;
+      max-width: 430px;
+      min-height: 100vh;
+      padding: 20px 18px 100px;
+    }
+
+    .statusbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      padding: 4px 2px 18px;
+      opacity: 0.7;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 800;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+
+    .avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      font-size: 16px;
+    }
+
+    .section-label {
+      color: var(--text-faint);
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 26px 2px 12px;
+    }
+
+    .day-label {
+      color: var(--text-dim);
+      font-size: 14px;
+      font-weight: 600;
+      margin: 22px 2px 10px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.no-media::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--mood);
+    }
+
+    /* Hero-Foto */
+    .card-media {
+      position: relative;
+      width: 100%;
+      height: 190px;
+      overflow: hidden;
+      background: var(--surface-2);
+    }
+
+    .card-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-media::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10, 10, 14, 0.75) 0%, rgba(10, 10, 14, 0.0) 55%);
+    }
+
+    .media-count {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 2;
+      background: rgba(14, 15, 19, 0.6);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 20px;
+    }
+
+    .mood-chip.on-media {
+      position: absolute;
+      bottom: 12px;
+      left: 14px;
+      z-index: 2;
+      background: rgba(14, 15, 19, 0.55);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      border: none;
+    }
+
+    .mood-strip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--mood);
+      z-index: 2;
+    }
+
+    .card-body {
+      padding: 14px 16px 14px;
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    .mood-chip {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 9px 3px 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .mood-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--mood);
+    }
+
+    .meta {
+      font-size: 12.5px;
+      color: var(--text-faint);
+      margin-bottom: 8px;
+    }
+
+    .preview {
+      font-size: 14.5px;
+      color: var(--text-dim);
+      line-height: 1.45;
+      margin: 0 0 12px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .tabbar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      background: rgba(20, 21, 27, 0.92);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 12px 0 26px;
+    }
+
+    .tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 11.5px;
+      color: var(--text-faint);
+      font-weight: 600;
+    }
+
+    .tab.active {
+      color: var(--accent);
+    }
+
+    .tab .icon {
+      font-size: 19px;
+    }
+
+    .fab {
+      position: fixed;
+      bottom: 96px;
+      right: calc(50% - 195px);
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 400;
+      box-shadow: 0 8px 20px rgba(138, 126, 240, 0.4);
+    }
+
+    .note {
+      max-width: 430px;
+      margin: 40px auto 0;
+      color: var(--text-faint);
+      font-size: 12.5px;
+      line-height: 1.6;
+      padding: 0 18px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="screen">
+    <div class="statusbar">
+      <span>20:44</span>
+      <span>🔑 •••</span>
+    </div>
+
+    <header>
+      <h1>Mein Tagebuch</h1>
+      <div class="avatar">👤</div>
+    </header>
+
+    <div class="section-label">Heute</div>
+
+    <div class="card" style="--mood:var(--mood-calm)">
+      <div class="card-media">
+        <span class="mood-strip"></span>
+        <img src="https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&h=600&fit=crop" alt="">
+        <span class="media-count">+9 Fotos</span>
+        <div class="mood-chip on-media"><span class="mood-dot"></span>☀️ Gut</div>
+      </div>
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="card-title">Sonnenschein</h3>
+        </div>
+        <div class="meta">20:23 Uhr</div>
+        <p class="preview">Heute hat die Sonne geschienen. Es war schön, das zu sehen.</p>
+        <div class="tags"><span class="tag">#Alltag</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="--mood:var(--mood-neutral)">
+      <div class="card-media">
+        <span class="mood-strip"></span>
+        <img src="https://images.unsplash.com/photo-1465101162946-4377e57745c3?w=800&h=600&fit=crop" alt="">
+        <div class="mood-chip on-media"><span class="mood-dot"></span>🌱 Ruhig</div>
+      </div>
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="card-title">Gartenarbeit heute</h3>
+        </div>
+        <div class="meta">0 Min</div>
+        <p class="preview">Heute war ein wirklich schöner Tag. Die Sonne hat geschienen, und ich habe gan…</p>
+        <div class="tags">
+          <span class="tag">#Arbeit</span><span class="tag">#Alltag</span><span class="tag">#Garten</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-label">Mi, 26. August</div>
+
+    <div class="card no-media" style="--mood:var(--mood-tense)">
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="card-title">Morgen und Regen</h3>
+          <div class="mood-chip"><span class="mood-dot"></span>🌧️ Angespannt</div>
+        </div>
+        <div class="meta">07:53 Uhr</div>
+        <p class="preview">Heute war ein Dienstag, der zuerst irgendwie fordernd startete, bevor …</p>
+        <div class="tags"><span class="tag">#Alltag</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fab">+</div>
+
+  <div class="tabbar">
+    <div class="tab"><span class="icon">🎙️</span>Heute</div>
+    <div class="tab active"><span class="icon">📔</span>Tagebuch</div>
+    <div class="tab"><span class="icon">📊</span>Analyse</div>
+  </div>
+
+  <div class="note">
+    Variante 2: Hauptfoto als Hero-Bild oben in der Karte (190px, volle Breite) statt Thumbnail-Reihe. Mood-Chip liegt
+    jetzt als Glas-Badge auf dem Foto, Fotoanzahl oben rechts. Einträge ohne Foto (z. B. "Morgen und Regen") behalten
+    das kompakte Kartenlayout mit Farbstreifen, damit die Liste nicht unnötig hoch wird, wenn kein Bild vorhanden ist.
+  </div>
+
+</body>
+
+</html>
