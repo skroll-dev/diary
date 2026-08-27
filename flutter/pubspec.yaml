@@ -61,6 +61,7 @@ dependencies:
   image_picker: ^1.2.3
   cached_network_image: ^3.4.1
   animated_reorderable_list: ^1.1.0
+  photo_view: ^0.15.0
 
 dev_dependencies:
   flutter_test:

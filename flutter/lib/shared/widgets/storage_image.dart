@@ -8,6 +8,15 @@ import 'package:flutter/material.dart';
 /// (`getDownloadURL()`) every time a tile scrolls back into view.
 final _downloadUrlCache = <String, Future<String>>{};
 
+/// Resolves a Storage object path to a download URL, sharing [StorageImage]'s
+/// own cache — reused by [FullscreenImageViewer] so opening a photo that's
+/// already visible in a grid/strip doesn't re-issue the same network call.
+Future<String> resolveStorageDownloadUrl(String objectPath) =>
+    _downloadUrlCache.putIfAbsent(
+      objectPath,
+      () => FirebaseStorage.instance.ref(objectPath).getDownloadURL(),
+    );
+
 /// Displays an image stored at a Firebase Storage object path. Resolves the
 /// path to a download URL directly via the Storage SDK (no proxy round-trip
 /// for reads) and renders it through [CachedNetworkImage] for on-disk
@@ -61,10 +70,8 @@ class _StorageImageState extends State<StorageImage> {
     }
   }
 
-  Future<String> _resolve(String objectPath) => _downloadUrlCache.putIfAbsent(
-        objectPath,
-        () => FirebaseStorage.instance.ref(objectPath).getDownloadURL(),
-      );
+  Future<String> _resolve(String objectPath) =>
+      resolveStorageDownloadUrl(objectPath);
 
   @override
   Widget build(BuildContext context) {
