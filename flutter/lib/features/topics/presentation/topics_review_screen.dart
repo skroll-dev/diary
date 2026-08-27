@@ -642,47 +642,13 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     final originalIndex = _images.indexOf(target);
     if (originalIndex < 0) return;
 
+    // Instant, no confirmation — re-adding a photo costs a couple of taps
+    // from the same camera roll, so an undo/confirm step isn't worth the
+    // extra UI (matches "remove from album" elsewhere, e.g. iOS/Google Photos).
     setState(() => _images = List.of(_images)..removeAt(originalIndex));
 
-    final messenger = ScaffoldMessenger.of(context);
-    final actionColor = Theme.of(context).colorScheme.inversePrimary;
-    var undone = false;
-
-    // Hand-rolled instead of the single-action SnackBar API so we can offer
-    // both an explicit "Bestätigen" (commit now, don't wait out the timeout)
-    // and "Rückgängig" — both just close the SnackBar early via
-    // hideCurrentSnackBar(); the `undone` flag (not SnackBarClosedReason)
-    // decides afterwards whether to commit.
-    final controller = messenger.showSnackBar(SnackBar(
-      content: Row(
-        children: [
-          const Expanded(child: Text('Foto gelöscht')),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: actionColor),
-            onPressed: () => messenger.hideCurrentSnackBar(),
-            child: const Text('Bestätigen'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: actionColor),
-            onPressed: () {
-              undone = true;
-              if (mounted) {
-                setState(() =>
-                    _images = List.of(_images)..insert(originalIndex, target));
-              }
-              messenger.hideCurrentSnackBar();
-            },
-            child: const Text('Rückgängig'),
-          ),
-        ],
-      ),
-    ));
-
-    await controller.closed;
-    if (undone || !mounted) return;
-
-    // Commit: persist the removal and clean up Storage. The Storage delete
-    // is best-effort — a failure there (e.g. an orphaned object from a
+    // Persist the removal and clean up Storage. The Storage delete is
+    // best-effort — a failure there (e.g. an orphaned object from a
     // previous auth/account) must not surface as an unhandled exception,
     // matching the fire-and-forget cleanup pattern used elsewhere
     // (EntryRepository's Firestore syncs, deleteEntryById's image cleanup).
