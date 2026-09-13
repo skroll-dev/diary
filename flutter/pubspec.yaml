@@ -73,14 +73,16 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
 
 flutter_launcher_icons:
-  image_path: "assets/icon/icon.jpg"
+  image_path: "assets/icon/icon2-blue-bg.png"
   android: true
+  adaptive_icon_background: "#3D40AB"
+  adaptive_icon_foreground: "assets/icon/icon2-foreground.png"
   ios: true
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/icon/icon.jpg"
-    background_color: "#1A2744"
+    image_path: "assets/icon/icon2-blue-bg.png"
+    background_color: "#3D40AB"
     theme_color: "#4A90D9"
   windows:
     generate: false
