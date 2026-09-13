@@ -1237,7 +1237,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                     const SizedBox(height: 28),
                     Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
                     const SizedBox(height: 8),
-                    if (entry.rawEntry != null && _isToday(entry.date)) ...[
+                    if (entry.rawEntry != null) ...[
                       Center(
                         child: TextButton.icon(
                           onPressed: () {
