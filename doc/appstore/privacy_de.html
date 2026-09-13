@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenschutzerklärung – Mein KI-Tagebuch</title>
+<style>
+  :root {
+    --accent: #4A90D9;
+    --accent-dark: #2f6ba8;
+    --text: #1c1f24;
+    --muted: #5b6572;
+    --bg: #fafbfc;
+    --card-bg: #ffffff;
+    --border: #e4e8ed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --text: #e7eaee;
+      --muted: #a2acb8;
+      --bg: #14171c;
+      --card-bg: #1b1f26;
+      --border: #2b313a;
+      --accent: #6fa8e0;
+      --accent-dark: #8fbdea;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .lang-switch {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .lang-switch a {
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .lang-switch a.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  header.doc-header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header.doc-header h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+  }
+  header.doc-header .subtitle {
+    font-size: 16px;
+    color: var(--muted);
+    font-style: italic;
+    margin: 0 0 10px;
+  }
+  header.doc-header .meta {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 8px 28px;
+  }
+  section {
+    padding: 22px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-of-type {
+    border-bottom: none;
+  }
+  h2 {
+    font-size: 17px;
+    color: var(--accent-dark);
+    margin: 0 0 10px;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  h2 .num {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  p {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+  ul {
+    margin: 8px 0 10px;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  strong { color: var(--text); }
+  a { color: var(--accent-dark); }
+  footer {
+    text-align: center;
+    margin-top: 36px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<nav class="lang-switch">
+  <a href="privacy_en.html">EN</a>
+  <a href="privacy_de.html" class="active">DE</a>
+</nav>
+
+<main>
+  <header class="doc-header">
+    <h1>Datenschutzerklärung</h1>
+    <p class="subtitle">Mein KI-Tagebuch – &bdquo;Sprich, die KI schreibt.&ldquo;</p>
+    <p class="meta">Stand: Juni 2026 · Version 1.0</p>
+  </header>
+
+  <div class="card">
+
+    <section>
+      <h2><span class="num">1.</span> Verantwortlicher</h2>
+      <p>Verantwortlich für die Datenverarbeitung im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:</p>
+      <p>
+        Mathias Blaich<br>
+        Gartenstraße 25<br>
+        75382 Althengstett<br>
+        Deutschland
+      </p>
+      <p>E-Mail: <a href="mailto:blaichmathias@gmail.com">blaichmathias@gmail.com</a></p>
+    </section>
+
+    <section>
+      <h2><span class="num">2.</span> Überblick und Geltungsbereich</h2>
+      <p>Diese Datenschutzerklärung informiert dich über Art, Umfang und Zweck der Verarbeitung personenbezogener Daten innerhalb der mobilen Anwendung &bdquo;Mein KI-Tagebuch&ldquo; (nachfolgend &bdquo;App&ldquo;) sowie über deine Rechte.</p>
+      <p>Die App ermöglicht es dir, frei in dein Smartphone zu sprechen. Deine Spracheingabe wird durch künstliche Intelligenz transkribiert und zu einem strukturierten Tagebucheintrag verarbeitet. Der Schutz deiner sehr persönlichen Inhalte ist dabei ein zentraler Grundsatz unserer technischen Architektur (&bdquo;Privacy by Design&ldquo;).</p>
+    </section>
+
+    <section>
+      <h2><span class="num">3.</span> Welche Daten wir verarbeiten</h2>
+      <ul>
+        <li><strong>Konto- und Stammdaten:</strong> Konto-Kennung (User-ID), Authentifizierungsdaten</li>
+        <li><strong>Spracheingaben (Audio):</strong> deine gesprochenen Aufnahmen während der Erstellung eines Eintrags</li>
+        <li><strong>Tagebuchinhalte:</strong> transkribierter Text, generierter Eintrag, Stimmungs-Tags und -Scores</li>
+        <li><strong>Nutzungs- und Gerätedaten:</strong> App-Version, Geräte-/Betriebssystemtyp, Fehler-/Absturzberichte, Zeitstempel</li>
+        <li><strong>Abonnementdaten:</strong> Status des Abonnements (aktiv/inaktiv) – die Zahlung selbst erfolgt über App Store / Google Play</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">4.</span> Spracheingabe und Zero-Disk-Policy</h2>
+      <p><strong>Zero-Disk-Policy:</strong> Deine Audioaufnahmen werden zu keinem Zeitpunkt dauerhaft auf unseren Servern oder Festplatten gespeichert. Das Audio wird ausschließlich im Arbeitsspeicher (RAM) verarbeitet und unmittelbar nach der Erstellung des Texteintrags rückstandslos verworfen.</p>
+      <p>Gespeichert wird lediglich das Ergebnis der Verarbeitung – also der von dir freigegebene Tagebucheintrag in Textform sowie die zugehörigen Metadaten (z. B. Stimmungs-Tag). Die Original-Audiodatei verlässt diesen In-Memory-Prozess nicht.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">5.</span> Besondere Kategorien personenbezogener Daten (Art. 9 DSGVO)</h2>
+      <p>Tagebucheinträge können ihrer Natur nach sehr persönliche Informationen enthalten – etwa Angaben zu Gesundheit, religiösen oder weltanschaulichen Überzeugungen, politischen Meinungen oder zum Sexualleben. Solche Daten gelten als besondere Kategorien personenbezogener Daten im Sinne des Art. 9 DSGVO und genießen besonderen Schutz.</p>
+      <p>Die Verarbeitung dieser Inhalte erfolgt ausschließlich auf Grundlage deiner ausdrücklichen Einwilligung gemäß Art. 9 Abs. 2 lit. a DSGVO. Diese Einwilligung holen wir vor der ersten Nutzung des KI-Funktionsumfangs gesondert in der App ein. Du kannst sie jederzeit mit Wirkung für die Zukunft widerrufen.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">6.</span> Verarbeitung durch künstliche Intelligenz</h2>
+      <p>Zur Erbringung des Kerndienstes setzen wir folgende KI-Dienste ein:</p>
+      <ul>
+        <li><strong>Spracherkennung (Transkription):</strong> Google Cloud Speech-to-Text (Chirp) wandelt deine Spracheingabe in Text um.</li>
+        <li><strong>Textstrukturierung:</strong> das multimodale Modell Gemini 2.5 Flash (Google Cloud Vertex AI) formt aus dem Gesprochenen einen zusammenhängenden Eintrag, extrahiert die Stimmung und generiert ggf. Vertiefungsfragen.</li>
+      </ul>
+      <p>Die Spracherkennung wird innerhalb der Google Cloud EU Multi-Region verarbeitet. Die Textstrukturierung findet in der Region europe-west3 (Frankfurt am Main) statt. Deine Inhalte werden nicht zum Training öffentlicher KI-Modelle verwendet.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">7.</span> Empfänger / Auftragsverarbeiter</h2>
+      <p>Zur Bereitstellung der App nutzen wir sorgfältig ausgewählte Dienstleister, mit denen Auftragsverarbeitungsverträge (Art. 28 DSGVO) bestehen:</p>
+      <ul>
+        <li>Google Cloud Run – Backend-Verarbeitung (In-Memory) · Google · europe-west3</li>
+        <li>Firebase – Authentifizierung, Datenbank, Synchronisation · Google · europe-west3</li>
+        <li>Speech-to-Text (Chirp) – Audio-Transkription · Google · EU</li>
+        <li>Gemini 2.5 Flash (Vertex AI) – Textstrukturierung &amp; Analyse · Google · EU</li>
+        <li>Apple App Store / Google Play – Abwicklung von Abonnements &amp; Zahlungen · Apple / Google</li>
+      </ul>
+      <p>Anbieter ist jeweils die Google Ireland Limited bzw. ggf. die Google LLC. Soweit eine Übermittlung in Drittländer erfolgt, ist diese durch geeignete Garantien (insbesondere EU-Standardvertragsklauseln) abgesichert.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">8.</span> Rechtsgrundlagen</h2>
+      <ul>
+        <li>Art. 6 Abs. 1 lit. b DSGVO – Erfüllung des Nutzungsvertrags (Bereitstellung der App-Funktionen, Konto, Abonnement).</li>
+        <li>Art. 9 Abs. 2 lit. a DSGVO – ausdrückliche Einwilligung für Tagebuchinhalte mit besonderem Schutzbedarf.</li>
+        <li>Art. 6 Abs. 1 lit. f DSGVO – berechtigtes Interesse (z. B. Stabilität, Fehleranalyse, Sicherheit).</li>
+        <li>Art. 6 Abs. 1 lit. c DSGVO – Erfüllung rechtlicher Verpflichtungen.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="num">9.</span> Speicherort und Speicherdauer</h2>
+      <p>Deine Tagebucheinträge und Kontodaten werden in der EU (Frankfurt, europe-west3) gespeichert. Zusätzlich werden Einträge lokal auf deinem Gerät gespeichert (SQLite-Datenbank); diese Daten verlassen dein Gerät nur zur Synchronisation mit der Cloud. Wir speichern deine Daten so lange, wie dein Konto besteht. Löschst du einzelne Einträge oder dein gesamtes Konto, werden die zugehörigen Daten gelöscht. Audioaufnahmen werden gemäß der Zero-Disk-Policy gar nicht erst dauerhaft gespeichert.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">10.</span> Deine Rechte</h2>
+      <p>Dir stehen nach der DSGVO folgende Rechte zu:</p>
+      <ul>
+        <li>Auskunft über die verarbeiteten Daten (Art. 15)</li>
+        <li>Berichtigung unrichtiger Daten (Art. 16)</li>
+        <li>Löschung (&bdquo;Recht auf Vergessenwerden&ldquo;, Art. 17)</li>
+        <li>Einschränkung der Verarbeitung (Art. 18)</li>
+        <li>Datenübertragbarkeit – Export deiner Einträge (Art. 20)</li>
+        <li>Widerspruch gegen die Verarbeitung (Art. 21)</li>
+        <li>Widerruf erteilter Einwilligungen mit Wirkung für die Zukunft (Art. 7 Abs. 3)</li>
+      </ul>
+      <p>Zur Ausübung deiner Rechte genügt eine Nachricht an <a href="mailto:blaichmathias@gmail.com">blaichmathias@gmail.com</a>.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">11.</span> Datensicherheit</h2>
+      <p>Wir schützen deine Daten durch technische und organisatorische Maßnahmen. Die Übertragung erfolgt verschlüsselt (TLS), Daten im Ruhezustand werden verschlüsselt gespeichert (AES-256). Der Zugriff auf Verarbeitungssysteme ist auf das Notwendige beschränkt.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">12.</span> Authentifizierung</h2>
+      <p>Für die Anmeldung und Kontoverwaltung nutzen wir Firebase Authentication. Dabei werden deine Konto-Kennung und Authentifizierungsdaten verarbeitet, um dir einen sicheren Zugang zu deinen Einträgen zu ermöglichen.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">13.</span> Abonnements und Zahlungen</h2>
+      <p>Kostenpflichtige Funktionen werden als Abonnement angeboten. Der Kauf und die Abrechnung erfolgen ausschließlich über den Apple App Store bzw. Google Play. Wir erhalten keine vollständigen Zahlungsdaten (z. B. Kreditkartennummern), sondern lediglich Informationen über den Status deines Abonnements. Es gelten ergänzend die Datenschutzbestimmungen von Apple und Google.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">14.</span> Minderjährige</h2>
+      <p>Die App richtet sich nicht an Kinder. Personen unter 16 Jahren dürfen die App nur mit Einwilligung der Erziehungsberechtigten nutzen.</p>
+    </section>
+
+    <section>
+      <h2><span class="num">15.</span> Beschwerderecht bei der Aufsichtsbehörde</h2>
+      <p>Du hast das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren. Zuständig ist in der Regel die Behörde deines Wohnsitzes oder unseres Sitzes:</p>
+      <p>
+        Der Landesbeauftragte für den Datenschutz und die Informationsfreiheit Baden-Württemberg<br>
+        <a href="https://www.baden-wuerttemberg.datenschutz.de" target="_blank" rel="noopener">www.baden-wuerttemberg.datenschutz.de</a>
+      </p>
+    </section>
+
+    <section>
+      <h2><span class="num">16.</span> Änderungen dieser Datenschutzerklärung</h2>
+      <p>Wir passen diese Datenschutzerklärung an, sobald Änderungen an der App oder der Rechtslage dies erfordern. Die jeweils aktuelle Version ist stets an dieser Stelle abrufbar.</p>
+    </section>
+
+  </div>
+
+  <footer>
+    © 2026 Mathias Blaich · Mein KI-Tagebuch · Zuletzt aktualisiert im Juni 2026
+  </footer>
+</main>
+
+</body>
+</html>

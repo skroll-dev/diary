@@ -120,5 +120,5 @@ flutter run --release -d 00008110-000C74CC3AE2401E   # Simon's device
 |---|---|
 | Developer home | https://skroll-dev.github.io |
 | Ads verification | https://skroll-dev.github.io/app-ads.txt |
-| Privacy policy | https://skroll-dev.github.io/privacy-policy.html |
-| Terms | https://skroll-dev.github.io/terms.html |
+| Privacy policy | https://silbenquiz.de/diary-web/privacy_en.html |
+| Terms | https://silbenquiz.de/diary-web/terms.html |
