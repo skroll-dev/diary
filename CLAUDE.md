@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**AI Tagebuch** (codename: Mein KI-Tagebuch) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags and follow-up questions via Gemini. All data stays in the EU.
+**AI Tagebuch** (codename: Mein KI-Tagebuch) — a privacy-first, AI-powered voice diary app for the DACH market. Users dictate diary entries; the backend transcribes audio and generates structured diary entries with mood tags, photos, and follow-up questions via Gemini. UI, transcription, and generation are bilingual (German/English). All data stays in the EU.
 
 - **Firebase project:** `diary-6fa61`
 - **Bundle ID:** iOS `com.diary.skroll.app`, Android `com.ai.diary.app` (diverged 2026-08-02 — `com.diary.app` was already claimed by another team in App Store Connect; Android kept its old ID until then, both platforms share the `diary-6fa61` Firebase project via separate app registrations)
@@ -39,7 +39,7 @@ flutter build ios
 Each service has its own Python venv (3.12+ required; 3.14 works with `pydantic>=2.11.0`).
 
 ```bash
-cd ai-proxy              # or gdpr-export
+cd ai-proxy              # or gdpr-export, image-proxy
 
 # macOS / Linux
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -49,7 +49,7 @@ LOG_FILE=../log/ai-proxy.log .venv/bin/uvicorn app.main:app --reload --port 8080
 python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\uvicorn app.main:app --reload --port 8080
 
-# gdpr-export (port 8081, same pattern)
+# gdpr-export (port 8081, same pattern), image-proxy (port 8082, same pattern)
 ```
 
 **Logs:** ai-proxy writes to `log/ai-proxy.log` (controlled by `LOG_FILE` env var). The `log/` directory at repo root must exist — create it once with `mkdir log`.
@@ -77,16 +77,19 @@ GOOGLE_APPLICATION_CREDENTIALS=./credentials.json   # service account key for lo
 
 `gdpr-export` has no App Check bypass logic of its own — every route verifies the caller's Firebase ID token directly (`_get_uid`), so `ENV` only affects the `/docs` route. It can reuse the same service account key as `ai-proxy` (copy `ai-proxy/credentials.json` to `gdpr-export/credentials.json`) for local Firestore/Storage access, but `DELETE /account` additionally calls `auth.delete_user()`, which needs the **Firebase Authentication Admin** IAM role — grant it to whichever service account you use if that call fails locally with a permission error.
 
+`image-proxy`'s `.env` follows the same shape as `ai-proxy`'s (`ENV`, `GCP_PROJECT`, `GOOGLE_APPLICATION_CREDENTIALS`, `LOG_FILE`, `LOG_LEVEL`), but like `gdpr-export` it has no App Check bypass — `get_current_uid` always verifies a real Firebase ID token, so local runs resolve the caller's actual uid.
+
 ### Deployment (CI/CD)
 
 GitHub Actions auto-deploy on push to `main`:
 - `ai-proxy/` changes → Cloud Run (`europe-west3`) via `.github/workflows/deploy-ai-proxy.yml`
 - `gdpr-export/` changes → Cloud Run (`europe-west3`) via `.github/workflows/deploy-gdpr-export.yml`
+- `image-proxy/` changes → Cloud Run (`europe-west3`) via `.github/workflows/deploy-image-proxy.yml`
 - `flutter/` changes → Firebase Hosting via `.github/workflows/deploy-web.yml`
 
-Both `ai-proxy` and `gdpr-export` deploy with `--allow-unauthenticated` — each route verifies the caller's Firebase ID token itself (`_get_uid` in `gdpr-export`, the App Check/auth middleware in `ai-proxy`), so Cloud Run IAM does not gate access.
+All three backend services deploy with `--allow-unauthenticated` — each route verifies the caller's Firebase ID token itself (`_get_uid` in `gdpr-export`, `get_current_uid` in `image-proxy`, the App Check/auth middleware in `ai-proxy`), so Cloud Run IAM does not gate access.
 
-Required GitHub repository secrets: `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_OPTIONS_DART`, `PROXY_BASE_URL`, `GDPR_EXPORT_BASE_URL`.
+Required GitHub repository secrets: `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_OPTIONS_DART`, `PROXY_BASE_URL`, `GDPR_EXPORT_BASE_URL`, `IMAGE_PROXY_BASE_URL`.
 
 ```bash
 # Manually update Cloud Run env vars
@@ -123,6 +126,9 @@ Flutter App (iOS/Android/Web)
   │     audio bytes processed in RAM, never persisted
   └─► Cloud Firestore (eu-eur3, entries per user)
   └─► Drift (SQLite, local source of truth)
+  └─► image-proxy (Cloud Run, europe-west3)
+  │     POST /images/upload  → resize + strip EXIF/GPS → Cloud Storage (full + thumb)
+  │     POST /images/delete  → remove Storage objects
 
 gdpr-export (Cloud Run) ──► Firestore (JSON export / account deletion)
 ```
@@ -149,10 +155,11 @@ Shell navigation (Heute / Verlauf / Analyse) is handled by `StatefulShellRoute.i
 `TopicsArgs` (defined in `app_router.dart`):
 ```dart
 typedef TopicsArgs = ({
-  String date, String duration,
+  String entryId, String date, String duration,
   List<TopicDto> topics, String normalizedTranscript,
   String bodyMarkdown, String mood, double moodScore,
   List<String> followUpQuestions, String transcriptReason,
+  bool isEditMode, // true when opened from History to edit an existing entry
 });
 ```
 
@@ -197,12 +204,13 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 3. `setState(...)` — UI updates immediately with new topics/questions
 4. `EntryRepository.mergeEntry(...)` — DB sync, fire-and-forget (must not block UI)
 
-#### Data model — Drift schema v3
+#### Data model — Drift schema v4
 
 **Entries table:**
 - Core: `id`, `userId`, `date`, `bodyMarkdown`, `mood`, `moodScore`, `durationSeconds`, `language`, `version`, `createdAt`, `updatedAt`, `synced`
 - Added in v2: `followUpQuestions` (JSON string), `topics` (JSON string)
 - Added in v3: `tags` (JSON string) — see `EntryRepository.getAllTags()`
+- Added in v4: `images` (JSON string) — array of `EntryImage` (full/thumb Storage paths + dimensions), populated via `image-proxy`
 
 **RawTranscripts table:**
 - Core: `id`, `entryId`, `content` (raw STT — never shown to user), `createdAt`
@@ -259,8 +267,8 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
 | `HistoryScreen` | Complete — real Drift data via `_historyEntriesProvider` (reactive stream, user-scoped), sticky Year/Month headers (`flutter_sticky_header: ^0.8.0`), right-side scroll scrubber (`_ScrollScrubber` / `_ScrubberPainter` CustomPainter with year ticks + month dots, tap + drag support), topic detail sheet, entry deletion. `useFakeHistoryProvider` toggles mock data for design work |
 | `AnalyticsScreen` | Skeleton ("Kommt bald" placeholder) |
-| `ProfileScreen` | Complete — display name, sign-in state, GDPR danger zone (export/delete via `gdpr-export`), settings entry point (gear icon) |
-| `SettingsScreen` | Complete — language switcher (System/Deutsch/English) via `LocaleController` |
+| `ProfileScreen` | Complete — display name, sign-in state, stats, settings entry point (gear icon) |
+| `SettingsScreen` | Complete — language switcher (System/Deutsch/English) via `LocaleController`; GDPR danger zone (export/delete via `gdpr-export`) |
 
 ### ai-proxy (`ai-proxy/app/`)
 
@@ -283,7 +291,15 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 ### gdpr-export (`gdpr-export/app/`)
 
-FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON ZIP, or deletes the account and all associated Firestore documents (`DELETE /account` also deletes the Firebase Auth user via the Admin SDK). Called from Flutter via `shared/services/gdpr_export_client.dart` (`GdprExportClient.deleteAccount()`), wired to the "Alle Daten unwiderruflich löschen" danger-zone action on `ProfileScreen` (type-to-confirm dialog, then clears Drift/`history_synced_*` prefs via `EntryRepository.clearAllLocalData()` and signs out).
+FastAPI service for DSGVO compliance: exports all user Firestore data as a JSON ZIP, or deletes the account and all associated Firestore documents (`DELETE /account` also deletes the Firebase Auth user via the Admin SDK). Called from Flutter via `shared/services/gdpr_export_client.dart` (`GdprExportClient.deleteAccount()`), wired to the "Alle Daten unwiderruflich löschen" danger-zone action on `SettingsScreen` (type-to-confirm dialog, then clears Drift/`history_synced_*` prefs via `EntryRepository.clearAllLocalData()` and signs out).
+
+### image-proxy (`image-proxy/app/`)
+
+FastAPI service handling diary-entry photo attachments (`POST /images/upload`, `POST /images/delete`, `GET /health`). Unlike `ai-proxy`, there is no App Check bypass — `get_current_uid` (`app/services/auth.py`) always verifies a real Firebase ID token and returns its `uid`, which is the only source ever trusted for Storage paths (`users/{uid}/...`); `assert_owns_path` guards every delete.
+
+**Image processing** (`app/services/images.py`): accepts JPEG/PNG/HEIC/HEIF/WebP up to 15 MB; `process_upload()` applies `ImageOps.exif_transpose()` (must run first, or portrait photos end up rotated), converts to RGB, and re-encodes as JPEG — a full re-encode with no `exif=` means all metadata (not just GPS) is stripped, not just filtered. Produces two variants: full (max 2048px) and thumb (max 320px), both quality 85, uploaded to `diary-6fa61.firebasestorage.app`. `MAX_IMAGES_PER_ENTRY = 10` must stay in sync with `kMaxImagesPerEntry` in `flutter/lib/shared/constants/image_limits.dart`.
+
+Flutter client: `shared/services/image_proxy_client.dart` (`ImageProxyClient`, returns `EntryImage`), always sends the real ID token (no `localhost` auth-skip like `ProxyClient`) since `image-proxy` has no dev bypass to match.
 
 ### Agent Skills
 
@@ -293,8 +309,8 @@ Two separate skill directories exist — check both before writing code for a re
 
 ## Key Constraints
 
-- **GDPR / DSGVO:** Speech-to-Text uses Chirp 3 at `eu-speech.googleapis.com` (EU multi-region). All other GCP resources must stay in `europe-west3` or `eu-eur3`. Audio is processed in RAM only — never written to disk or object storage.
+- **GDPR / DSGVO:** Speech-to-Text uses Chirp 3 at `eu-speech.googleapis.com` (EU multi-region). All other GCP resources must stay in `europe-west3` or `eu-eur3`. Audio is processed in RAM only — never written to disk or object storage. Photos uploaded via `image-proxy` have all EXIF metadata (including GPS) stripped server-side before being written to Storage.
 - **Firebase App Check** is required on all ai-proxy routes in production. Anonymous auth must be enabled in the Firebase console (`diary-6fa61` → Authentication → Sign-in method).
 - **Web audio:** `kIsWeb` must gate any `local_auth` usage. The `record` package works on web, but only `AudioEncoder.pcm16bits` is supported for streaming.
 - **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.
-- **Drift schema changes** require a migration in `app_database.dart` (`MigrationStrategy.onUpgrade`) and `dart run build_runner build` afterwards. Current schema version: **3**.
+- **Drift schema changes** require a migration in `app_database.dart` (`MigrationStrategy.onUpgrade`) and `dart run build_runner build` afterwards. Current schema version: **4**.
