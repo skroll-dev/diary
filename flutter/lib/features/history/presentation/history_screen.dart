@@ -739,11 +739,7 @@ class _EntryCard extends StatelessWidget {
     );
   }
 
-  String _metaText() {
-    if (entry.durationSeconds > 0) return _formatDuration(entry.durationSeconds);
-    if (entry.createdTime.isNotEmpty) return entry.createdTime;
-    return '–';
-  }
+  String _metaText() => entry.createdTime.isNotEmpty ? entry.createdTime : '–';
 
   @override
   Widget build(BuildContext context) {
@@ -1142,11 +1138,12 @@ class _EntryDetailSheet extends ConsumerWidget {
                           style: tt.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700),
                         ),
-                        Text(
-                          _formatDuration(entry.durationSeconds),
-                          style:
-                              tt.labelSmall?.copyWith(color: cs.outline),
-                        ),
+                        if (entry.createdTime.isNotEmpty)
+                          Text(
+                            entry.createdTime,
+                            style:
+                                tt.labelSmall?.copyWith(color: cs.outline),
+                          ),
                       ],
                     ),
                   ),
