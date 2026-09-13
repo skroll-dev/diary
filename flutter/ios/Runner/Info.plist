@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ai Tagebuch</string>
+	<string>My AI-Diary</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,11 +29,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Mein KI-Tagebuch benötigt Zugriff auf die Kamera, um Fotos zu deinen Tagebucheinträgen hinzuzufügen.</string>
+	<string>My AI-Diary needs access to the camera to add photos to your diary entries.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen.</string>
+	<string>My AI-Diary needs access to the microphone to record your spoken diary entries.</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>Mein KI-Tagebuch möchte dich geräteübergreifend verfolgen, um dir relevantere Inhalte zu zeigen und die App zu verbessern.</string>
+	<string>My AI-Diary would like to track you across apps and websites to show you more relevant content and improve the app.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

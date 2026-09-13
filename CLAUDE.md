@@ -23,6 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cd flutter
 flutter pub get
 dart run build_runner build          # regenerate .g.dart files after schema/provider changes
+flutter gen-l10n                     # regenerate lib/l10n/app_localizations*.dart after editing .arb files (also runs automatically on `flutter pub get`/`run`/`build`)
 flutter run                          # iOS/Android on connected device
 flutter run -d chrome                # Web
 flutter analyze
@@ -141,6 +142,7 @@ Flutter 3.44.1+ (Dart 3.12+) required — `record ^7.0.0` needs Dart SDK `^3.12.
 | `/history` | `HistoryScreen` | — |
 | `/analytics` | `AnalyticsScreen` | — |
 | `/profile` | `ProfileScreen` | — |
+| `/settings` | `SettingsScreen` | — |
 
 Shell navigation (Heute / Verlauf / Analyse) is handled by `StatefulShellRoute.indexedStack` in `app_router.dart`, rendered by `shared/widgets/main_shell.dart`.
 
@@ -246,6 +248,7 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 - `TopicDto.text` is complete chapter prose — never truncated or summarized
 - Transcript length is capped at `kMaxTranscriptChars` (`shared/constants/transcript_limits.dart`, 20,000) — must stay in sync with `MAX_TRANSCRIPT_CHARS` in `ai-proxy/app/routes/entries.py`, which applies the same value to all of `normalize`/`generate`/`merge`'s string fields. `TopicsReviewScreen` disables new recordings at 90% of the cap and, on the rare 422 that slips through anyway (`ProxyValidationException` in `proxy_client.dart`), reopens `showTranscriptInputSheet` pre-filled with the offending text for an edit-and-resend.
 - `_AuthSheetState` (`features/auth/presentation/auth_sheet.dart`) can dismiss itself from two independent places — the `authStateChanges` listener (deep-link email sign-in) and the sign-in button handlers (`UidChangedNotice` after an anonymous→existing-account uid swap). Both must route through `_closeSheet()`, which is guarded by a `_popped` flag: a second `Navigator.pop()` on an already-closed sheet (with `useRootNavigator: true`) falls through and pops a real page off the GoRouter stack instead.
+- **Localization (German + English):** UI strings live in `lib/l10n/app_de.arb` (template/source of truth) and `app_en.arb`, compiled by `flutter gen-l10n` (config: `l10n.yaml`) into `lib/l10n/app_localizations.dart`. Access via the `context.l10n` extension (`shared/extensions/localization_extensions.dart`), not `AppLocalizations.of(context)!` directly. The active locale is `LocaleController` (`shared/providers/locale_provider.dart`, Riverpod, backed by `AppPreferences.localeCode`) — `null` means "follow device", resolved in `main.dart`'s `localeResolutionCallback` (any `de_*` device locale → German, else → English). Shared mood/provider-label helpers live in `shared/utils/mood_labels.dart` and `shared/utils/provider_labels.dart` — reuse them rather than re-adding per-screen mood/provider switch statements. Backend calls (`ProxyClient`) also send the resolved language code (see `ai-proxy` below) so transcription and Gemini generation match the UI language.
 
 #### Current implementation state
 
@@ -256,8 +259,8 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 | `EntryScreen` | Skeleton ("IN PROGRESS") |
 | `HistoryScreen` | Complete — real Drift data via `_historyEntriesProvider` (reactive stream, user-scoped), sticky Year/Month headers (`flutter_sticky_header: ^0.8.0`), right-side scroll scrubber (`_ScrollScrubber` / `_ScrubberPainter` CustomPainter with year ticks + month dots, tap + drag support), topic detail sheet, entry deletion. `useFakeHistoryProvider` toggles mock data for design work |
 | `AnalyticsScreen` | Skeleton ("Kommt bald" placeholder) |
-| `ProfileScreen` | Complete — display name, sign-in state, GDPR danger zone (export/delete via `gdpr-export`) |
-| `settings/` | Folder exists, no route wired yet |
+| `ProfileScreen` | Complete — display name, sign-in state, GDPR danger zone (export/delete via `gdpr-export`), settings entry point (gear icon) |
+| `SettingsScreen` | Complete — language switcher (System/Deutsch/English) via `LocaleController` |
 
 ### ai-proxy (`ai-proxy/app/`)
 
@@ -265,16 +268,16 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 | Route | Description |
 |---|---|
-| `POST /transcribe/` | Audio (m4a/aac/wav, max 10 MB) → raw transcript via Chirp 3 |
-| `WS /transcribe/ws` | PCM16 stream + `"done"` sentinel → WAV-wrapped chunks → Chirp 3 |
-| `POST /entries/normalize` | Raw transcript → cleaned text via Gemini |
-| `POST /entries/generate` | Transcript → entry JSON: `body_markdown`, `mood`, `mood_score`, `follow_up_questions`, `topics[{title, text, follow_up_hint}]` |
-| `POST /entries/merge` | Existing entry body + new transcript → updated entry JSON (same schema) |
+| `POST /transcribe/` | Audio (m4a/aac/wav, max 10 MB) + `language` form field (`de`\|`en`, default `de`) → raw transcript via Chirp 3 |
+| `WS /transcribe/ws` | PCM16 stream + `"done"` sentinel + `language` query param (`de`\|`en`) → WAV-wrapped chunks → Chirp 3 |
+| `POST /entries/normalize` | Raw transcript + `language` → cleaned text via Gemini |
+| `POST /entries/generate` | Transcript + `language` → entry JSON: `body_markdown`, `mood`, `mood_score`, `follow_up_questions`, `topics[{title, text, follow_up_hint}]` |
+| `POST /entries/merge` | Existing entry body + new transcript + `language` → updated entry JSON (same schema) |
 | `GET /health` | Liveness check |
 
-**Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` — `europe-west3`, `europe-west4`, and `global` are all rejected.
+**Speech-to-Text:** Chirp 3 (`chirp_3`), location `eu`, endpoint `eu-speech.googleapis.com`. The `_` default recognizer requires `locations/eu` — `europe-west3`, `europe-west4`, and `global` are all rejected. Bilingual: `language_codes` is set per-request from the client's `language` field (`de`→`de-DE`, `en`→`en-US`, mapped in `app/services/speech.py`'s `_bcp47()`) — no separate GCP recognizer resource needed per language.
 
-**Gemini model:** `gemini-2.5-flash`, `temperature=0.7`, `max_output_tokens=8192`, JSON output mode. The AI persona is named **Mein KI-Tagebuch**. Topic `text` fields must be complete chapter prose — never truncated.
+**Gemini model:** `gemini-2.5-flash`, `temperature=0.7`, `max_output_tokens=8192`, JSON output mode. The AI persona is named **Mein KI-Tagebuch** (German) / **My AI-Diary** (English). Topic `text` fields must be complete chapter prose — never truncated. Bilingual: `app/services/gemini.py` holds separate `_DE`/`_EN` system prompt variants for `normalize`/`generate`/`merge` (selected by the request's `language` field, defaulting to German) — the `mood` enum values and JSON key names are language-neutral and unchanged between variants.
 
 **Logging:** All Gemini calls logged at `info` level: `gemini_call` (fn, input) and `gemini_response` (fn, finish_reason, output_tokens, output). JSON parse errors log the full raw response via `gemini_json_parse_error`.
 

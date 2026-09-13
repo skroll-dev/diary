@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/services/auth_service.dart';
 
 Future<bool> showAuthSheet(
@@ -96,7 +97,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
   Future<void> _onSendLinkTap() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      setState(() => _errorMessage = 'Bitte E-Mail-Adresse eingeben.');
+      setState(() => _errorMessage = context.l10n.authErrorEnterEmail);
       return;
     }
     setState(() {
@@ -122,12 +123,15 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
     }
   }
 
-  String _localizeError(FirebaseAuthException e) => switch (e.code) {
-        'invalid-email' => 'Ungültige E-Mail-Adresse.',
-        'too-many-requests' => 'Zu viele Versuche. Bitte kurz warten.',
-        'network-request-failed' => 'Keine Internetverbindung.',
-        _ => 'Fehler: ${e.message ?? e.code}',
-      };
+  String _localizeError(FirebaseAuthException e) {
+    final l10n = context.l10n;
+    return switch (e.code) {
+      'invalid-email' => l10n.authErrorInvalidEmail,
+      'too-many-requests' => l10n.authErrorTooManyRequests,
+      'network-request-failed' => l10n.authErrorNoConnection,
+      _ => l10n.authErrorGeneric(e.message ?? e.code),
+    };
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -178,7 +182,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
                 child: IconButton(
                   onPressed: () => Navigator.of(context).pop(false),
                   icon: Icon(Icons.close_rounded, color: cs.outline, size: 20),
-                  tooltip: 'Schließen',
+                  tooltip: context.l10n.close,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -189,12 +193,12 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
 
         // Headline
         Text(
-          widget.isDismissible ? 'Anmelden' : 'Eintrag sichern',
+          widget.isDismissible ? context.l10n.authSignInTitle : context.l10n.authSaveEntryTitle,
           style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         Text(
-          'Erstelle ein kostenloses Konto, um deinen Eintrag dauerhaft zu schützen.',
+          context.l10n.authSubtitle,
           style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
@@ -205,7 +209,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
             Icon(Icons.lock_outline_rounded, size: 14, color: cs.outline),
             const SizedBox(width: 5),
             Text(
-              'Deine Daten bleiben in der EU.',
+              context.l10n.authEuTrustLine,
               style: tt.labelSmall?.copyWith(color: cs.outline),
             ),
           ],
@@ -226,7 +230,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'oder',
+                context.l10n.authOr,
                 style: tt.labelSmall?.copyWith(color: cs.outline),
               ),
             ),
@@ -243,7 +247,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _onSendLinkTap(),
           decoration: InputDecoration(
-            labelText: 'E-Mail-Adresse',
+            labelText: context.l10n.authEmailAddressLabel,
             filled: true,
             fillColor: cs.surfaceContainerHighest,
             border: OutlineInputBorder(
@@ -287,7 +291,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: cs.primary),
                 )
-              : const Text('Link senden'),
+              : Text(context.l10n.authSendLinkButton),
         ),
       ],
     );
@@ -327,13 +331,13 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Link gesendet!',
+          context.l10n.authLinkSentTitle,
           textAlign: TextAlign.center,
           style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
         Text(
-          'Wir haben einen Link an $email geschickt. Öffne deine E-Mails und tippe auf den Link — du wirst automatisch angemeldet.',
+          context.l10n.authLinkSentBody(email),
           textAlign: TextAlign.center,
           style: tt.bodyMedium?.copyWith(
             color: cs.onSurfaceVariant,
@@ -348,7 +352,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
             _errorMessage = null;
           }),
           child: Text(
-            'Anderen Link senden',
+            context.l10n.authSendAnotherLink,
             style: tt.labelLarge?.copyWith(color: cs.primary),
           ),
         ),
@@ -407,7 +411,7 @@ class _GoogleSignInButton extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Mit Google fortfahren',
+                    context.l10n.authGoogleButton,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,

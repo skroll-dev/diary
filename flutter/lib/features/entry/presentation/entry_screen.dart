@@ -2,8 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/utils/provider_labels.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 
 class EntryScreen extends ConsumerWidget {
@@ -51,14 +53,16 @@ class _Body extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
             // ── Account section ──────────────────────────────────────────────
-            _SectionLabel(label: 'Konto', cs: cs, tt: tt),
+            _SectionLabel(label: context.l10n.sectionAccount, cs: cs, tt: tt),
             const SizedBox(height: 12),
             _InfoTile(
               icon: user.isAnonymous
                   ? Icons.person_outline_rounded
                   : Icons.verified_user_outlined,
-              label: 'Status',
-              value: user.isAnonymous ? 'Anonym' : 'Angemeldet',
+              label: context.l10n.entryStatusLabel,
+              value: user.isAnonymous
+                  ? context.l10n.entryStatusAnonymous
+                  : context.l10n.entryStatusSignedIn,
               cs: cs,
               tt: tt,
             ),
@@ -66,7 +70,7 @@ class _Body extends ConsumerWidget {
               const SizedBox(height: 8),
               _InfoTile(
                 icon: Icons.mail_outline_rounded,
-                label: 'E-Mail',
+                label: context.l10n.entryEmailLabel,
                 value: user.email!,
                 cs: cs,
                 tt: tt,
@@ -76,8 +80,8 @@ class _Body extends ConsumerWidget {
               const SizedBox(height: 8),
               _InfoTile(
                 icon: Icons.link_rounded,
-                label: 'Anmeldung',
-                value: _providerLabel(user.providerData.first.providerId),
+                label: context.l10n.entrySignInLabel,
+                value: providerLabel(context, user.providerData.first.providerId),
                 cs: cs,
                 tt: tt,
               ),
@@ -85,11 +89,11 @@ class _Body extends ConsumerWidget {
             const SizedBox(height: 28),
 
             // ── Diary section ────────────────────────────────────────────────
-            _SectionLabel(label: 'Tagebuch', cs: cs, tt: tt),
+            _SectionLabel(label: context.l10n.sectionDiary, cs: cs, tt: tt),
             const SizedBox(height: 12),
             _InfoTile(
               icon: Icons.book_outlined,
-              label: 'Gespeicherte Einträge',
+              label: context.l10n.entrySavedEntriesLabel,
               value: count != null ? '$count' : '…',
               cs: cs,
               tt: tt,
@@ -99,13 +103,6 @@ class _Body extends ConsumerWidget {
       },
     );
   }
-
-  String _providerLabel(String providerId) => switch (providerId) {
-        'google.com' => 'Google',
-        'password' => 'E-Mail-Link',
-        'emailLink' => 'E-Mail-Link',
-        _ => providerId,
-      };
 }
 
 // ── Small components ──────────────────────────────────────────────────────────

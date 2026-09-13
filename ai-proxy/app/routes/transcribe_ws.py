@@ -52,6 +52,7 @@ async def transcribe_ws(
     token: str | None = None,
     denoise: bool = True,
     sr: int = 44100,
+    language: str = "de",
 ):
     if not _IS_DEV:
         if not verify_id_token(token):
@@ -93,9 +94,9 @@ async def transcribe_ws(
     try:
         result = await stream_transcribe_audio(
             audio_queue, on_interim=_on_interim, on_segment=_on_segment,
-            denoise_audio=denoise, sample_rate=sr,
+            denoise_audio=denoise, sample_rate=sr, language=language,
         )
-        log.info("transcribe_ws", chunks=chunks_received, denoise=denoise, sr=sr)
+        log.info("transcribe_ws", chunks=chunks_received, denoise=denoise, sr=sr, language=language)
         if _IS_DEV:
             _save_debug_wav(debug_chunks, sample_rate=sr)
         await websocket.send_json({

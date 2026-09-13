@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../extensions/localization_extensions.dart';
 import '../repositories/entry_repository.dart';
 
 /// Fetches the signed-in user's full entry history from Firestore into Drift,
@@ -54,8 +55,8 @@ Future<void> runHistorySyncWithProgress(BuildContext context, WidgetRef ref) asy
                       const SizedBox(height: 20),
                       Text(
                         total == 0
-                            ? 'Einträge werden gesucht …'
-                            : 'Einträge werden geladen … $loaded von $total',
+                            ? ctx.l10n.syncSearchingEntries
+                            : ctx.l10n.syncLoadingEntries(loaded, total),
                         style: Theme.of(ctx).textTheme.bodyMedium,
                       ),
                     ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 
 class AnalyticsScreen extends ConsumerWidget {
@@ -13,7 +14,7 @@ class AnalyticsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Analyse'),
+        title: Text(context.l10n.analyticsTitle),
         actions: const [ProfileAvatarButton(), SizedBox(width: 8)],
       ),
       body: Center(
@@ -23,7 +24,7 @@ class AnalyticsScreen extends ConsumerWidget {
             Icon(Icons.bar_chart_rounded, size: 56, color: cs.outlineVariant),
             const SizedBox(height: 16),
             Text(
-              'Kommt bald',
+              context.l10n.analyticsComingSoonTitle,
               style: tt.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: cs.onSurface,
@@ -31,7 +32,7 @@ class AnalyticsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Stimmungsverläufe und Themen-Insights\nfolgen in einer der nächsten Versionen.',
+              context.l10n.analyticsComingSoonBody,
               style: tt.bodyMedium?.copyWith(color: cs.outline),
               textAlign: TextAlign.center,
             ),

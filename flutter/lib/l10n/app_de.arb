@@ -1,0 +1,269 @@
+{
+    "@@locale": "de",
+    "appTitle": "Mein KI-Tagebuch",
+
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "ok": "OK",
+    "close": "Schließen",
+    "done": "Fertig",
+    "edit": "Bearbeiten",
+
+    "moodHappy": "Gut",
+    "moodCalm": "Ruhig",
+    "moodNeutral": "Neutral",
+    "moodTense": "Angespannt",
+    "moodSad": "Traurig",
+    "moodMixed": "Gemischt",
+
+    "mainShellTabToday": "Heute",
+    "mainShellTabDiary": "Tagebuch",
+    "mainShellTabAnalytics": "Analyse",
+
+    "analyticsTitle": "Analyse",
+    "analyticsComingSoonTitle": "Kommt bald",
+    "analyticsComingSoonBody": "Stimmungsverläufe und Themen-Insights\nfolgen in einer der nächsten Versionen.",
+
+    "transcriptInputTitle": "Text eingeben",
+    "transcriptInputHint": "Hier tippen …",
+    "transcriptInputConfirm": "Verarbeiten",
+
+    "syncSearchingEntries": "Einträge werden gesucht …",
+    "syncLoadingEntries": "Einträge werden geladen … {loaded} von {total}",
+    "@syncLoadingEntries": {
+        "placeholders": {
+            "loaded": {"type": "int"},
+            "total": {"type": "int"}
+        }
+    },
+
+    "splashSlogan": "Sprich. Mein KI-Tagebuch schreibt.",
+
+    "sectionAccount": "Konto",
+    "sectionDiary": "Tagebuch",
+    "providerEmailLink": "E-Mail-Link",
+
+    "entryStatusLabel": "Status",
+    "entryStatusAnonymous": "Anonym",
+    "entryStatusSignedIn": "Angemeldet",
+    "entryEmailLabel": "E-Mail",
+    "entrySignInLabel": "Anmeldung",
+    "entrySavedEntriesLabel": "Gespeicherte Einträge",
+
+    "authSignInTitle": "Anmelden",
+    "authSaveEntryTitle": "Eintrag sichern",
+    "authSubtitle": "Erstelle ein kostenloses Konto, um deinen Eintrag dauerhaft zu schützen.",
+    "authEuTrustLine": "Deine Daten bleiben in der EU.",
+    "authOr": "oder",
+    "authEmailAddressLabel": "E-Mail-Adresse",
+    "authSendLinkButton": "Link senden",
+    "authGoogleButton": "Mit Google fortfahren",
+    "authLinkSentTitle": "Link gesendet!",
+    "authLinkSentBody": "Wir haben einen Link an {email} geschickt. Öffne deine E-Mails und tippe auf den Link — du wirst automatisch angemeldet.",
+    "@authLinkSentBody": {
+        "placeholders": {
+            "email": {"type": "String"}
+        }
+    },
+    "authSendAnotherLink": "Anderen Link senden",
+    "authErrorEnterEmail": "Bitte E-Mail-Adresse eingeben.",
+    "authErrorInvalidEmail": "Ungültige E-Mail-Adresse.",
+    "authErrorTooManyRequests": "Zu viele Versuche. Bitte kurz warten.",
+    "authErrorNoConnection": "Keine Internetverbindung.",
+    "authErrorGeneric": "Fehler: {error}",
+    "@authErrorGeneric": {
+        "placeholders": {
+            "error": {"type": "String"}
+        }
+    },
+
+    "micPermissionRequired": "Mikrofon-Zugriff wird benötigt, um Einträge aufzunehmen.",
+    "pipelineListening": "Mein KI-Tagebuch hört zu …",
+    "pipelineReadingText": "Mein KI-Tagebuch liest deinen Text …",
+    "pipelineMerging": "Mein KI-Tagebuch fügt alles zusammen …",
+    "pipelineThinking": "Mein KI-Tagebuch denkt nach …",
+    "recordingCancel": "Aufnahme abbrechen",
+    "recordingTapToStop": "Tippe zum Beenden",
+    "typeInsteadSemantics": "Text statt Sprache eingeben",
+    "transcriptInputTitleAlt": "Transkript eingeben",
+    "transcriptInputHintTyped": "Text statt Sprache …",
+    "transcriptInputHintRaw": "Rohes Transkript …",
+    "recordingControlsIdleLabel": "Aufnahme starten",
+
+    "devMenuTitle": "Dev-Menü",
+    "devMenuFakeHistoryTitle": "Fake Verlauf-Daten",
+    "devMenuFakeHistorySubtitle": "Mock-Einträge statt echter Daten",
+
+    "authLinkExpiredTitle": "Link abgelaufen",
+    "authLinkExpiredBody": "Dieser Anmelde-Link ist nicht mehr gültig. Bitte fordere einen neuen Link an.",
+    "authLinkEmailNotFoundTitle": "E-Mail nicht gefunden",
+    "authLinkEmailNotFoundBody": "Bitte öffne den Link in demselben Browser, in dem du die E-Mail angefordert hast, oder fordere einen neuen Link an.",
+    "authRequestNewLink": "Neuen Link anfordern",
+    "authSignInSuccessSnackbar": "Anmeldung erfolgreich! Willkommen zurück.",
+    "alreadyRegisteredPrompt": "Bereits registriert? ",
+
+    "recordingHeaderListening": "Mein KI-Tagebuch hört zu",
+    "recordingHeaderProcessing": "Einen Moment …",
+    "recordingMicIdleLabel": "Tagebucheintrag starten",
+    "contextChipExtending": "Ergänzt · {topicTitle}",
+    "@contextChipExtending": {
+        "placeholders": {
+            "topicTitle": {"type": "String"}
+        }
+    },
+    "contextChipContinuing": "Ergänzt den Eintrag",
+    "subtitleContinuing": "Einfach weiterreden —\nMein KI-Tagebuch ordnet es ein.",
+    "subtitleFresh": "Erzähl einfach drauflos.\nMein KI-Tagebuch strukturiert es nachher.",
+    "subtitleExtendingTopic": "Was möchtest du zu\n„{topicTitle}\" ergänzen?",
+    "@subtitleExtendingTopic": {
+        "placeholders": {
+            "topicTitle": {"type": "String"}
+        }
+    },
+
+    "profileTitle": "Profil",
+    "sectionPersonal": "Persönlich",
+    "sectionStatistics": "Statistiken",
+    "sectionDangerZone": "Gefahrenzone",
+    "profileNameLabel": "Name",
+    "profileNameHint": "Dein Name",
+    "profileNamePlaceholder": "Kein Name gesetzt",
+    "profileTotalEntries": "Einträge gesamt",
+    "profileTotalDuration": "Gesamtdauer",
+    "profileFirstEntry": "Erste Aufnahme",
+    "profileLatestEntry": "Letzte Aufnahme",
+    "profileTopMood": "Häufigste Stimmung",
+    "profileUserId": "Benutzer-ID",
+    "profileSignOut": "Abmelden",
+    "profileSignOutConfirmTitle": "Abmelden?",
+    "profileSignOutConfirmBody": "Du wirst abgemeldet. Deine Einträge werden von diesem Gerät gelöscht, bleiben aber sicher in deinem Konto gespeichert.",
+    "profileDeleteAllData": "Alle Daten unwiderruflich löschen",
+    "profileSigningOutProgress": "Einträge werden gesichert …",
+    "profileSignOutFailed": "Abmelden fehlgeschlagen. Bitte erneut versuchen.",
+    "profileWipingDataProgress": "Alle Daten werden gelöscht …",
+    "profileDeleteFailedTitle": "Löschen fehlgeschlagen",
+    "profileDeleteFailedBody": "Deine Daten konnten nicht gelöscht werden: {error}",
+    "@profileDeleteFailedBody": {
+        "placeholders": {
+            "error": {"type": "String"}
+        }
+    },
+    "profileWipeConfirmTitle": "Bist du absolut sicher?",
+    "profileWipeConfirmBody": "Alle deine Tagebucheinträge werden dauerhaft gelöscht — auf diesem Gerät und in der Cloud. Dein Konto wird ebenfalls vollständig entfernt. Das kann NICHT rückgängig gemacht werden.",
+    "profileWipeConfirmPrompt": "Gib \"{confirmWord}\" ein, um zu bestätigen:",
+    "@profileWipeConfirmPrompt": {
+        "placeholders": {
+            "confirmWord": {"type": "String"}
+        }
+    },
+    "profileWipeConfirmButton": "Endgültig löschen",
+    "profileWipeConfirmWord": "LÖSCHEN",
+
+    "settingsTitle": "Einstellungen",
+    "settingsLanguageSection": "Sprache",
+    "settingsLanguageSystem": "Systemsprache",
+    "settingsLanguageGerman": "Deutsch",
+    "settingsLanguageEnglish": "English",
+
+    "historyTitle": "Mein Tagebuch",
+    "historyNewEntryTooltip": "Neuer Eintrag",
+    "historyEmptyTitle": "Noch keine Einträge",
+    "historyEmptyBody": "Nimm deinen ersten Tagebucheintrag auf\nund er erscheint hier.",
+    "historyEmptyButton": "Ersten Eintrag aufnehmen",
+    "historyLoadError": "Fehler beim Laden",
+    "historyToday": "HEUTE",
+    "historyDeleteEntryTitle": "Eintrag löschen?",
+    "historyDeleteEntryBody": "Dieser Eintrag wird dauerhaft gelöscht und kann nicht wiederhergestellt werden.",
+    "historyTopicsLabel": "Themen",
+    "historyPhotosLabel": "Fotos · {count}",
+    "@historyPhotosLabel": {
+        "placeholders": {
+            "count": {"type": "int"}
+        }
+    },
+    "historyEditEntry": "Eintrag editieren",
+    "historyDeleteEntry": "Eintrag löschen",
+    "historyDurationMinutes": "{minutes} Min",
+    "@historyDurationMinutes": {
+        "placeholders": {
+            "minutes": {"type": "int"}
+        }
+    },
+    "historyTimeSuffix": "{time} Uhr",
+    "@historyTimeSuffix": {
+        "placeholders": {
+            "time": {"type": "String"}
+        }
+    },
+
+    "topicsProvenanceInitial": "Erste Aufnahme",
+    "topicsProvenanceContinuation": "Ergänzung",
+    "topicsProvenanceFollowUp": "Antwort auf: „{question}\"",
+    "@topicsProvenanceFollowUp": {
+        "placeholders": {
+            "question": {"type": "String"}
+        }
+    },
+    "topicsProvenanceDefault": "Aufnahme",
+
+    "topicsMergeError": "Beim Ergänzen ist etwas schiefgelaufen. Bitte versuche es erneut.",
+    "topicsUpdateError": "Beim Aktualisieren ist etwas schiefgelaufen. Bitte versuche es erneut.",
+    "topicsPhotoUploadError": "Foto konnte nicht hochgeladen werden.",
+
+    "topicsTextTooLongTitle": "Text ist zu lang",
+    "topicsResendConfirm": "Erneut senden",
+
+    "topicsEditRecordingTitle": "Aufnahme bearbeiten",
+
+    "topicsDeleteRecordingTitle": "Aufnahme löschen?",
+    "topicsDeleteRecordingBody": "Diese Aufnahme wird dauerhaft entfernt und der Eintrag neu erstellt.",
+
+    "topicsCamera": "Kamera",
+    "topicsGallery": "Fotos",
+
+    "topicsUnsavedEntryTitle": "Eintrag noch nicht abgeschlossen",
+    "topicsUnsavedEntryBody": "Möchtest du deinen Eintrag speichern oder verwerfen?",
+    "topicsDiscard": "Verwerfen",
+
+    "topicsResetAllTitle": "Von vorne anfangen?",
+    "topicsResetAllBody": "Alle Aufnahmen und der aktuelle Eintrag werden gelöscht.",
+    "topicsDeleteAllConfirm": "Alles löschen",
+    "topicsResetAll": "Von vorne anfangen",
+    "topicsBackTooltip": "Zurück",
+
+    "topicsNoTopics": "Keine Themen erkannt.",
+    "topicsTopicsCount": "{count, plural, one{{count} Thema erkannt.} other{{count} Themen erkannt.}}",
+    "@topicsTopicsCount": {
+        "placeholders": {
+            "count": {"type": "num"}
+        }
+    },
+    "topicsWantToDeepen": "Möchtest du etwas vertiefen?",
+
+    "topicsRecordingsLabel": "Aufnahmen",
+    "topicsRecordingsCount": "{count, plural, one{{count} Aufnahme} other{{count} Aufnahmen}}",
+    "@topicsRecordingsCount": {
+        "placeholders": {
+            "count": {"type": "num"}
+        }
+    },
+
+    "topicsAiAsks": "Mein KI-Tagebuch fragt",
+    "topicsFollowUpCount": "{count, plural, one{{count} Impuls} other{{count} Impulse}} zum Vertiefen",
+    "@topicsFollowUpCount": {
+        "placeholders": {
+            "count": {"type": "num"}
+        }
+    },
+
+    "topicsNearLimitWarning": "Dein Eintrag ist heute schon sehr umfangreich — bitte kürze bestehenden Text, um mehr zu ergänzen.",
+
+    "topicsDeepenEntry": "Eintrag vertiefen",
+    "topicsFinishEntry": "Eintrag abschließen",
+
+    "topicsAnswerRecording": "Antwort aufnehmen",
+    "topicsAddLabel": "Ergänzen",
+    "topicsWhatToAddHint": "Was möchtest du ergänzen?",
+    "topicsAddPhoto": "Hinzufügen"
+}

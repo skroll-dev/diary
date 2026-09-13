@@ -25,6 +25,7 @@ MAX_TRANSCRIPT_CHARS = 20_000
 
 class NormalizeRequest(BaseModel):
     transcript: str = Field(..., min_length=5, max_length=MAX_TRANSCRIPT_CHARS)
+    language: str = Field(default="de")
 
 
 class NormalizeResponse(BaseModel):
@@ -68,7 +69,7 @@ async def normalize(
     _: None = Depends(verify_app_check),
 ):
     log.info("normalize_request", transcript_len=len(req.transcript))
-    text = await normalize_transcript(req.transcript)
+    text = await normalize_transcript(req.transcript, req.language)
     return NormalizeResponse(normalized_text=text)
 
 

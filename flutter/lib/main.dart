@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
+import 'l10n/app_localizations.dart';
+import 'shared/providers/locale_provider.dart';
 import 'shared/services/auth_error_provider.dart';
 import 'shared/services/auth_service.dart'
     show AuthLinkError, EmailNotFoundForLinkException, authServiceProvider;
@@ -92,12 +94,17 @@ class _AiTagebuchAppState extends ConsumerState<AiTagebuchApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
-      title: 'AI Tagebuch',
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      locale: ref.watch(localeControllerProvider),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localeResolutionCallback: (deviceLocale, supportedLocales) =>
+          deviceLocale?.languageCode == 'de' ? const Locale('de') : const Locale('en'),
     );
   }
 }

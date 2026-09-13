@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "My AI-Diary";
+"NSCameraUsageDescription" = "My AI-Diary needs access to the camera to add photos to your diary entries.";
+"NSMicrophoneUsageDescription" = "My AI-Diary needs access to the microphone to record your spoken diary entries.";
+"NSUserTrackingUsageDescription" = "My AI-Diary would like to track you across apps and websites to show you more relevant content and improve the app.";

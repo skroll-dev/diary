@@ -15,6 +15,12 @@ log = structlog.get_logger()
 GCP_PROJECT = os.environ["GCP_PROJECT"]
 RECOGNIZER = f"projects/{GCP_PROJECT}/locations/eu/recognizers/_"
 
+_BCP47_LANGUAGE_CODES = {"de": "de-DE", "en": "en-US"}
+
+
+def _bcp47(language: str) -> str:
+    return _BCP47_LANGUAGE_CODES.get(language, "de-DE")
+
 
 def _denoiser(enabled: bool) -> cloud_speech.DenoiserConfig | None:
     if not enabled:
@@ -25,14 +31,14 @@ def _denoiser(enabled: bool) -> cloud_speech.DenoiserConfig | None:
     )
 
 
-async def transcribe_audio(audio_bytes: bytes, *, denoise_audio: bool = True) -> dict:
+async def transcribe_audio(audio_bytes: bytes, *, denoise_audio: bool = True, language: str = "de") -> dict:
     client = SpeechAsyncClient(
         client_options=ClientOptions(api_endpoint="eu-speech.googleapis.com")
     )
 
     config = cloud_speech.RecognitionConfig(
         auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
-        language_codes=["de-DE"],
+        language_codes=[_bcp47(language)],
         model="chirp_3",
         denoiser_config=_denoiser(denoise_audio),
     )
@@ -57,7 +63,7 @@ async def transcribe_audio(audio_bytes: bytes, *, denoise_audio: bool = True) ->
     return {
         "transcript": " ".join(transcript_parts).strip(),
         "duration_seconds": total_duration,
-        "language_detected": "de",
+        "language_detected": language if language in _BCP47_LANGUAGE_CODES else "de",
     }
 
 
@@ -68,6 +74,7 @@ async def stream_transcribe_audio(
     *,
     denoise_audio: bool = True,
     sample_rate: int = 44100,
+    language: str = "de",
 ) -> dict:
     """StreamingRecognize path for the WebSocket endpoint.
 
@@ -85,7 +92,7 @@ async def stream_transcribe_audio(
                 sample_rate_hertz=sample_rate,
                 audio_channel_count=1,
             ),
-            language_codes=["de-DE"],
+            language_codes=[_bcp47(language)],
             model="chirp_3",
             denoiser_config=_denoiser(denoise_audio),
         ),
@@ -157,5 +164,5 @@ async def stream_transcribe_audio(
     return {
         "transcript": " ".join(final_parts).strip(),
         "duration_seconds": total_duration,
-        "language_detected": "de",
+        "language_detected": language if language in _BCP47_LANGUAGE_CODES else "de",
     }

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_error_provider.dart';
@@ -143,14 +144,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   Future<void> _startRecording() async {
+    final languageCode = Localizations.localeOf(context).languageCode;
     final svc = ref.read(recordingServiceProvider);
     try {
       await svc.start();
     } on RecordingPermissionDenied {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mikrofon-Zugriff wird benötigt, um Einträge aufzunehmen.'),
+          SnackBar(
+            content: Text(context.l10n.micPermissionRequired),
           ),
         );
       }
@@ -163,6 +165,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     if (kIsWeb) {
       _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
         svc.webAudioStream,
+        languageCode: languageCode,
         onInterim: (text) {
           if (mounted && _state == _RecordingState.recording) {
             setState(() => _interimText = text);
@@ -206,6 +209,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     _pulseController.reset();
     setState(() => _state = _RecordingState.processing);
 
+    final l10n = context.l10n;
+    final languageCode = Localizations.localeOf(context).languageCode;
     final date = _dateLabel;
     final duration = _timerLabel;
     final durationSec = _seconds;
@@ -224,21 +229,21 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     try {
       final sw = Stopwatch()..start();
 
-      _setStep('Mein KI-Tagebuch hört zu …', 0.0, 0.35);
+      _setStep(l10n.pipelineListening, 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();
         rawTranscript = await _wsTranscriptFuture!;
       } else {
         final audio = await ref.read(recordingServiceProvider).stopAndRead();
-        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
+        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio, languageCode: languageCode);
       }
       _completeStep(0.35);
       debugPrint('[Pipeline] transcribe: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setStep('Mein KI-Tagebuch liest deinen Text …', 0.36, 0.55);
-      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      _setStep(l10n.pipelineReadingText, 0.36, 0.55);
+      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript, languageCode: languageCode);
       _completeStep(0.55);
       debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
@@ -248,7 +253,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       if (targetEntryId != null) {
         final existingEntry =
             await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
-        _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.56, 1.0);
+        _setStep(l10n.pipelineMerging, 0.56, 1.0);
         final previousQuestions = existingEntry != null
             ? (jsonDecode(existingEntry.followUpQuestions) as List).cast<String>()
             : <String>[];
@@ -256,6 +261,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               existingBody: existingEntry?.bodyMarkdown ?? '',
               newTranscript: normalizedText,
               previousQuestions: previousQuestions,
+              languageCode: languageCode,
               existingTags: existingTags,
             );
         topics = entry.topics;
@@ -281,9 +287,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             );
         debugPrint('[Pipeline] save (merged): ${sw.elapsedMilliseconds}ms');
       } else {
-        _setStep('Mein KI-Tagebuch denkt nach …', 0.56, 1.0);
+        _setStep(l10n.pipelineThinking, 0.56, 1.0);
         final entry = await ref.read(proxyClientProvider).generateEntry(
           normalizedText,
+          languageCode: languageCode,
           existingTags: existingTags,
         );
         topics = entry.topics;
@@ -363,10 +370,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   // Long-press mic: type a transcript instead of speaking (works in all builds)
   Future<void> _showTranscriptDialog() async {
+    final l10n = context.l10n;
+    final languageCode = Localizations.localeOf(context).languageCode;
     final rawTranscript = await showTranscriptInputSheet(
       context,
-      title: 'Transkript eingeben',
-      hint: 'Rohes Transkript …',
+      title: l10n.transcriptInputTitleAlt,
+      hint: l10n.transcriptInputHintRaw,
     );
     if (rawTranscript == null || rawTranscript.isEmpty) return;
 
@@ -387,8 +396,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     try {
       final sw = Stopwatch()..start();
 
-      _setStep('Mein KI-Tagebuch liest deinen Text …', 0.0, 0.30);
-      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript);
+      _setStep(l10n.pipelineReadingText, 0.0, 0.30);
+      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript, languageCode: languageCode);
       _completeStep(0.30);
       debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
@@ -398,7 +407,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
       if (targetEntryId != null) {
         final existingEntryTyped =
             await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
-        _setStep('Mein KI-Tagebuch fügt alles zusammen …', 0.31, 1.0);
+        _setStep(l10n.pipelineMerging, 0.31, 1.0);
         final previousQuestionsTyped = existingEntryTyped != null
             ? (jsonDecode(existingEntryTyped.followUpQuestions) as List)
                 .cast<String>()
@@ -407,6 +416,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               existingBody: existingEntryTyped?.bodyMarkdown ?? '',
               newTranscript: normalizedText,
               previousQuestions: previousQuestionsTyped,
+              languageCode: languageCode,
               existingTags: existingTagsTyped,
             );
         topics = entry.topics;
@@ -450,9 +460,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         return;
       }
 
-      _setStep('Mein KI-Tagebuch denkt nach …', 0.31, 1.0);
+      _setStep(l10n.pipelineThinking, 0.31, 1.0);
       final entry = await ref.read(proxyClientProvider).generateEntry(
         normalizedText,
+        languageCode: languageCode,
         existingTags: existingTagsTyped,
       );
       topics = entry.topics;
@@ -501,16 +512,17 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   void _showDevMenu() {
+    final l10n = context.l10n;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Dev-Menü'),
+        title: Text(l10n.devMenuTitle),
         content: Consumer(
           builder: (_, ref, __) {
             final fakeHistory = ref.watch(useFakeHistoryProvider);
             return SwitchListTile(
-              title: const Text('Fake Verlauf-Daten'),
-              subtitle: const Text('Mock-Einträge statt echter Daten'),
+              title: Text(l10n.devMenuFakeHistoryTitle),
+              subtitle: Text(l10n.devMenuFakeHistorySubtitle),
               value: fakeHistory,
               onChanged: (v) => ref.read(useFakeHistoryProvider.notifier).set(v),
             );
@@ -519,7 +531,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Schließen'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -527,14 +539,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   void _showAuthLinkErrorDialog(AuthLinkError error) {
+    final l10n = context.l10n;
     final (title, message) = switch (error) {
       AuthLinkError.expiredLink => (
-          'Link abgelaufen',
-          'Dieser Anmelde-Link ist nicht mehr gültig. Bitte fordere einen neuen Link an.',
+          l10n.authLinkExpiredTitle,
+          l10n.authLinkExpiredBody,
         ),
       AuthLinkError.emailNotFound => (
-          'E-Mail nicht gefunden',
-          'Bitte öffne den Link in demselben Browser, in dem du die E-Mail angefordert hast, oder fordere einen neuen Link an.',
+          l10n.authLinkEmailNotFoundTitle,
+          l10n.authLinkEmailNotFoundBody,
         ),
     };
     showDialog<void>(
@@ -546,14 +559,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+            child: Text(l10n.ok),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               showAuthSheet(context, isDismissible: true);
             },
-            child: const Text('Neuen Link anfordern'),
+            child: Text(l10n.authRequestNewLink),
           ),
         ],
       ),
@@ -562,8 +575,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   void _showAuthLinkSuccessSnackBar() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Anmeldung erfolgreich! Willkommen zurück.'),
+      SnackBar(
+        content: Text(context.l10n.authSignInSuccessSnackbar),
       ),
     );
   }
@@ -616,15 +629,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
 
   String get _dateLabel {
     final now = DateTime.now();
-    const weekdays = [
-      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-      'Freitag', 'Samstag', 'Sonntag'
-    ];
-    const months = [
-      '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-    ];
-    return '${weekdays[now.weekday]}, ${now.day}. ${months[now.month]}';
+    final locale = Localizations.localeOf(context).languageCode;
+    final weekday = DateFormat.EEEE(locale).format(now);
+    final month = DateFormat.MMMM(locale).format(now);
+    return locale == 'de' ? '$weekday, ${now.day}. $month' : '$weekday, $month ${now.day}';
   }
 
   @override
@@ -801,13 +809,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                         size: 13, color: cs.onSurface.withValues(alpha: 0.35)),
                     const SizedBox(width: 6),
                     Text(
-                      'Bereits registriert? ',
+                      context.l10n.alreadyRegisteredPrompt,
                       style: tt.labelSmall?.copyWith(
                         color: cs.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
                     Text(
-                      'Anmelden',
+                      context.l10n.authSignInTitle,
                       style: tt.labelSmall?.copyWith(
                         color: cs.primary,
                         fontWeight: FontWeight.w600,
@@ -856,9 +864,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final showChip = _state != _RecordingState.processing && ctx is! FreshRecording;
 
     final String title = switch (_state) {
-      _RecordingState.idle => 'Mein KI-Tagebuch',
-      _RecordingState.recording => 'Mein KI-Tagebuch hört zu',
-      _RecordingState.processing => 'Einen Moment …',
+      _RecordingState.idle => context.l10n.appTitle,
+      _RecordingState.recording => context.l10n.recordingHeaderListening,
+      _RecordingState.processing => context.l10n.recordingHeaderProcessing,
     };
 
     return AnimatedSwitcher(
@@ -901,13 +909,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     final (IconData icon, String label, Color color, Color bg) = switch (ctx) {
       ExtendingTopic(:final topicTitle) => (
           Icons.edit_note_rounded,
-          'Ergänzt · $topicTitle',
+          context.l10n.contextChipExtending(topicTitle),
           const Color(0xFF5E35B1),
           const Color(0xFFEDE9FF),
         ),
       ContinuingEntry() => (
           Icons.post_add_rounded,
-          'Ergänzt den Eintrag',
+          context.l10n.contextChipContinuing,
           cs.primary,
           cs.primaryContainer,
         ),
@@ -934,10 +942,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         ExtendingTopic(:final followUpHint) when followUpHint != null =>
           followUpHint,
         ExtendingTopic(:final topicTitle) =>
-          'Was möchtest du zu\n„$topicTitle" ergänzen?',
-        ContinuingEntry() =>
-          'Einfach weiterreden —\nMein KI-Tagebuch ordnet es ein.',
-        _ => 'Erzähl einfach drauflos.\nMein KI-Tagebuch strukturiert es nachher.',
+          context.l10n.subtitleExtendingTopic(topicTitle),
+        ContinuingEntry() => context.l10n.subtitleContinuing,
+        _ => context.l10n.subtitleFresh,
       };
 
   Widget _buildMicButton(BuildContext context) {
@@ -1020,7 +1027,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                   opacity: isRecording ? 0.0 : 1.0,
                   child: Semantics(
                     button: true,
-                    label: 'Text statt Sprache eingeben',
+                    label: context.l10n.typeInsteadSemantics,
                     child: Material(
                       color: cs.surfaceContainerHigh,
                       shape: CircleBorder(
@@ -1051,7 +1058,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: Text(
-            isRecording ? 'Tippe zum Beenden' : 'Tagebucheintrag starten',
+            isRecording ? context.l10n.recordingTapToStop : context.l10n.recordingMicIdleLabel,
             key: ValueKey(isRecording),
             style: tt.bodyMedium?.copyWith(color: cs.outline),
           ),
@@ -1066,7 +1073,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 10),
                     child: Text(
-                      'Aufnahme abbrechen',
+                      context.l10n.recordingCancel,
                       style: tt.labelMedium?.copyWith(
                         color: cs.error.withValues(alpha: 0.65),
                       ),

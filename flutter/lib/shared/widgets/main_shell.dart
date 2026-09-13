@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../extensions/localization_extensions.dart';
+
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
@@ -88,19 +90,19 @@ class _NavBar extends StatelessWidget {
         children: [
           _NavItem(
             icon: Icons.mic_none_rounded,
-            label: 'Heute',
+            label: context.l10n.mainShellTabToday,
             selected: currentIndex == 0,
             onTap: () => onTap(0),
           ),
           _NavItem(
             iconBuilder: (color, size) => _DiaryBookIcon(color: color, size: size),
-            label: 'Tagebuch',
+            label: context.l10n.mainShellTabDiary,
             selected: currentIndex == 1,
             onTap: () => onTap(1),
           ),
           _NavItem(
             icon: Icons.bar_chart_rounded,
-            label: 'Analyse',
+            label: context.l10n.mainShellTabAnalytics,
             selected: currentIndex == 2,
             onTap: () => onTap(2),
           ),

@@ -12,6 +12,7 @@ class AppPreferences {
 
   // ── Keys ──────────────────────────────────────────────────────────────────
   static const _kDenoiseAudio = 'denoise_audio';
+  static const _kLocale = 'app_locale';
 
   // ── Transcription ─────────────────────────────────────────────────────────
 
@@ -22,6 +23,16 @@ class AppPreferences {
 
   Future<void> setDenoiseAudio(bool value) =>
       _prefs.setBool(_kDenoiseAudio, value);
+
+  // ── Language ──────────────────────────────────────────────────────────────
+
+  /// User-selected language code ('de' or 'en'), or null to follow the
+  /// device's system language.
+  String? get localeCode => _prefs.getString(_kLocale);
+
+  Future<void> setLocaleCode(String? code) => code == null
+      ? _prefs.remove(_kLocale)
+      : _prefs.setString(_kLocale, code);
 }
 
 @Riverpod(keepAlive: true)

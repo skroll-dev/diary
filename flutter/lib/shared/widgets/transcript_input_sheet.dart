@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../extensions/localization_extensions.dart';
+
 /// Shows a keyboard-safe dialog for multi-line text input.
 ///
 /// Uses [showDialog] instead of a bottom sheet — dialogs center in the screen
@@ -9,11 +11,15 @@ import 'package:flutter/material.dart';
 /// Returns the entered text, or null if cancelled.
 Future<String?> showTranscriptInputSheet(
   BuildContext context, {
-  String title = 'Text eingeben',
-  String hint = 'Hier tippen …',
+  String? title,
+  String? hint,
   String initialValue = '',
-  String confirmLabel = 'Verarbeiten',
+  String? confirmLabel,
 }) async {
+  final l10n = context.l10n;
+  final resolvedTitle = title ?? l10n.transcriptInputTitle;
+  final resolvedHint = hint ?? l10n.transcriptInputHint;
+  final resolvedConfirmLabel = confirmLabel ?? l10n.transcriptInputConfirm;
   return showDialog<String>(
     context: context,
     barrierDismissible: true,
@@ -26,10 +32,10 @@ Future<String?> showTranscriptInputSheet(
         child: Padding(
           padding: EdgeInsets.fromLTRB(20, topPadding, 20, 0),
           child: _TranscriptInputDialog(
-            title: title,
-            hint: hint,
+            title: resolvedTitle,
+            hint: resolvedHint,
             initialValue: initialValue,
-            confirmLabel: confirmLabel,
+            confirmLabel: resolvedConfirmLabel,
           ),
         ),
       );
@@ -138,7 +144,7 @@ class _TranscriptInputDialogState extends State<_TranscriptInputDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text('Abbrechen'),
+                    child: Text(context.l10n.cancel),
                   ),
                 ),
                 const SizedBox(width: 12),

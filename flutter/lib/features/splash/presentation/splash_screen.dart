@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/tracking_consent_service.dart';
@@ -207,7 +208,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   child: FadeTransition(
                     opacity: _nameOpacity,
                     child: Text(
-                      'Mein KI-Tagebuch',
+                      context.l10n.appTitle,
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -221,7 +222,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 FadeTransition(
                   opacity: _sloganOpacity,
                   child: Text(
-                    'Sprich. Mein KI-Tagebuch schreibt.',
+                    context.l10n.splashSlogan,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.white.withValues(alpha: 0.5),
                           letterSpacing: 0.5,
@@ -250,8 +251,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         const SizedBox(height: 10),
                         Text(
                           _historyTotal == 0
-                              ? 'Einträge werden gesucht …'
-                              : 'Lade deine Einträge … $_historyLoaded/$_historyTotal',
+                              ? context.l10n.syncSearchingEntries
+                              : context.l10n.syncLoadingEntries(_historyLoaded, _historyTotal),
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.white.withValues(alpha: 0.45),
                               ),

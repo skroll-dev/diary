@@ -126,7 +126,7 @@ class ProxyClient {
     return dio;
   }
 
-  Future<String> transcribe(AudioData audio) async {
+  Future<String> transcribe(AudioData audio, {required String languageCode}) async {
     final prefs = await _ref.read(appPreferencesProvider.future);
     final dio = await _dio();
     final parts = audio.contentType.split('/');
@@ -137,6 +137,7 @@ class ProxyClient {
         contentType: DioMediaType(parts.first, parts.last),
       ),
       'denoise': prefs.denoiseAudio ? '1' : '0',
+      'language': languageCode,
     });
     final resp = await dio.post('/transcribe/', data: form);
     return resp.data['transcript'] as String;
@@ -147,6 +148,7 @@ class ProxyClient {
   /// segment is confirmed. Returns the full transcript when the stream ends.
   Future<String> transcribeWebSocket(
     Stream<Uint8List> audioStream, {
+    required String languageCode,
     void Function(String text)? onInterim,
     void Function(String text)? onSegment,
   }) async {
@@ -164,6 +166,7 @@ class ProxyClient {
       if (token.isNotEmpty) 'token=${Uri.encodeQueryComponent(token)}',
       if (!prefs.denoiseAudio) 'denoise=0',
       'sr=${RecordingService.webSampleRate}',
+      'language=$languageCode',
     ];
     final uri = Uri.parse(
       '$wsBase/transcribe/ws${params.isEmpty ? '' : '?${params.join('&')}'}',
@@ -242,12 +245,12 @@ class ProxyClient {
     return transcript;
   }
 
-  Future<String> normalize(String transcript) async {
+  Future<String> normalize(String transcript, {required String languageCode}) async {
     final dio = await _dio();
     try {
       final resp = await dio.post(
         '/entries/normalize',
-        data: {'transcript': transcript},
+        data: {'transcript': transcript, 'language': languageCode},
       );
       return resp.data['normalized_text'] as String;
     } on DioException catch (e) {
@@ -257,6 +260,7 @@ class ProxyClient {
 
   Future<EntryDto> generateEntry(
     String transcript, {
+    required String languageCode,
     List<String> existingTags = const [],
   }) async {
     final dio = await _dio();
@@ -265,6 +269,7 @@ class ProxyClient {
         '/entries/generate',
         data: {
           'transcript': transcript,
+          'language': languageCode,
           if (existingTags.isNotEmpty) 'existing_tags': existingTags,
         },
       );
@@ -278,6 +283,7 @@ class ProxyClient {
     required String existingBody,
     required String newTranscript,
     required List<String> previousQuestions,
+    required String languageCode,
     List<String> existingTags = const [],
   }) async {
     final dio = await _dio();
@@ -288,6 +294,7 @@ class ProxyClient {
           'existing_entry': existingBody,
           'new_transcript': newTranscript,
           'previous_questions': previousQuestions,
+          'language': languageCode,
           if (existingTags.isNotEmpty) 'existing_tags': existingTags,
         },
       );

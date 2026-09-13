@@ -23,6 +23,7 @@ class TranscribeResponse(BaseModel):
 async def transcribe(
     audio: UploadFile = File(...),
     denoise: str = Form("1"),
+    language: str = Form("de"),
     _: None = Depends(verify_app_check),
 ):
     if audio.content_type not in ("audio/m4a", "audio/aac", "audio/wav", "audio/mpeg", "audio/webm"):
@@ -32,7 +33,7 @@ async def transcribe(
     if len(audio_bytes) > 10 * 1024 * 1024:  # 10 MB Limit
         raise HTTPException(status_code=413, detail="Audio-Datei zu groß (max. 10 MB)")
 
-    log.info("transcribe_request", size_bytes=len(audio_bytes), content_type=audio.content_type, denoise=denoise)
+    log.info("transcribe_request", size_bytes=len(audio_bytes), content_type=audio.content_type, denoise=denoise, language=language)
 
-    result = await transcribe_audio(audio_bytes, denoise_audio=(denoise == "1"))
+    result = await transcribe_audio(audio_bytes, denoise_audio=(denoise == "1"), language=language)
     return TranscribeResponse(**result)

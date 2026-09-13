@@ -8,13 +8,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:intl/intl.dart' hide TextDirection;
+
 import '../../auth/presentation/auth_sheet.dart';
 import '../../recording/recording_context.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/constants/image_limits.dart';
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/models/entry_image.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/image_proxy_client.dart';
+import '../../../shared/utils/mood_labels.dart';
 import '../../../shared/widgets/fullscreen_image_viewer.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/widgets/storage_image.dart';
@@ -59,14 +64,14 @@ class _RecordingRecord {
   final String reason;
   final DateTime timestamp;
 
-  String get provenanceLabel {
-    if (reason == 'initial') return 'Erste Aufnahme';
-    if (reason == 'continuation') return 'Ergänzung';
+  String provenanceLabel(AppLocalizations l10n) {
+    if (reason == 'initial') return l10n.topicsProvenanceInitial;
+    if (reason == 'continuation') return l10n.topicsProvenanceContinuation;
     if (reason.startsWith('followUp:')) {
       final q = reason.substring('followUp:'.length);
-      return 'Antwort auf: „$q"';
+      return l10n.topicsProvenanceFollowUp(q);
     }
-    return 'Aufnahme';
+    return l10n.topicsProvenanceDefault;
   }
 }
 
@@ -344,20 +349,23 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         _ => 'continuation',
       };
 
+      final l10n = context.l10n;
+      final languageCode = Localizations.localeOf(context).languageCode;
       final sw = Stopwatch()..start();
-      _setRegenStep('Mein KI-Tagebuch liest deinen Text …', 0.0, 0.35);
+      _setRegenStep(l10n.pipelineReadingText, 0.0, 0.35);
       final normalized =
-          await ref.read(proxyClientProvider).normalize(rawTranscript);
+          await ref.read(proxyClientProvider).normalize(rawTranscript, languageCode: languageCode);
       _completeRegenStep(0.35);
       debugPrint('[Pipeline] normalize (merge): ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
 
-      _setRegenStep('Mein KI-Tagebuch fügt alles zusammen …', 0.36, 1.0);
+      _setRegenStep(l10n.pipelineMerging, 0.36, 1.0);
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
       final entry = await ref.read(proxyClientProvider).mergeEntry(
             existingBody: _bodyMarkdown,
             newTranscript: normalized,
             previousQuestions: _followUpQuestions,
+            languageCode: languageCode,
             existingTags: existingTags,
           );
       _completeRegenStep(1.0);
@@ -404,9 +412,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       debugPrint('[TopicsReviewScreen] merge error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Beim Ergänzen ist etwas schiefgelaufen. Bitte versuche es erneut.')),
+          SnackBar(content: Text(context.l10n.topicsMergeError)),
         );
       }
     } finally {
@@ -424,10 +430,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     if (!mounted) return;
     final edited = await showTranscriptInputSheet(
       context,
-      title: 'Text ist zu lang',
+      title: context.l10n.topicsTextTooLongTitle,
       hint: message,
       initialValue: offendingText,
-      confirmLabel: 'Erneut senden',
+      confirmLabel: context.l10n.topicsResendConfirm,
     );
     if (edited == null || edited.isEmpty || !mounted) return;
     await onRetry(edited);
@@ -439,10 +445,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     final record = _recordings[index];
     final result = await showTranscriptInputSheet(
       context,
-      title: 'Aufnahme bearbeiten',
+      title: context.l10n.topicsEditRecordingTitle,
       hint: '',
       initialValue: record.normalizedText,
-      confirmLabel: 'Speichern',
+      confirmLabel: context.l10n.save,
     );
     if (result == null || result.isEmpty || result == record.normalizedText) return;
 
@@ -459,9 +465,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
   Future<void> _deleteRecording(int index) async {
     final confirmed = await _showConfirmDialog(
-      title: 'Aufnahme löschen?',
-      body: 'Diese Aufnahme wird dauerhaft entfernt und der Eintrag neu erstellt.',
-      confirmLabel: 'Löschen',
+      title: context.l10n.topicsDeleteRecordingTitle,
+      body: context.l10n.topicsDeleteRecordingBody,
+      confirmLabel: context.l10n.delete,
     );
     if (!confirmed || !mounted) return;
 
@@ -482,14 +488,17 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
   Future<void> _rederiveFromTranscripts([String? overrideText]) async {
     setState(() => _isRegenerating = true);
+    final l10n = context.l10n;
+    final languageCode = Localizations.localeOf(context).languageCode;
     final combined =
         overrideText ?? _recordings.map((r) => r.normalizedText).join('\n\n');
     try {
       final sw = Stopwatch()..start();
-      _setRegenStep('Mein KI-Tagebuch denkt nach …', 0.0, 1.0);
+      _setRegenStep(l10n.pipelineThinking, 0.0, 1.0);
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
       final entry = await ref.read(proxyClientProvider).generateEntry(
         combined,
+        languageCode: languageCode,
         existingTags: existingTags,
       );
       _completeRegenStep(1.0);
@@ -525,9 +534,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       debugPrint('[TopicsReviewScreen] re-derive error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Beim Aktualisieren ist etwas schiefgelaufen. Bitte versuche es erneut.')),
+          SnackBar(content: Text(context.l10n.topicsUpdateError)),
         );
       }
     } finally {
@@ -555,12 +562,12 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             children: [
               ListTile(
                 leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Kamera'),
+                title: Text(context.l10n.topicsCamera),
                 onTap: () => Navigator.of(sheetCtx).pop(ImageSource.camera),
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Fotos'),
+                title: Text(context.l10n.topicsGallery),
                 onTap: () => Navigator.of(sheetCtx).pop(ImageSource.gallery),
               ),
             ],
@@ -638,8 +645,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       if (!mounted) return;
       setState(() => _uploadingImages.removeWhere((u) => u.id == placeholder.id));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Foto konnte nicht hochgeladen werden.')),
+        SnackBar(content: Text(context.l10n.topicsPhotoUploadError)),
       );
     }
   }
@@ -712,7 +718,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       children: [
         Row(
           children: [
-            Text('Fotos · ${_images.length}',
+            Text(context.l10n.historyPhotosLabel(_images.length),
                 style: tt.labelMedium?.copyWith(color: cs.onSurface)),
             const Spacer(),
             // Also shown while _isEditingPhotos, even with zero images left —
@@ -723,7 +729,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               TextButton(
                 onPressed: () =>
                     setState(() => _isEditingPhotos = !_isEditingPhotos),
-                child: Text(_isEditingPhotos ? 'Fertig' : 'Bearbeiten'),
+                child: Text(_isEditingPhotos ? context.l10n.done : context.l10n.edit),
               ),
           ],
         ),
@@ -818,10 +824,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         return AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Eintrag noch nicht abgeschlossen',
+          title: Text(ctx.l10n.topicsUnsavedEntryTitle,
               style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
           content: Text(
-            'Möchtest du deinen Eintrag speichern oder verwerfen?',
+            ctx.l10n.topicsUnsavedEntryBody,
             style: tt.bodyMedium,
           ),
           actionsPadding:
@@ -829,16 +835,16 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop('cancel'),
-              child: const Text('Abbrechen'),
+              child: Text(ctx.l10n.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop('delete'),
               style: TextButton.styleFrom(foregroundColor: cs.error),
-              child: const Text('Verwerfen'),
+              child: Text(ctx.l10n.topicsDiscard),
             ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop('save'),
-              child: const Text('Speichern'),
+              child: Text(ctx.l10n.save),
             ),
           ],
         );
@@ -882,9 +888,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
   Future<void> _confirmDeleteAll() async {
     final confirmed = await _showConfirmDialog(
-      title: 'Von vorne anfangen?',
-      body: 'Alle Aufnahmen und der aktuelle Eintrag werden gelöscht.',
-      confirmLabel: 'Alles löschen',
+      title: context.l10n.topicsResetAllTitle,
+      body: context.l10n.topicsResetAllBody,
+      confirmLabel: context.l10n.topicsDeleteAllConfirm,
     );
     if (confirmed && mounted) {
       await ref.read(entryRepositoryProvider).deleteEntryById(_entryId);
@@ -913,7 +919,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Abbrechen')),
+                child: Text(ctx.l10n.cancel)),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: TextButton.styleFrom(foregroundColor: cs.error),
@@ -983,7 +989,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                                 onPressed: _handleBackPressed,
                                 icon: Icon(Icons.arrow_back_ios_new_rounded,
                                     size: 20, color: cs.onSurface),
-                                tooltip: 'Zurück',
+                                tooltip: context.l10n.topicsBackTooltip,
                               ),
                             const SizedBox(width: 4),
                             _MoodChip(mood: _mood, moodScore: _moodScore),
@@ -1013,7 +1019,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                                       Icon(Icons.restart_alt_rounded,
                                           size: 18, color: cs.error),
                                       const SizedBox(width: 10),
-                                      Text('Von vorne anfangen',
+                                      Text(context.l10n.topicsResetAll,
                                           style: TextStyle(color: cs.error)),
                                     ],
                                   ),
@@ -1046,8 +1052,8 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                               children: [
                                 Text(
                                   _topics.isEmpty
-                                      ? 'Keine Themen erkannt.'
-                                      : '${_topics.length} ${_topics.length == 1 ? 'Thema' : 'Themen'} erkannt.',
+                                      ? context.l10n.topicsNoTopics
+                                      : context.l10n.topicsTopicsCount(_topics.length),
                                   style: tt.headlineMedium?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     height: 1.25,
@@ -1057,7 +1063,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                                 if (_topics.isNotEmpty) ...[
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Möchtest du etwas vertiefen?',
+                                    context.l10n.topicsWantToDeepen,
                                     style: tt.bodyMedium?.copyWith(
                                       color: cs.primary,
                                     ),
@@ -1137,8 +1143,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
-                        'Dein Eintrag ist heute schon sehr umfangreich — '
-                        'bitte kürze bestehenden Text, um mehr zu ergänzen.',
+                        context.l10n.topicsNearLimitWarning,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: cs.error,
                             ),
@@ -1151,7 +1156,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                               ContinuingEntry(entryId: _entryId),
                             ),
                     icon: const Icon(Icons.mic_none_rounded, size: 18),
-                    label: const Text('Eintrag vertiefen'),
+                    label: Text(context.l10n.topicsDeepenEntry),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: cs.onSurface,
                       side: BorderSide(color: cs.outlineVariant),
@@ -1170,7 +1175,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                         ? () => _handleFinishEntry()
                         : null,
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Eintrag abschließen'),
+                    label: Text(context.l10n.topicsFinishEntry),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: cs.onSurface,
                       side: BorderSide(color: cs.outlineVariant),
@@ -1257,11 +1262,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               children: [
                 Icon(Icons.mic_none_rounded, size: 15, color: cs.outline),
                 const SizedBox(width: 6),
-                Text('Aufnahmen',
+                Text(context.l10n.topicsRecordingsLabel,
                     style: tt.labelMedium?.copyWith(color: cs.onSurface)),
                 const SizedBox(width: 8),
                 Text(
-                  '${_recordings.length} ${_recordings.length == 1 ? 'Aufnahme' : 'Aufnahmen'}',
+                  context.l10n.topicsRecordingsCount(_recordings.length),
                   style: tt.labelSmall?.copyWith(color: cs.outline),
                 ),
                 const Spacer(),
@@ -1329,11 +1334,11 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Mein KI-Tagebuch fragt',
+                  Text(context.l10n.topicsAiAsks,
                       style: tt.labelLarge
                           ?.copyWith(fontWeight: FontWeight.w700)),
                   Text(
-                    '${_followUpQuestions.length} ${_followUpQuestions.length == 1 ? 'Impuls' : 'Impulse'} zum Vertiefen',
+                    context.l10n.topicsFollowUpCount(_followUpQuestions.length),
                     style: tt.labelSmall?.copyWith(color: cs.outline),
                   ),
                 ],
@@ -1345,8 +1350,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
-              'Dein Eintrag ist heute schon sehr umfangreich — '
-              'bitte kürze bestehenden Text, um mehr zu ergänzen.',
+              context.l10n.topicsNearLimitWarning,
               style: tt.bodySmall?.copyWith(color: cs.error),
             ),
           ),
@@ -1358,7 +1362,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 : () => _showRecordingOverlay(
                       ExtendingTopic(
                         entryId: _entryId,
-                        topicTitle: 'Mein KI-Tagebuch fragt',
+                        topicTitle: context.l10n.topicsAiAsks,
                         followUpHint: _followUpQuestions[i],
                       ),
                     ),
@@ -1415,12 +1419,13 @@ class _RecordingOverlay extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
+    final l10n = context.l10n;
     final contextLabel = switch (recordingContext) {
-      ExtendingTopic(:final topicTitle) when topicTitle == 'Mein KI-Tagebuch fragt' =>
-        'Antwort aufnehmen',
-      ExtendingTopic(:final topicTitle) => 'Ergänzt · $topicTitle',
-      ContinuingEntry() => 'Ergänzen',
-      _ => 'Aufnahme',
+      ExtendingTopic(:final topicTitle) when topicTitle == l10n.topicsAiAsks =>
+        l10n.topicsAnswerRecording,
+      ExtendingTopic(:final topicTitle) => l10n.contextChipExtending(topicTitle),
+      ContinuingEntry() => l10n.topicsAddLabel,
+      _ => l10n.topicsProvenanceDefault,
     };
 
     return Container(
@@ -1465,7 +1470,7 @@ class _RecordingOverlay extends StatelessWidget {
               IconButton(
                 onPressed: onCancel,
                 icon: Icon(Icons.close_rounded, color: cs.outline),
-                tooltip: 'Abbrechen',
+                tooltip: l10n.cancel,
               ),
             ],
           ),
@@ -1474,7 +1479,7 @@ class _RecordingOverlay extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               (recordingContext as ExtendingTopic).followUpHint ??
-                  'Was möchtest du ergänzen?',
+                  l10n.topicsWhatToAddHint,
               style: tt.bodyMedium?.copyWith(
                 color: cs.onSurface.withValues(alpha: 0.6),
                 fontStyle: FontStyle.italic,
@@ -1487,7 +1492,6 @@ class _RecordingOverlay extends StatelessWidget {
             recordingContext: recordingContext,
             onComplete: onComplete,
             onCancel: onCancel,
-            idleLabel: 'Aufnahme starten',
           ),
           const SizedBox(height: 8),
         ],
@@ -1509,15 +1513,13 @@ class _NormalizedTextBubble extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  static String _formatTime(DateTime dt) {
-    const weekdays = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    const months = [
-      '', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
-    ];
+  static String _formatTime(DateTime dt, String locale) {
+    final weekday = DateFormat.E(locale).format(dt);
+    final month = DateFormat.MMM(locale).format(dt);
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
-    return '${weekdays[dt.weekday]}, ${dt.day}. ${months[dt.month]} · $h:$m';
+    final datePart = locale == 'de' ? '$weekday, ${dt.day}. $month' : '$weekday, $month ${dt.day}';
+    return '$datePart · $h:$m';
   }
 
   @override
@@ -1535,7 +1537,7 @@ class _NormalizedTextBubble extends StatelessWidget {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                '${_formatTime(record.timestamp)} · ${record.provenanceLabel}',
+                '${_formatTime(record.timestamp, Localizations.localeOf(context).languageCode)} · ${record.provenanceLabel(context.l10n)}',
                 style: tt.labelSmall?.copyWith(color: cs.outline),
               ),
             ),
@@ -1788,7 +1790,7 @@ class _AddPhotoTile extends StatelessWidget {
           children: [
             Icon(Icons.add_rounded, size: 22, color: cs.primary),
             const SizedBox(height: 4),
-            Text('Hinzufügen',
+            Text(context.l10n.topicsAddPhoto,
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1854,15 +1856,6 @@ class _MoodChip extends StatelessWidget {
   final String mood;
   final double moodScore;
 
-  String get _emoji => switch (mood) {
-        'happy' => '😊',
-        'calm' => '😌',
-        'tense' => '😰',
-        'sad' => '😔',
-        'mixed' => '🤔',
-        _ => '😐',
-      };
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1875,7 +1868,7 @@ class _MoodChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        _emoji,
+        moodEmoji(mood),
         style: tt.labelSmall,
       ),
     );

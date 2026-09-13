@@ -12,11 +12,15 @@ import '../../../core/database/app_database.dart' as db;
 import '../../../shared/models/entry.dart';
 import '../../../shared/models/entry_image.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
+import '../../../l10n/app_localizations.dart';
+import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/proxy_client.dart' show TopicDto;
+import '../../../shared/utils/mood_labels.dart';
 import '../../../shared/widgets/fullscreen_image_viewer.dart';
 import '../../../shared/widgets/history_sync_dialog.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
@@ -233,24 +237,8 @@ int _uniqueDayCount(List<_EntryPreview> entries) {
   return days.length;
 }
 
-const _monthNamesShort = [
-  '',
-  'Jan.',
-  'Feb.',
-  'März',
-  'Apr.',
-  'Mai',
-  'Juni',
-  'Juli',
-  'Aug.',
-  'Sep.',
-  'Okt.',
-  'Nov.',
-  'Dez.',
-];
-
 (List<_IndexEntry>, double) _buildIndex(
-    Map<int, Map<int, List<_EntryPreview>>> grouped) {
+    Map<int, Map<int, List<_EntryPreview>>> grouped, String locale) {
   final entries = <_IndexEntry>[];
   double offset = 0;
 
@@ -264,10 +252,11 @@ const _monthNamesShort = [
     offset += _kYearHeaderH;
 
     for (final month in grouped[year]!.keys) {
+      final monthName = DateFormat.MMM(locale).format(DateTime(year, month));
       entries.add(_IndexEntry(
         year: year,
         month: month,
-        label: '${_monthNamesShort[month]} $year',
+        label: '$monthName $year',
         estimatedOffset: offset,
       ));
       offset += _kMonthHeaderH;
@@ -282,25 +271,11 @@ const _monthNamesShort = [
 
 // ─── Date / duration helpers ─────────────────────────────────────────────────
 
-const _weekdays = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-const _monthNames = [
-  '',
-  'Januar',
-  'Februar',
-  'März',
-  'April',
-  'Mai',
-  'Juni',
-  'Juli',
-  'August',
-  'September',
-  'Oktober',
-  'November',
-  'Dezember',
-];
-
-String _formatEntryDate(DateTime dt) =>
-    '${_weekdays[dt.weekday]}, ${dt.day}. ${_monthNames[dt.month]}';
+String _formatEntryDate(DateTime dt, String locale) {
+  final weekday = DateFormat.E(locale).format(dt);
+  final month = DateFormat.MMMM(locale).format(dt);
+  return locale == 'de' ? '$weekday, ${dt.day}. $month' : '$weekday, $month ${dt.day}';
+}
 
 bool _isToday(DateTime dt) {
   final now = DateTime.now();
@@ -310,22 +285,15 @@ bool _isToday(DateTime dt) {
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
-String _formatDuration(int seconds) => '${(seconds / 60).round()} Min';
+String _formatDuration(int seconds, AppLocalizations l10n) =>
+    l10n.historyDurationMinutes((seconds / 60).round());
 
-String _formatCreatedTime(String iso) {
+String _formatCreatedTime(String iso, AppLocalizations l10n) {
   final dt = DateTime.tryParse(iso);
   if (dt == null) return '';
-  return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} Uhr';
+  final time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  return l10n.historyTimeSuffix(time);
 }
-
-String _moodEmoji(Mood m) => switch (m) {
-      Mood.happy => '😊',
-      Mood.calm => '😌',
-      Mood.tense => '😰',
-      Mood.sad => '😔',
-      Mood.mixed => '🤔',
-      _ => '😐',
-    };
 
 Color _moodColor(Mood m) => switch (m) {
       Mood.happy => const Color(0xFFF9A825),
@@ -334,15 +302,6 @@ Color _moodColor(Mood m) => switch (m) {
       Mood.sad => const Color(0xFF1565C0),
       Mood.mixed => const Color(0xFF6A1B9A),
       _ => const Color(0xFF5C6BC0),
-    };
-
-String _moodLabel(Mood m) => switch (m) {
-      Mood.happy => 'Gut',
-      Mood.calm => 'Ruhig',
-      Mood.tense => 'Angespannt',
-      Mood.sad => 'Traurig',
-      Mood.mixed => 'Gemischt',
-      _ => 'Neutral',
     };
 
 // ─── Real-data provider ───────────────────────────────────────────────────────
@@ -385,7 +344,7 @@ String _stripMarkdown(String md) {
       .trim();
 }
 
-_EntryPreview _toPreview(db.Entry e, int index) {
+_EntryPreview _toPreview(db.Entry e, int index, AppLocalizations l10n) {
   final topics = _parseTopics(e.topics);
   final title = topics.isNotEmpty
       ? (topics.first['title'] as String? ?? '')
@@ -404,7 +363,7 @@ _EntryPreview _toPreview(db.Entry e, int index) {
     paletteIndex: index % 5,
     allTopics: topics,
     entryDate: e.date,
-    createdTime: _formatCreatedTime(e.createdAt),
+    createdTime: _formatCreatedTime(e.createdAt, l10n),
     rawEntry: e,
     images: parseEntryImages(e.images),
   );
@@ -441,7 +400,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     return AppBar(
       backgroundColor: cs.surface,
       surfaceTintColor: Colors.transparent,
-      title: const Text('Mein Tagebuch'),
+      title: Text(context.l10n.historyTitle),
       actions: const [ProfileAvatarButton(), SizedBox(width: 8)],
     );
   }
@@ -452,7 +411,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     Future<void> Function()? onRefresh,
   }) {
     final cs = Theme.of(context).colorScheme;
-    final built = _buildIndex(grouped);
+    final locale = Localizations.localeOf(context).languageCode;
+    final built = _buildIndex(grouped, locale);
     final indexEntries = built.$1;
     final totalH = built.$2;
 
@@ -511,7 +471,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       appBar: _appBar(context),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.go('/'),
-        tooltip: 'Neuer Eintrag',
+        tooltip: context.l10n.historyNewEntryTooltip,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add_rounded),
       ),
@@ -549,12 +509,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           Icon(Icons.book_outlined, size: 56, color: cs.outlineVariant),
           const SizedBox(height: 16),
           Text(
-            'Noch keine Einträge',
+            context.l10n.historyEmptyTitle,
             style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
-            'Nimm deinen ersten Tagebucheintrag auf\nund er erscheint hier.',
+            context.l10n.historyEmptyBody,
             style: tt.bodyMedium?.copyWith(color: cs.outline),
             textAlign: TextAlign.center,
           ),
@@ -562,7 +522,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           FilledButton.icon(
             onPressed: () => context.go('/'),
             icon: const Icon(Icons.mic_rounded),
-            label: const Text('Ersten Eintrag aufnehmen'),
+            label: Text(context.l10n.historyEmptyButton),
           ),
         ],
       ),
@@ -606,16 +566,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ),
       error: (_, __) => Scaffold(
         appBar: _appBar(context),
-        body: const Center(child: Text('Fehler beim Laden')),
+        body: Center(child: Text(context.l10n.historyLoadError)),
       ),
       data: (dbEntries) {
         if (dbEntries.isEmpty) {
           return _buildEmptyState(context, onRefresh: _handleRefresh);
         }
+        final l10n = context.l10n;
         final previews = dbEntries
             .asMap()
             .entries
-            .map((e) => _toPreview(e.value, e.key))
+            .map((e) => _toPreview(e.value, e.key, l10n))
             .toList();
         return _buildScaffold(
           context,
@@ -679,7 +640,9 @@ class _MonthHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final label = '${_monthNames[month]} $year';
+    final locale = Localizations.localeOf(context).languageCode;
+    final monthName = DateFormat.MMMM(locale).format(DateTime(year, month));
+    final label = '$monthName $year';
     return ColoredBox(
       color: cs.surface,
       child: Padding(
@@ -709,10 +672,11 @@ class _DayDivider extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final today = _isToday(date);
+    final locale = Localizations.localeOf(context).languageCode;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
-        today ? 'HEUTE' : _formatEntryDate(date),
+        today ? context.l10n.historyToday : _formatEntryDate(date, locale),
         style: tt.labelSmall?.copyWith(
           color: cs.outline,
           fontWeight: FontWeight.w600,
@@ -867,7 +831,7 @@ class _MediaCardBody extends StatelessWidget {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        '${_moodEmoji(entry.mood)} ${_moodLabel(entry.mood)}',
+                        '${moodEmoji(entry.mood.name)} ${moodLabel(context, entry.mood.name)}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -1020,7 +984,7 @@ class _InlineMoodChip extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            '${_moodEmoji(mood)} ${_moodLabel(mood)}',
+            '${moodEmoji(mood.name)} ${moodLabel(context, mood.name)}',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -1066,22 +1030,22 @@ class _EntryDetailSheet extends ConsumerWidget {
   final _EntryPreview entry;
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eintrag löschen?'),
-        content: const Text(
-            'Dieser Eintrag wird dauerhaft gelöscht und kann nicht wiederhergestellt werden.'),
+        title: Text(l10n.historyDeleteEntryTitle),
+        content: Text(l10n.historyDeleteEntryBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Löschen'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -1126,7 +1090,7 @@ class _EntryDetailSheet extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: Row(
                 children: [
-                  Text(_moodEmoji(entry.mood),
+                  Text(moodEmoji(entry.mood.name),
                       style: const TextStyle(fontSize: 28)),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1134,7 +1098,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _formatEntryDate(entry.date),
+                          _formatEntryDate(entry.date, Localizations.localeOf(context).languageCode),
                           style: tt.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700),
                         ),
@@ -1171,7 +1135,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                     const SizedBox(height: 20),
                   ],
                   Text(
-                    'Themen',
+                    context.l10n.historyTopicsLabel,
                     style: tt.labelMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: cs.outline,
@@ -1190,7 +1154,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                   if (entry.images.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text(
-                      'Fotos · ${entry.images.length}',
+                      context.l10n.historyPhotosLabel(entry.images.length),
                       style: tt.labelMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: cs.outline,
@@ -1242,9 +1206,9 @@ class _EntryDetailSheet extends ConsumerWidget {
                             Navigator.of(context).pop();
                             context.push('/topics?entryId=${e.id}', extra: (
                               entryId: e.id,
-                              date: _formatEntryDate(entry.date),
+                              date: _formatEntryDate(entry.date, Localizations.localeOf(context).languageCode),
                               duration: entry.durationSeconds > 0
-                                  ? _formatDuration(entry.durationSeconds)
+                                  ? _formatDuration(entry.durationSeconds, context.l10n)
                                   : '',
                               topics: entry.allTopics
                                   .map((t) => TopicDto.fromJson(t))
@@ -1261,7 +1225,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                           },
                           icon: Icon(Icons.edit_outlined,
                               color: cs.primary, size: 18),
-                          label: Text('Eintrag editieren',
+                          label: Text(context.l10n.historyEditEntry,
                               style: TextStyle(color: cs.primary)),
                         ),
                       ),
@@ -1272,7 +1236,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                         onPressed: () => _confirmDelete(context, ref),
                         icon: Icon(Icons.delete_outline_rounded,
                             color: cs.error, size: 18),
-                        label: Text('Eintrag löschen',
+                        label: Text(context.l10n.historyDeleteEntry,
                             style: TextStyle(color: cs.error)),
                       ),
                     ),

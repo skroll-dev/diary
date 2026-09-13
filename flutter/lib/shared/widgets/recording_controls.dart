@@ -7,6 +7,7 @@ import 'transcript_input_sheet.dart';
 import 'live_transcript_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../extensions/localization_extensions.dart';
 import '../services/proxy_client.dart';
 import '../services/recording_service.dart';
 import '../../features/recording/recording_context.dart';
@@ -24,13 +25,13 @@ class RecordingControls extends ConsumerStatefulWidget {
     required this.recordingContext,
     required this.onComplete,
     this.onCancel,
-    this.idleLabel = 'Aufnahme starten',
+    this.idleLabel,
   });
 
   final RecordingContext recordingContext;
   final Future<void> Function(String rawTranscript) onComplete;
   final VoidCallback? onCancel;
-  final String idleLabel;
+  final String? idleLabel;
 
   @override
   ConsumerState<RecordingControls> createState() => _RecordingControlsState();
@@ -105,14 +106,15 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   }
 
   Future<void> _start() async {
+    final languageCode = Localizations.localeOf(context).languageCode;
     final svc = ref.read(recordingServiceProvider);
     try {
       await svc.start();
     } on RecordingPermissionDenied {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mikrofon-Zugriff wird benötigt, um Einträge aufzunehmen.'),
+          SnackBar(
+            content: Text(context.l10n.micPermissionRequired),
           ),
         );
       }
@@ -121,6 +123,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     if (kIsWeb) {
       _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
         svc.webAudioStream,
+        languageCode: languageCode,
         onInterim: (text) {
           if (mounted) setState(() => _interimText = text);
         },
@@ -150,8 +153,8 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   Future<void> _showTypeDialog() async {
     final text = await showTranscriptInputSheet(
       context,
-      title: 'Transkript eingeben',
-      hint: 'Text statt Sprache …',
+      title: context.l10n.transcriptInputTitleAlt,
+      hint: context.l10n.transcriptInputHintTyped,
     );
     if (text == null || text.isEmpty) return;
 
@@ -167,16 +170,17 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     _pulseController.reset();
     setState(() => _phase = RecordingPhase.processing);
 
+    final languageCode = Localizations.localeOf(context).languageCode;
     try {
       final sw = Stopwatch()..start();
-      _setStep('Mein KI-Tagebuch hört zu …', 0.0, 0.35);
+      _setStep(context.l10n.pipelineListening, 0.0, 0.35);
       final String rawTranscript;
       if (kIsWeb) {
         await ref.read(recordingServiceProvider).stopStream();
         rawTranscript = await _wsTranscriptFuture!;
       } else {
         final audio = await ref.read(recordingServiceProvider).stopAndRead();
-        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio);
+        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio, languageCode: languageCode);
       }
       _completeStep(0.40);
       debugPrint('[Pipeline] transcribe (controls): ${sw.elapsedMilliseconds}ms');
@@ -392,7 +396,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                     opacity: isRecording ? 0.0 : 1.0,
                     child: Semantics(
                       button: true,
-                      label: 'Text statt Sprache eingeben',
+                      label: context.l10n.typeInsteadSemantics,
                       child: Material(
                         color: cs.surfaceContainerHigh,
                         shape: CircleBorder(
@@ -423,7 +427,9 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
           GestureDetector(
             onDoubleTap: isRecording ? null : _showTypeDialog,
             child: Text(
-              isRecording ? 'Tippe zum Beenden' : widget.idleLabel,
+              isRecording
+                  ? context.l10n.recordingTapToStop
+                  : (widget.idleLabel ?? context.l10n.recordingControlsIdleLabel),
               style: tt.bodyMedium?.copyWith(color: cs.outline),
               textAlign: TextAlign.center,
             ),
@@ -438,7 +444,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 10),
                       child: Text(
-                        'Aufnahme abbrechen',
+                        context.l10n.recordingCancel,
                         style: tt.labelMedium?.copyWith(
                           color: cs.error.withValues(alpha: 0.65),
                         ),
