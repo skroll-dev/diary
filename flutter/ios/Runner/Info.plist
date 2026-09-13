@@ -28,6 +28,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Mein KI-Tagebuch benötigt Zugriff auf die Kamera, um Fotos zu deinen Tagebucheinträgen hinzuzufügen.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen.</string>
 	<key>UIApplicationSceneManifest</key>
