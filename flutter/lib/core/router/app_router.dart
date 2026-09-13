@@ -23,6 +23,7 @@ typedef TopicsArgs = ({
   double moodScore,
   List<String> followUpQuestions,
   String transcriptReason, // 'initial' | 'followUp:...' | 'continuation'
+  bool isEditMode, // true when opened from History to edit an existing entry
 });
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -99,6 +100,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             moodScore: args?.moodScore ?? 0.0,
             followUpQuestions: args?.followUpQuestions ?? [],
             transcriptReason: args?.transcriptReason ?? 'initial',
+            isEditMode: args?.isEditMode ?? false,
           );
         },
       ),

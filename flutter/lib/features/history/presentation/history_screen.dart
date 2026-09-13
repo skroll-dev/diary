@@ -1259,6 +1259,7 @@ class _EntryDetailSheet extends ConsumerWidget {
                               followUpQuestions:
                                   _parseTags(e.followUpQuestions),
                               transcriptReason: 'initial',
+                              isEditMode: true,
                             ));
                           },
                           icon: Icon(Icons.edit_outlined,

@@ -333,6 +333,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         moodScore: moodScore,
         followUpQuestions: followUpQuestions,
         transcriptReason: reason,
+        isEditMode: false,
       ));
     }
   }
@@ -443,6 +444,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             moodScore: moodScore,
             followUpQuestions: followUpQuestions,
             transcriptReason: 'continuation',
+            isEditMode: false,
           ));
         }
         return;
@@ -493,6 +495,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
         moodScore: moodScore,
         followUpQuestions: followUpQuestions,
         transcriptReason: reason,
+        isEditMode: false,
       ));
     }
   }

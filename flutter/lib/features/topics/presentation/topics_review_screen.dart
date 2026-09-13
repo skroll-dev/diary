@@ -95,6 +95,7 @@ class TopicsReviewScreen extends ConsumerStatefulWidget {
     this.moodScore = 0.0,
     this.followUpQuestions = const [],
     this.transcriptReason = 'initial',
+    this.isEditMode = false,
   });
 
   final String entryId;
@@ -107,6 +108,10 @@ class TopicsReviewScreen extends ConsumerStatefulWidget {
   final double moodScore;
   final List<String> followUpQuestions;
   final String transcriptReason;
+  // true when opened from History to edit an already-saved entry: back
+  // navigation must never offer to discard/delete it, only fresh recordings
+  // (not yet confirmed by the user) get that option.
+  final bool isEditMode;
 
   @override
   ConsumerState<TopicsReviewScreen> createState() => _TopicsReviewScreenState();
@@ -123,6 +128,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   late String _mood;
   late double _moodScore;
   late final String _entryId = widget.entryId;
+  late final bool _isEditMode = widget.isEditMode;
 
   bool _isRecordingsExpanded = false;
   bool _isRegenerating = false;
@@ -782,12 +788,28 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     if (mounted) context.go('/history');
   }
 
-  // ── Back navigation — the entry already exists locally at this point
-  // (saveEntry ran back on RecordingScreen), so leaving via the back button
-  // must not silently abandon it half-synced. Ask the user to either finish
-  // it (same as "Eintrag abschließen") or discard it outright.
+  // ── Back navigation ──────────────────────────────────────────────────────
+  //
+  // Edit mode (opened from History for an already-saved entry): every change
+  // on this screen already autosaves in place (mergeEntry/updateEntry/
+  // updateTranscript/updateEntryImages all write immediately as the user
+  // acts), so there is nothing left to "save or discard" — just flush any
+  // pending sync and leave. Crucially, this path must never call
+  // deleteEntryById: that would destroy a persisted diary entry the user
+  // only meant to stop editing.
+  //
+  // Fresh-recording mode: the entry already exists locally at this point
+  // (saveEntry ran back on RecordingScreen), but the user hasn't confirmed
+  // they want to keep it yet, so leaving via the back button asks them to
+  // either finish it (same as "Eintrag abschließen") or discard it outright.
 
   Future<void> _handleBackPressed() async {
+    if (_isEditMode) {
+      unawaited(ref.read(entryRepositoryProvider).flushPendingSyncs());
+      _leaveScreen();
+      return;
+    }
+
     final action = await showDialog<String>(
       context: context,
       builder: (ctx) {
