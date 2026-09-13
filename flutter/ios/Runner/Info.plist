@@ -32,6 +32,8 @@
 	<string>Mein KI-Tagebuch benötigt Zugriff auf die Kamera, um Fotos zu deinen Tagebucheinträgen hinzuzufügen.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Mein KI-Tagebuch möchte dich geräteübergreifend verfolgen, um dir relevantere Inhalte zu zeigen und die App zu verbessern.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
