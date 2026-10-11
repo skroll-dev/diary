@@ -336,33 +336,6 @@ class EntryRepository {
 
     await (_db.update(_db.entries)..where((e) => e.id.equals(entry.id)))
         .write(const EntriesCompanion(synced: Value(true)));
-
-    try {
-      await _deleteLegacyDateDoc(
-          uid: targetUid, entryId: entry.id, date: entry.date);
-    } catch (e) {
-      debugPrint('[EntryRepository] legacy doc cleanup failed for ${entry.id}: $e');
-    }
-  }
-
-  /// Entries created before the multi-entry-per-day migration live in a
-  /// Firestore doc keyed by their date; every write since targets a doc keyed
-  /// by entry id. Once the id-keyed doc holds the full entry, the date-keyed
-  /// one is a stale duplicate that would resurface on the next history sync
-  /// — remove it.
-  Future<void> _deleteLegacyDateDoc({
-    required String uid,
-    required String entryId,
-    required String date,
-  }) async {
-    if (date == entryId) return;
-    final ref = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('entries')
-        .doc(date);
-    final snap = await ref.get();
-    if (snap.data()?['id'] == entryId) await ref.delete();
   }
 
   /// Wipes every locally cached entry/transcript on this device (all users,
@@ -410,8 +383,7 @@ class EntryRepository {
     await (_db.delete(_db.entries)
           ..where((e) => e.id.equals(entryId)))
         .go();
-    unawaited(_deleteFromFirestore(
-        uid: user.uid, entryId: entryId, date: entry?.date));
+    unawaited(_deleteFromFirestore(uid: user.uid, entryId: entryId));
 
     final images = entry != null ? parseEntryImages(entry.images) : const <EntryImage>[];
     if (images.isNotEmpty) {
@@ -545,11 +517,7 @@ class EntryRepository {
   // ── Firestore → Drift bulk sync (full history, e.g. on login) ───────────────
 
   /// Fetches every entry doc under `users/{uid}/entries` and inserts any that
-  /// are missing locally. Doc IDs are entry ids for docs written after the
-  /// multi-entry-per-day migration, but may still be legacy date strings for
-  /// older docs — either way `data['id']` is the authoritative entry id, so
-  /// dedup and insertion key off that (falling back to `doc.id`/`doc data
-  /// date` for docs written before the `id`/`date` fields existed). Never
+  /// are missing locally. Docs are keyed by entry id. Never
   /// overwrites an entry that already exists locally. Reports (loaded,
   /// total) progress after each doc is processed — [onProgress] is called
   /// once with (0, total) before the loop starts.
@@ -574,43 +542,19 @@ class EntryRepository {
         .map((e) => e.id)
         .toSet();
 
-    // A legacy entry edited after the multi-entry-per-day migration exists
-    // twice: the stale date-keyed doc and the current id-keyed one (see
-    // [_deleteLegacyDateDoc]). Group by entry id so both collapse into one.
-    final docsByEntryId =
-        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
-    for (final doc in snapshot.docs) {
-      final entryId = doc.data()['id'] as String? ?? doc.id;
-      docsByEntryId.putIfAbsent(entryId, () => []).add(doc);
-    }
-
     var inserted = 0;
     var loaded = 0;
-    for (final group in docsByEntryId.entries) {
-      final docs = group.value;
-      if (!localEntryIds.contains(group.key)) {
+    for (final doc in snapshot.docs) {
+      if (!localEntryIds.contains(doc.id)) {
         try {
-          final data = _mergeEntryDocs(docs);
-          final resolvedDate = data['date'] as String? ?? docs.first.id;
-          final entryId =
-              await _insertEntryFromFirestoreData(data, user.uid, resolvedDate);
+          await _insertEntryFromFirestoreDoc(doc, user.uid);
           inserted++;
-          if (docs.length > 1) {
-            // Heal the remote: rewrite the id-keyed doc in full and drop the
-            // stale duplicate.
-            final entry = await getEntryById(entryId);
-            if (entry != null) {
-              unawaited(_pushEntryToFirestore(entry, user.uid).catchError(
-                  (Object e) => debugPrint(
-                      '[EntryRepository] duplicate repair failed for $entryId: $e')));
-            }
-          }
         } catch (e, st) {
           // ignore: avoid_print
-          print('[EntryRepository] syncAllEntriesFromFirestore: failed for ${group.key}: $e\n$st');
+          print('[EntryRepository] syncAllEntriesFromFirestore: failed for ${doc.id}: $e\n$st');
         }
       }
-      loaded += docs.length;
+      loaded++;
       onProgress?.call(loaded, total);
     }
     return inserted;
@@ -628,45 +572,12 @@ class EntryRepository {
 
   // ── Shared Firestore doc → Drift row conversion ──────────────────────────────
 
-  /// Collapses every Firestore doc belonging to one entry into a single data
-  /// map, oldest first so the most recently updated fields win. A doc
-  /// carrying `id` is a full write whose `rawTranscripts` is the complete
-  /// list; one without is a partial merge write ([_updateFirestore],
-  /// [_syncImagesToFirestore]) whose transcripts only add to the others.
-  Map<String, dynamic> _mergeEntryDocs(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    if (docs.length == 1) return docs.single.data();
-
-    final sorted = [...docs]..sort((a, b) =>
-        _tsToString(a.data()['updatedAt'], '')
-            .compareTo(_tsToString(b.data()['updatedAt'], '')));
-    final merged = <String, dynamic>{};
-    final transcripts = <dynamic>[];
-    for (final doc in sorted) {
-      final data = doc.data();
-      final docTranscripts = data['rawTranscripts'] as List<dynamic>?;
-      if (docTranscripts != null) {
-        if (data.containsKey('id')) transcripts.clear();
-        final incomingIds = docTranscripts.map((t) => (t as Map)['id']).toSet();
-        transcripts
-          ..removeWhere((t) => incomingIds.contains((t as Map)['id']))
-          ..addAll(docTranscripts);
-      }
-      merged.addAll(data);
-    }
-    merged['rawTranscripts'] = transcripts;
-    return merged;
-  }
-
-  /// Inserts the entry described by [data] plus its transcripts and returns
-  /// the entry id.
-  Future<String> _insertEntryFromFirestoreData(
-    Map<String, dynamic> data,
+  Future<void> _insertEntryFromFirestoreDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
     String uid,
-    String date,
   ) async {
-    final entryId = data['id'] as String? ?? _uuid.v4();
+    final data = doc.data()!;
+    final entryId = doc.id;
     final now = DateTime.now().toIso8601String();
 
     // Firestore stores followUpQuestions and topics as native lists;
@@ -684,7 +595,7 @@ class EntryRepository {
       EntriesCompanion.insert(
         id: entryId,
         userId: uid,
-        date: date,
+        date: data['date'] as String,
         bodyMarkdown: data['bodyMarkdown'] as String? ?? '',
         mood: Value(data['mood'] as String? ?? 'neutral'),
         moodScore: Value((data['moodScore'] as num?)?.toDouble() ?? 0.0),
@@ -717,7 +628,6 @@ class EntryRepository {
         );
       }
     }
-    return entryId;
   }
 
   // Firestore may store timestamps as Timestamp objects or ISO strings.
@@ -733,7 +643,6 @@ class EntryRepository {
   Future<void> _deleteFromFirestore({
     required String uid,
     required String entryId,
-    String? date,
   }) async {
     try {
       await FirebaseFirestore.instance
@@ -742,9 +651,6 @@ class EntryRepository {
           .collection('entries')
           .doc(entryId)
           .delete();
-      if (date != null) {
-        await _deleteLegacyDateDoc(uid: uid, entryId: entryId, date: date);
-      }
     } catch (e) {
       debugPrint('[EntryRepository] _deleteFromFirestore failed for $entryId: $e');
     }
