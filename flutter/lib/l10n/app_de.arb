@@ -182,6 +182,13 @@
             "count": {"type": "int"}
         }
     },
+    "historyPhotoPosition": "{current} von {total}",
+    "@historyPhotoPosition": {
+        "placeholders": {
+            "current": {"type": "int"},
+            "total": {"type": "int"}
+        }
+    },
     "historyEditEntry": "Eintrag editieren",
     "historyDeleteEntry": "Eintrag löschen",
     "historyDurationMinutes": "{minutes} Min",

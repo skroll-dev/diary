@@ -97,5 +97,10 @@ flutter:
   generate: true
   assets:
     - assets/animations/
-    - assets/fonts/
     - assets/icon/
+  fonts:
+    - family: Newsreader
+      fonts:
+        - asset: assets/fonts/Newsreader.ttf
+        - asset: assets/fonts/Newsreader-Italic.ttf
+          style: italic

@@ -141,6 +141,7 @@
     "historyDeleteEntryBody": "This entry will be permanently deleted and cannot be restored.",
     "historyTopicsLabel": "Topics",
     "historyPhotosLabel": "Photos · {count}",
+    "historyPhotoPosition": "{current} of {total}",
     "historyEditEntry": "Edit entry",
     "historyDeleteEntry": "Delete entry",
     "historyDurationMinutes": "{minutes} min",

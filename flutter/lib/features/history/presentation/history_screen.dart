@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -224,10 +223,15 @@ Map<int, Map<int, List<_EntryPreview>>> _groupEntries(
 
 // ─── Index builder for scrubber ───────────────────────────────────────────────
 
-const _kYearHeaderH = 57.0;
-const _kMonthHeaderH = 44.0;
-const _kCardH = 190.0; // blended estimate: hero-photo cards run ~290, no-media ~110
-const _kDayDividerH = 28.0;
+const _kMonthHeaderH = 34.0;
+// One topic block: highlighted title + up to three lines of prose.
+const _kTopicH = 104.0;
+// Per entry, on top of its topics: time/mood line, tags, padding.
+const _kEntryChromeH = 44.0;
+// Photo strip plus its position rail, added for entries with photos.
+const _kCarouselH = 220.0;
+// Extra breathing room around each day's group of entries.
+const _kDayGapH = 16.0;
 
 int _uniqueDayCount(List<_EntryPreview> entries) {
   final days = <DateTime>{};
@@ -249,7 +253,6 @@ int _uniqueDayCount(List<_EntryPreview> entries) {
       label: '$year',
       estimatedOffset: offset,
     ));
-    offset += _kYearHeaderH;
 
     for (final month in grouped[year]!.keys) {
       final monthName = DateFormat.MMM(locale).format(DateTime(year, month));
@@ -261,8 +264,12 @@ int _uniqueDayCount(List<_EntryPreview> entries) {
       ));
       offset += _kMonthHeaderH;
       final monthEntries = grouped[year]![month]!;
-      offset += monthEntries.length * _kCardH;
-      offset += _uniqueDayCount(monthEntries) * _kDayDividerH;
+      for (final e in monthEntries) {
+        offset += _topicBlocks(e).length * _kTopicH +
+            _kEntryChromeH +
+            (e.images.isNotEmpty ? _kCarouselH : 0);
+      }
+      offset += _uniqueDayCount(monthEntries) * _kDayGapH;
     }
   }
 
@@ -274,7 +281,9 @@ int _uniqueDayCount(List<_EntryPreview> entries) {
 String _formatEntryDate(DateTime dt, String locale) {
   final weekday = DateFormat.E(locale).format(dt);
   final month = DateFormat.MMMM(locale).format(dt);
-  return locale == 'de' ? '$weekday, ${dt.day}. $month' : '$weekday, $month ${dt.day}';
+  return locale == 'de'
+      ? '$weekday, ${dt.day}. $month'
+      : '$weekday, $month ${dt.day}';
 }
 
 bool _isToday(DateTime dt) {
@@ -291,7 +300,8 @@ String _formatDuration(int seconds, AppLocalizations l10n) =>
 String _formatCreatedTime(String iso, AppLocalizations l10n) {
   final dt = DateTime.tryParse(iso);
   if (dt == null) return '';
-  final time = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  final time =
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   return l10n.historyTimeSuffix(time);
 }
 
@@ -346,9 +356,8 @@ String _stripMarkdown(String md) {
 
 _EntryPreview _toPreview(db.Entry e, int index, AppLocalizations l10n) {
   final topics = _parseTopics(e.topics);
-  final title = topics.isNotEmpty
-      ? (topics.first['title'] as String? ?? '')
-      : e.date;
+  final title =
+      topics.isNotEmpty ? (topics.first['title'] as String? ?? '') : e.date;
   final date = DateTime.tryParse(e.date) ?? DateTime.now();
   return _EntryPreview(
     date: date,
@@ -421,49 +430,29 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       // Keeps pull-to-refresh reachable when the entries don't fill the screen.
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
+        // No separate year header: the sticky month header already names the
+        // year and swaps as the list scrolls.
         for (final year in grouped.keys)
-          SliverStickyHeader(
-            header: _YearHeader(year: year),
-            sliver: SliverMainAxisGroup(
-              slivers: [
-                for (final month in grouped[year]!.keys)
-                  SliverStickyHeader(
-                    header: _MonthHeader(year: year, month: month),
-                    sliver: SliverList.builder(
-                      itemCount: grouped[year]![month]!.length,
-                      itemBuilder: (ctx, i) {
-                        final monthEntries = grouped[year]![month]!;
-                        final e = monthEntries[i];
-                        final today = _isToday(e.date);
-                        final isFirstOfDay = i == 0 ||
-                            !_isSameDay(monthEntries[i - 1].date, e.date);
-                        var card = _EntryCard(entry: e)
-                            .animate()
-                            .fadeIn(duration: 250.ms, delay: (i * 30).ms)
-                            .slideY(begin: 0.05, end: 0);
-                        if (today) {
-                          card = card.then(delay: 250.ms).shimmer(
-                                duration: 700.ms,
-                                color: Theme.of(ctx)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.18),
-                              );
-                        }
-                        if (!isFirstOfDay) return card;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _DayDivider(date: e.date),
-                            card,
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-              ],
+          for (final month in grouped[year]!.keys)
+            SliverStickyHeader(
+              header: _MonthHeader(year: year, month: month),
+              sliver: SliverList.builder(
+                itemCount: grouped[year]![month]!.length,
+                itemBuilder: (ctx, i) {
+                  final monthEntries = grouped[year]![month]!;
+                  final e = monthEntries[i];
+                  final isFirstOfDay = i == 0 ||
+                      !_isSameDay(monthEntries[i - 1].date, e.date);
+                  final isLastOfDay = i == monthEntries.length - 1 ||
+                      !_isSameDay(monthEntries[i + 1].date, e.date);
+                  return _MarkerEntry(
+                    entry: e,
+                    showDate: isFirstOfDay,
+                    endsDay: isLastOfDay,
+                  ).animate().fadeIn(duration: 250.ms);
+                },
+              ),
             ),
-          ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
@@ -590,46 +579,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
-// ─── Year sticky header ───────────────────────────────────────────────────────
-
-class _YearHeader extends StatelessWidget {
-  const _YearHeader({required this.year});
-
-  final int year;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    return ColoredBox(
-      color: cs.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Text(
-              '$year',
-              style: tt.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-                color: cs.onSurface,
-              ),
-            ),
-          ),
-          Divider(
-            height: 1,
-            thickness: 1,
-            indent: 20,
-            endIndent: 20,
-            color: cs.outlineVariant.withValues(alpha: 0.4),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ─── Month sticky header ──────────────────────────────────────────────────────
 
 class _MonthHeader extends StatelessWidget {
@@ -648,7 +597,7 @@ class _MonthHeader extends StatelessWidget {
     return ColoredBox(
       color: cs.surface,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+        padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
         child: Text(
           label,
           style: tt.titleSmall?.copyWith(
@@ -662,39 +611,73 @@ class _MonthHeader extends StatelessWidget {
   }
 }
 
-// ─── Day divider (groups multiple same-day entries) ──────────────────────────
+// ─── Marker entry (calendar-leaf style: drop-cap date, highlighted title) ─────
 
-class _DayDivider extends StatelessWidget {
-  const _DayDivider({required this.date});
+const _kSerif = 'Newsreader';
+const _kEntryLeftInset = 20.0;
+// Keeps prose clear of the scrubber track on the right edge.
+const _kEntryRightInset = 28.0;
+const _kCapGap = 12.0;
 
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    final today = _isToday(date);
-    final locale = Localizations.localeOf(context).languageCode;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        today ? context.l10n.historyToday : _formatEntryDate(date, locale),
-        style: tt.labelSmall?.copyWith(
-          color: cs.outline,
-          fontWeight: FontWeight.w600,
-          letterSpacing: today ? 0.9 : 0.3,
-        ),
-      ),
+// Newsreader ships as a variable font, so weight and optical size are set
+// through the axes as well as through fontWeight.
+TextStyle _serif({
+  required double size,
+  required Color color,
+  int weight = 400,
+  double? height,
+  bool italic = false,
+}) =>
+    TextStyle(
+      fontFamily: _kSerif,
+      fontSize: size,
+      height: height,
+      color: color,
+      letterSpacing: 0,
+      fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+      fontWeight: FontWeight.values[weight ~/ 100 - 1],
+      fontVariations: [
+        FontVariation('wght', weight.toDouble()),
+        FontVariation('opsz', size.clamp(6, 72).toDouble()),
+      ],
+      fontFeatures: const [FontFeature.liningFigures()],
     );
-  }
+
+// Mood colors are tuned as accents; as text they need more contrast against
+// the surface.
+Color _moodInk(Color c, Brightness brightness) {
+  final hsl = HSLColor.fromColor(c);
+  return (brightness == Brightness.dark
+          ? hsl.withLightness(max(hsl.lightness, 0.70))
+          : hsl.withLightness(min(hsl.lightness, 0.34)))
+      .toColor();
 }
 
-// ─── Entry card ───────────────────────────────────────────────────────────────
+// One (title, text) pair per identified topic. Entries without topics fall
+// back to their own title and body.
+List<(String, String)> _topicBlocks(_EntryPreview e) {
+  final blocks = [
+    for (final t in e.allTopics)
+      (
+        (t['title'] as String? ?? '').trim(),
+        _stripMarkdown(t['text'] as String? ?? ''),
+      ),
+  ].where((b) => b.$1.isNotEmpty || b.$2.isNotEmpty).toList();
+  return blocks.isEmpty ? [(e.title, e.preview)] : blocks;
+}
 
-class _EntryCard extends StatelessWidget {
-  const _EntryCard({required this.entry});
+class _MarkerEntry extends StatelessWidget {
+  const _MarkerEntry({
+    required this.entry,
+    required this.showDate,
+    required this.endsDay,
+  });
 
   final _EntryPreview entry;
+  // First entry of its day — carries the drop-cap date.
+  final bool showDate;
+  // Last entry of its day — followed by the wider gap between days.
+  final bool endsDay;
 
   void _openDetail(BuildContext context) {
     showModalBottomSheet(
@@ -705,189 +688,368 @@ class _EntryCard extends StatelessWidget {
     );
   }
 
-  String _metaText() => entry.createdTime.isNotEmpty ? entry.createdTime : '–';
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final today = _isToday(entry.date);
-    final moodColor = _moodColor(entry.mood);
-    final cardColor = today
-        ? Color.alphaBlend(
-            cs.primary.withValues(alpha: 0.05), cs.surfaceContainerLow)
-        : cs.surfaceContainerLow;
-
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: today
-            ? BorderSide(color: cs.primary.withValues(alpha: 0.4), width: 1.5)
-            : BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      color: cardColor,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
-        child: entry.images.isNotEmpty
-            ? _MediaCardBody(
-                entry: entry,
-                moodColor: moodColor,
-                meta: _metaText(),
-                cardColor: cardColor,
-              )
-            : _CompactCardBody(entry: entry, moodColor: moodColor, meta: _metaText()),
-      ),
-    );
-  }
-}
-
-// ─── Media card body (hero photo) ─────────────────────────────────────────────
-
-class _MediaCardBody extends StatelessWidget {
-  const _MediaCardBody({
-    required this.entry,
-    required this.moodColor,
-    required this.meta,
-    required this.cardColor,
-  });
-
-  final _EntryPreview entry;
-  final Color moodColor;
-  final String meta;
-  final Color cardColor;
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 3, color: moodColor),
-          Expanded(child: _buildContent(context, cs, tt)),
-        ],
+    return InkWell(
+      onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+            _kEntryLeftInset, showDate ? 10 : 4, 0, endsDay ? 18 : 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Every topic of the entry is listed; only the first carries the
+            // date cap and the entry's time/mood line.
+            for (final (i, (title, text)) in _topicBlocks(entry).indexed)
+              Padding(
+                padding: EdgeInsets.only(
+                    top: i == 0 ? 0 : 10, right: _kEntryRightInset),
+                child: _MarkerText(
+                  entry: entry,
+                  title: title,
+                  text: text,
+                  showDate: showDate && i == 0,
+                  showMeta: i == 0,
+                ),
+              ),
+            if (entry.tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 6, _kEntryRightInset, 0),
+                child: Text(
+                  entry.tags.join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tt.labelSmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            // The photos close the entry — on a day with several entries they
+            // are the only thing between one entry's topics and the next.
+            if (entry.images.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _PhotoCarousel(images: entry.images),
+              ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildContent(BuildContext context, ColorScheme cs, TextTheme tt) {
-    return Column(
+// ─── Marker text (date cap, title, meta, preview) ─────────────────────────────
+
+class _MarkerText extends StatelessWidget {
+  const _MarkerText({
+    required this.entry,
+    required this.title,
+    required this.text,
+    required this.showDate,
+    required this.showMeta,
+  });
+
+  final _EntryPreview entry;
+  final String title;
+  final String text;
+  final bool showDate;
+  // Time and mood belong to the entry, so only its first topic shows them.
+  final bool showMeta;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final tt = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final moodColor = _moodColor(entry.mood);
+
+    final titleStyle =
+        _serif(size: 21, height: 1.2, weight: 600, color: cs.onSurface);
+    final bodyStyle = _serif(size: 15.5, height: 1.36, color: cs.onSurface);
+
+    final head = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          height: 190,
-          width: double.infinity,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _HeroCarousel(images: entry.images, cardColor: cardColor),
-              if (entry.images.length > 1)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: _GlassBadge(
-                    child: Text(
-                      '${entry.images.length} Fotos',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+        _HighlightedTitle(
+          text: title,
+          style: titleStyle,
+          color: moodColor.withValues(alpha: isDark ? 0.45 : 0.32),
+        ),
+        if (showMeta) const SizedBox(height: 2),
+        if (showMeta)
+          Text.rich(
+            TextSpan(
+              children: [
+                if (entry.createdTime.isNotEmpty)
+                  TextSpan(text: '${entry.createdTime} · '),
+                TextSpan(
+                  text: moodLabel(context, entry.mood.name).toLowerCase(),
+                  style: _serif(
+                    size: 14,
+                    italic: true,
+                    color: _moodInk(moodColor, theme.brightness),
                   ),
                 ),
-              Positioned(
-                bottom: 12,
-                left: 14,
-                child: _GlassBadge(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tt.labelSmall?.copyWith(color: cs.outline),
+          ),
+      ],
+    );
+
+    if (!showDate) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          head,
+          if (text.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: bodyStyle,
+            ),
+          ],
+        ],
+      );
+    }
+
+    final today = _isToday(entry.date);
+    final locale = Localizations.localeOf(context).languageCode;
+    final day = entry.date.day.toString().padLeft(2, '0');
+    final dayLabel = today
+        ? context.l10n.historyToday
+        : DateFormat.E(locale)
+            .format(entry.date)
+            .replaceAll('.', '')
+            .toUpperCase();
+    final capStyle = _serif(
+      size: 54,
+      height: 0.9,
+      color: today ? cs.primary : cs.onSurface,
+    );
+    final dayLabelStyle = (tt.labelSmall ?? const TextStyle()).copyWith(
+      fontSize: 10,
+      letterSpacing: 1.2,
+      color: today ? cs.primary : cs.outline,
+      fontWeight: FontWeight.w600,
+    );
+
+    final inherited = DefaultTextStyle.of(context).style;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+
+    TextPainter measure(String text, TextStyle style, {int? maxLines}) =>
+        TextPainter(
+          text: TextSpan(text: text, style: inherited.merge(style)),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: maxLines,
+        );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final capPainter = measure(day, capStyle)..layout();
+        final labelPainter = measure(dayLabel, dayLabelStyle)..layout();
+        final capWidth = max(capPainter.width, labelPainter.width);
+        capPainter.dispose();
+        labelPainter.dispose();
+        final narrowWidth =
+            max(0.0, constraints.maxWidth - capWidth - _kCapGap);
+
+        // Flutter has no float layout, so the wrap around the date is done by
+        // hand: a one-line title leaves room for exactly one line of prose
+        // beside the cap, and the rest continues at full width below it.
+        final titlePainter = measure(title, titleStyle, maxLines: 2)
+          ..layout(maxWidth: narrowWidth);
+        final titleLines = titlePainter.computeLineMetrics().length;
+        titlePainter.dispose();
+
+        var firstLine = '';
+        var rest = text;
+        if (titleLines == 1 && rest.isNotEmpty) {
+          // The text can be a whole chapter — only its start matters here.
+          final probe = rest.length > 300 ? rest.substring(0, 300) : rest;
+          final probePainter = measure(probe, bodyStyle, maxLines: 1)
+            ..layout(maxWidth: narrowWidth);
+          final end =
+              probePainter.getLineBoundary(const TextPosition(offset: 0)).end;
+          probePainter.dispose();
+          firstLine = rest.substring(0, end).trimRight();
+          rest = rest.substring(end).trimLeft();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(day, style: capStyle),
+                    const SizedBox(height: 3),
+                    Text(dayLabel, style: dayLabelStyle),
+                  ],
+                ),
+                const SizedBox(width: _kCapGap),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: moodColor,
-                          shape: BoxShape.circle,
+                      head,
+                      if (firstLine.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          firstLine,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          style: bodyStyle,
                         ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${moodEmoji(entry.mood.name)} ${moodLabel(context, entry.mood.name)}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.title,
-                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              Text(meta, style: tt.labelSmall?.copyWith(color: cs.outline)),
-              const SizedBox(height: 6),
-              Text(
-                entry.preview,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: tt.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  height: 1.45,
-                ),
-              ),
-              if (entry.tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: entry.tags.map((t) => _TagChip(tag: t)).toList(),
-                ),
               ],
-            ],
-          ),
-        ),
-      ],
+            ),
+            if (rest.isNotEmpty)
+              Text(
+                rest,
+                maxLines: firstLine.isEmpty ? 3 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: bodyStyle,
+              ),
+          ],
+        );
+      },
     );
   }
 }
 
-// ─── Hero carousel (auto-rotating, swipeable photos) ──────────────────────────
+// ─── Highlighted title (mood-colored marker stroke) ───────────────────────────
 
-class _HeroCarousel extends StatefulWidget {
-  const _HeroCarousel({required this.images, required this.cardColor});
+class _HighlightedTitle extends StatelessWidget {
+  const _HighlightedTitle({
+    required this.text,
+    required this.style,
+    required this.color,
+  });
 
-  final List<EntryImage> images;
-  final Color cardColor;
+  final String text;
+  final TextStyle style;
+  final Color color;
 
   @override
-  State<_HeroCarousel> createState() => _HeroCarouselState();
+  Widget build(BuildContext context) {
+    // Full width, so the painter lays the text out against the same
+    // constraint as the Text widget and breaks lines identically.
+    return SizedBox(
+      width: double.infinity,
+      child: CustomPaint(
+        painter: _HighlightPainter(
+          text: text,
+          style: DefaultTextStyle.of(context).style.merge(style),
+          color: color,
+          textScaler: MediaQuery.textScalerOf(context),
+          textDirection: Directionality.of(context),
+        ),
+        child: Text(
+          text,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        ),
+      ),
+    );
+  }
 }
 
-class _HeroCarouselState extends State<_HeroCarousel> {
+class _HighlightPainter extends CustomPainter {
+  _HighlightPainter({
+    required this.text,
+    required this.style,
+    required this.color,
+    required this.textScaler,
+    required this.textDirection,
+  });
+
+  final String text;
+  final TextStyle style;
+  final Color color;
+  final TextScaler textScaler;
+  final TextDirection textDirection;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: textDirection,
+      textScaler: textScaler,
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: size.width);
+    final paint = Paint()..color = color;
+    // The stroke covers the lower half of each line, like a marker pen
+    // dragged along the baseline.
+    for (final line in tp.computeLineMetrics()) {
+      canvas.drawRect(
+        Rect.fromLTRB(
+          line.left - 3,
+          line.baseline - line.ascent * 0.40,
+          line.left + line.width + 3,
+          line.baseline + line.descent * 0.5,
+        ),
+        paint,
+      );
+    }
+    tp.dispose();
+  }
+
+  @override
+  bool shouldRepaint(_HighlightPainter old) =>
+      old.text != text ||
+      old.style != style ||
+      old.color != color ||
+      old.textScaler != textScaler ||
+      old.textDirection != textDirection;
+}
+
+// ─── Photo carousel (auto-rotating, swipeable photos) ─────────────────────────
+
+class _PhotoCarousel extends StatefulWidget {
+  const _PhotoCarousel({required this.images});
+
+  final List<EntryImage> images;
+
+  @override
+  State<_PhotoCarousel> createState() => _PhotoCarouselState();
+}
+
+class _PhotoCarouselState extends State<_PhotoCarousel> {
   static const _interval = Duration(seconds: 5);
   static const _slide = Duration(milliseconds: 900);
+  static const _height = 190.0;
+  static const _radius = BorderRadius.all(Radius.circular(4));
 
-  // Starts far from zero so the PageView can be swiped endlessly in both
-  // directions; the real image is always `page % images.length`.
+  // Starts away from zero so the PageView can be swiped in both directions;
+  // the real image is always `page % images.length`. Kept small on purpose:
+  // the scroll offset is `page * width`, and with a fractional page width a
+  // six-digit page offset loses enough double precision to trip a layout
+  // assertion in RenderSliverFixedExtentBoxAdaptor (seen at page ~5000).
+  late final int _homePage = widget.images.length * 10;
   late final PageController _controller =
-      PageController(initialPage: widget.images.length * 1000);
+      PageController(initialPage: _homePage);
   late int _page = _controller.initialPage;
   Timer? _timer;
 
@@ -900,7 +1062,7 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   }
 
   @override
-  void didUpdateWidget(covariant _HeroCarousel oldWidget) {
+  void didUpdateWidget(covariant _PhotoCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.images.length != widget.images.length) _restartTimer();
   }
@@ -919,223 +1081,107 @@ class _HeroCarouselState extends State<_HeroCarousel> {
     if (!_multiple || MediaQuery.disableAnimationsOf(context)) return;
     _timer = Timer(_interval, () {
       if (!mounted || !_controller.hasClients) return;
+      // Auto-rotation would otherwise walk the page index up without bound;
+      // hop back to the same photo near the home page before sliding on.
+      if ((_page - _homePage).abs() >= _homePage) {
+        _controller.jumpToPage(_homePage + _page % widget.images.length);
+      }
       _controller.nextPage(duration: _slide, curve: Curves.easeInOutCubic);
     });
   }
 
+  // Tapping a photo opens it full screen; the rest of the entry still opens
+  // the detail sheet.
+  Widget _photo(int index) => GestureDetector(
+        onTap: () => FullscreenImageViewer.open(
+          context,
+          images: widget.images,
+          initialIndex: index,
+        ),
+        child: SizedBox.expand(
+          child: StorageImage(objectPath: widget.images[index].fullPath),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final images = widget.images;
-    final cardColor = widget.cardColor;
 
-    return Stack(
-      fit: StackFit.expand,
+    if (!_multiple) {
+      return Padding(
+        padding: const EdgeInsets.only(right: _kEntryLeftInset),
+        child: SizedBox(
+          height: _height,
+          child: ClipRRect(borderRadius: _radius, child: _photo(0)),
+        ),
+      );
+    }
+
+    final index = _page % images.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_multiple)
-          // Hold the rotation while a finger is down, so the photo never
-          // slides away mid-drag.
-          Listener(
-            onPointerDown: (_) => _timer?.cancel(),
-            onPointerUp: (_) => _restartTimer(),
-            onPointerCancel: (_) => _restartTimer(),
-            child: PageView.builder(
-              controller: _controller,
-              // Keeps the neighbouring photos built, so a slide never
-              // reveals an unloaded placeholder.
-              allowImplicitScrolling: true,
-              onPageChanged: (page) {
-                setState(() => _page = page);
-                _restartTimer();
-              },
-              itemBuilder: (_, i) =>
-                  StorageImage(objectPath: images[i % images.length].fullPath),
-            ),
-          )
-        else
-          StorageImage(objectPath: images.first.fullPath),
-        // Fades into the card body's own background color (not plain
-        // black) so the photo blends seamlessly into the panel below
-        // instead of ending in a hard-edged seam.
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                stops: const [0.0, 0.55],
-                colors: [cardColor, cardColor.withValues(alpha: 0.0)],
-              ),
-            ),
-          ),
-        ),
-        if (_multiple)
-          Positioned(
-            bottom: 18,
-            right: 14,
-            child: IgnorePointer(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < images.length; i++)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      margin: const EdgeInsets.only(left: 4),
-                      width: i == _page % images.length ? 14 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(
-                            alpha: i == _page % images.length ? 0.95 : 0.55),
-                        borderRadius: BorderRadius.circular(3),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black26, blurRadius: 3),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ─── Compact card body (no photo) ──────────────────────────────────────────────
-
-class _CompactCardBody extends StatelessWidget {
-  const _CompactCardBody({
-    required this.entry,
-    required this.moodColor,
-    required this.meta,
-  });
-
-  final _EntryPreview entry;
-  final Color moodColor;
-  final String meta;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 3, color: moodColor),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(13, 14, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          entry.title,
-                          style: tt.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _InlineMoodChip(mood: entry.mood, color: moodColor),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(meta, style: tt.labelSmall?.copyWith(color: cs.outline)),
-                  const SizedBox(height: 6),
-                  Text(
-                    entry.preview,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: tt.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.45,
-                    ),
-                  ),
-                  if (entry.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children:
-                          entry.tags.map((t) => _TagChip(tag: t)).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Inline mood chip (compact card) ──────────────────────────────────────────
-
-class _InlineMoodChip extends StatelessWidget {
-  const _InlineMoodChip({required this.mood, required this.color});
-
-  final Mood mood;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '${moodEmoji(mood.name)} ${moodLabel(context, mood.name)}',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+        Padding(
+          padding: const EdgeInsets.only(right: _kEntryLeftInset),
+          child: SizedBox(
+            height: _height,
+            child: ClipRRect(
+              borderRadius: _radius,
+              // Hold the rotation while a finger is down, so the photo never
+              // slides away mid-drag.
+              child: Listener(
+                onPointerDown: (_) => _timer?.cancel(),
+                onPointerUp: (_) => _restartTimer(),
+                onPointerCancel: (_) => _restartTimer(),
+                child: PageView.builder(
+                  controller: _controller,
+                  // Keeps the neighbouring photos built, so a slide never
+                  // reveals an unloaded placeholder.
+                  allowImplicitScrolling: true,
+                  onPageChanged: (page) {
+                    setState(() => _page = page);
+                    _restartTimer();
+                  },
+                  itemBuilder: (_, i) => _photo(i % images.length),
                 ),
+              ),
+            ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Glass badge (hero photo overlay) ─────────────────────────────────────────
-
-class _GlassBadge extends StatelessWidget {
-  const _GlassBadge({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: child,
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 6, _kEntryLeftInset, 0),
+          child: Row(
+            children: [
+              Text(
+                context.l10n.historyPhotoPosition(index + 1, images.length),
+                style: _serif(size: 13, italic: true, color: cs.outline),
+              ),
+              const SizedBox(width: 10),
+              // Rail: the thumb is one photo wide and slides a step per photo.
+              Expanded(
+                child: SizedBox(
+                  height: 2,
+                  child: ColoredBox(
+                    color: cs.outlineVariant,
+                    child: AnimatedAlign(
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutCubic,
+                      alignment:
+                          Alignment(-1 + 2 * index / (images.length - 1), 0),
+                      child: FractionallySizedBox(
+                        widthFactor: 1 / images.length,
+                        heightFactor: 1,
+                        child: ColoredBox(color: cs.onSurface),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1216,15 +1262,15 @@ class _EntryDetailSheet extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _formatEntryDate(entry.date, Localizations.localeOf(context).languageCode),
-                          style: tt.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700),
+                          _formatEntryDate(entry.date,
+                              Localizations.localeOf(context).languageCode),
+                          style: tt.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         if (entry.createdTime.isNotEmpty)
                           Text(
                             entry.createdTime,
-                            style:
-                                tt.labelSmall?.copyWith(color: cs.outline),
+                            style: tt.labelSmall?.copyWith(color: cs.outline),
                           ),
                       ],
                     ),
@@ -1264,7 +1310,8 @@ class _EntryDetailSheet extends ConsumerWidget {
                   for (int i = 0; i < entry.allTopics.length; i++) ...[
                     _DetailTopicCard(
                       topic: entry.allTopics[i],
-                      paletteIndex: (entry.paletteIndex + i) % _tagPalette.length,
+                      paletteIndex:
+                          (entry.paletteIndex + i) % _tagPalette.length,
                     ),
                     if (i < entry.allTopics.length - 1)
                       const SizedBox(height: 12),
@@ -1309,7 +1356,8 @@ class _EntryDetailSheet extends ConsumerWidget {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: entry.tags.map((t) => _TagChip(tag: t)).toList(),
+                      children:
+                          entry.tags.map((t) => _TagChip(tag: t)).toList(),
                     ),
                   ],
                   if (entry.entryDate.isNotEmpty) ...[
@@ -1324,9 +1372,11 @@ class _EntryDetailSheet extends ConsumerWidget {
                             Navigator.of(context).pop();
                             context.push('/topics?entryId=${e.id}', extra: (
                               entryId: e.id,
-                              date: _formatEntryDate(entry.date, Localizations.localeOf(context).languageCode),
+                              date: _formatEntryDate(entry.date,
+                                  Localizations.localeOf(context).languageCode),
                               duration: entry.durationSeconds > 0
-                                  ? _formatDuration(entry.durationSeconds, context.l10n)
+                                  ? _formatDuration(
+                                      entry.durationSeconds, context.l10n)
                                   : '',
                               topics: entry.allTopics
                                   .map((t) => TopicDto.fromJson(t))
@@ -1372,8 +1422,7 @@ class _EntryDetailSheet extends ConsumerWidget {
 // ─── Detail topic card ────────────────────────────────────────────────────────
 
 class _DetailTopicCard extends StatelessWidget {
-  const _DetailTopicCard(
-      {required this.topic, required this.paletteIndex});
+  const _DetailTopicCard({required this.topic, required this.paletteIndex});
 
   final Map<String, dynamic> topic;
   final int paletteIndex;
@@ -1666,7 +1715,8 @@ class _ScrubberPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
         final tickLeftX = cx - tickLeft;
-        final textX = (tickLeftX - labelGap - tp.width).clamp(1.0, tickLeftX - labelGap);
+        final textX =
+            (tickLeftX - labelGap - tp.width).clamp(1.0, tickLeftX - labelGap);
         final textY = (y - tp.height / 2).clamp(0.0, size.height - tp.height);
         tp.paint(canvas, Offset(textX, textY));
       } else {
@@ -1674,8 +1724,7 @@ class _ScrubberPainter extends CustomPainter {
           Offset(cx, y),
           isActive ? 3.5 : 2.0,
           Paint()
-            ..color =
-                isActive ? activeColor : color.withValues(alpha: 0.45)
+            ..color = isActive ? activeColor : color.withValues(alpha: 0.45)
             ..style = PaintingStyle.fill,
         );
       }
@@ -1689,4 +1738,3 @@ class _ScrubberPainter extends CustomPainter {
       old.color != color ||
       old.activeColor != activeColor;
 }
-
