@@ -253,7 +253,13 @@ class EntryRepository {
     final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
     yield* (_db.select(_db.entries)
           ..where((e) => e.userId.equals(user.uid))
-          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+          // Newest day first, but chronological within a day. Without the
+          // second term same-day entries come back in insertion order, which
+          // a history re-sync after login reshuffles.
+          ..orderBy([
+            (e) => OrderingTerm.desc(e.date),
+            (e) => OrderingTerm.asc(e.createdAt),
+          ]))
         .watch();
   }
 
