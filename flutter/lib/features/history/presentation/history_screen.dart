@@ -22,24 +22,9 @@ import '../../../shared/services/proxy_client.dart' show TopicDto;
 import '../../../shared/utils/mood_labels.dart';
 import '../../../shared/widgets/fullscreen_image_viewer.dart';
 import '../../../shared/widgets/history_sync_dialog.dart';
+import '../../../shared/widgets/marker_style.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/widgets/storage_image.dart';
-
-// ─── Palette (mirrors _topicPalette in topics_review_screen.dart) ────────────
-
-const _tagPalette = [
-  (Color(0xFFEDE9FF), Color(0xFF5E35B1)),
-  (Color(0xFFE8F5E9), Color(0xFF2E7D32)),
-  (Color(0xFFFFF3E0), Color(0xFFBF360C)),
-  (Color(0xFFE3F2FD), Color(0xFF1565C0)),
-  (Color(0xFFFCE4EC), Color(0xFFC62828)),
-];
-
-// Single-accent tag color (mirrors flow-kozept.html's one-chip-type tags).
-// Light pair matches the app's existing light-mode chip look; dark pair
-// mirrors the concept's --accent/--accent-dim (#8A7EF0 at ~20% wash).
-const _accentTagLight = (Color(0xFFEDE9FF), Color(0xFF5E35B1));
-const _accentTagDark = (Color(0x338A7EF0), Color(0xFFC9BFFF));
 
 // ─── Local data model ────────────────────────────────────────────────────────
 
@@ -51,7 +36,6 @@ class _EntryPreview {
     required this.preview,
     required this.durationSeconds,
     required this.tags,
-    required this.paletteIndex,
     this.allTopics = const [],
     this.entryDate = '',
     this.createdTime = '',
@@ -65,7 +49,6 @@ class _EntryPreview {
   final String preview;
   final int durationSeconds;
   final List<String> tags;
-  final int paletteIndex;
   final List<Map<String, dynamic>> allTopics;
   final String entryDate;
   final String createdTime; // "HH:mm Uhr" — shown when durationSeconds == 0
@@ -195,7 +178,6 @@ List<_EntryPreview> _generateMockEntries() {
           preview: _mockPreviews[titleIdx],
           durationSeconds: 120 + rng.nextInt(781),
           tags: tags,
-          paletteIndex: palette,
         ));
 
         entryIndex++;
@@ -230,7 +212,7 @@ const _kTopicH = 104.0;
 const _kEntryChromeH = 44.0;
 // Photo strip plus its position rail, added for entries with photos.
 const _kCarouselH = 220.0;
-// Extra breathing room around each day's group of entries.
+// Extra padding at the top and bottom of each day's band.
 const _kDayGapH = 16.0;
 
 int _uniqueDayCount(List<_EntryPreview> entries) {
@@ -286,11 +268,6 @@ String _formatEntryDate(DateTime dt, String locale) {
       : '$weekday, $month ${dt.day}';
 }
 
-bool _isToday(DateTime dt) {
-  final now = DateTime.now();
-  return dt.year == now.year && dt.month == now.month && dt.day == now.day;
-}
-
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -304,15 +281,6 @@ String _formatCreatedTime(String iso, AppLocalizations l10n) {
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   return l10n.historyTimeSuffix(time);
 }
-
-Color _moodColor(Mood m) => switch (m) {
-      Mood.happy => const Color(0xFFF9A825),
-      Mood.calm => const Color(0xFF43A047),
-      Mood.tense => const Color(0xFFEF6C00),
-      Mood.sad => const Color(0xFF1565C0),
-      Mood.mixed => const Color(0xFF6A1B9A),
-      _ => const Color(0xFF5C6BC0),
-    };
 
 // ─── Real-data provider ───────────────────────────────────────────────────────
 
@@ -369,7 +337,6 @@ _EntryPreview _toPreview(db.Entry e, int index, AppLocalizations l10n) {
     preview: _stripMarkdown(e.bodyMarkdown),
     durationSeconds: e.durationSeconds,
     tags: _parseTags(e.tags),
-    paletteIndex: index % 5,
     allTopics: topics,
     entryDate: e.date,
     createdTime: _formatCreatedTime(e.createdAt, l10n),
@@ -425,6 +392,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final indexEntries = built.$1;
     final totalH = built.$2;
 
+    // Days alternate between two faint background tones, so each day reads as
+    // one band. The count runs on across month boundaries.
+    final tinted = <_EntryPreview, bool>{};
+    var dayIndex = -1;
+    DateTime? lastDate;
+    for (final months in grouped.values) {
+      for (final monthEntries in months.values) {
+        for (final e in monthEntries) {
+          if (lastDate == null || !_isSameDay(lastDate, e.date)) dayIndex++;
+          lastDate = e.date;
+          tinted[e] = dayIndex.isEven;
+        }
+      }
+    }
+
     final scrollView = CustomScrollView(
       controller: _scrollController,
       // Keeps pull-to-refresh reachable when the entries don't fill the screen.
@@ -441,14 +423,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 itemBuilder: (ctx, i) {
                   final monthEntries = grouped[year]![month]!;
                   final e = monthEntries[i];
-                  final isFirstOfDay = i == 0 ||
-                      !_isSameDay(monthEntries[i - 1].date, e.date);
+                  final isFirstOfDay =
+                      i == 0 || !_isSameDay(monthEntries[i - 1].date, e.date);
                   final isLastOfDay = i == monthEntries.length - 1 ||
                       !_isSameDay(monthEntries[i + 1].date, e.date);
                   return _MarkerEntry(
                     entry: e,
                     showDate: isFirstOfDay,
                     endsDay: isLastOfDay,
+                    tinted: tinted[e] ?? false,
                   ).animate().fadeIn(duration: 250.ms);
                 },
               ),
@@ -613,45 +596,10 @@ class _MonthHeader extends StatelessWidget {
 
 // ─── Marker entry (calendar-leaf style: drop-cap date, highlighted title) ─────
 
-const _kSerif = 'Newsreader';
 const _kEntryLeftInset = 20.0;
 // Keeps prose clear of the scrubber track on the right edge.
 const _kEntryRightInset = 28.0;
 const _kCapGap = 12.0;
-
-// Newsreader ships as a variable font, so weight and optical size are set
-// through the axes as well as through fontWeight.
-TextStyle _serif({
-  required double size,
-  required Color color,
-  int weight = 400,
-  double? height,
-  bool italic = false,
-}) =>
-    TextStyle(
-      fontFamily: _kSerif,
-      fontSize: size,
-      height: height,
-      color: color,
-      letterSpacing: 0,
-      fontStyle: italic ? FontStyle.italic : FontStyle.normal,
-      fontWeight: FontWeight.values[weight ~/ 100 - 1],
-      fontVariations: [
-        FontVariation('wght', weight.toDouble()),
-        FontVariation('opsz', size.clamp(6, 72).toDouble()),
-      ],
-      fontFeatures: const [FontFeature.liningFigures()],
-    );
-
-// Mood colors are tuned as accents; as text they need more contrast against
-// the surface.
-Color _moodInk(Color c, Brightness brightness) {
-  final hsl = HSLColor.fromColor(c);
-  return (brightness == Brightness.dark
-          ? hsl.withLightness(max(hsl.lightness, 0.70))
-          : hsl.withLightness(min(hsl.lightness, 0.34)))
-      .toColor();
-}
 
 // One (title, text) pair per identified topic. Entries without topics fall
 // back to their own title and body.
@@ -671,13 +619,16 @@ class _MarkerEntry extends StatelessWidget {
     required this.entry,
     required this.showDate,
     required this.endsDay,
+    required this.tinted,
   });
 
   final _EntryPreview entry;
-  // First entry of its day — carries the drop-cap date.
+  // First entry of its day — carries the date leaf.
   final bool showDate;
-  // Last entry of its day — followed by the wider gap between days.
+  // Last entry of its day — closes the day's band.
   final bool endsDay;
+  // Whether this entry's day sits on the tinted band or the plain one.
+  final bool tinted;
 
   void _openDetail(BuildContext context) {
     showModalBottomSheet(
@@ -693,49 +644,54 @@ class _MarkerEntry extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return InkWell(
-      onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            _kEntryLeftInset, showDate ? 10 : 4, 0, endsDay ? 18 : 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Every topic of the entry is listed; only the first carries the
-            // date cap and the entry's time/mood line.
-            for (final (i, (title, text)) in _topicBlocks(entry).indexed)
-              Padding(
-                padding: EdgeInsets.only(
-                    top: i == 0 ? 0 : 10, right: _kEntryRightInset),
-                child: _MarkerText(
-                  entry: entry,
-                  title: title,
-                  text: text,
-                  showDate: showDate && i == 0,
-                  showMeta: i == 0,
-                ),
-              ),
-            if (entry.tags.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 6, _kEntryRightInset, 0),
-                child: Text(
-                  entry.tags.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: tt.labelSmall?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w500,
+    // Material, not ColoredBox, so the InkWell's splash paints on the band.
+    return Material(
+      color: tinted ? cs.surfaceContainer : cs.surface,
+      child: InkWell(
+        onTap: entry.allTopics.isNotEmpty ? () => _openDetail(context) : null,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              _kEntryLeftInset, showDate ? 14 : 4, 0, endsDay ? 14 : 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Every topic of the entry is listed; only the first carries the
+              // date cap and the entry's time/mood line.
+              for (final (i, (title, text)) in _topicBlocks(entry).indexed)
+                Padding(
+                  padding: EdgeInsets.only(
+                      top: i == 0 ? 0 : 10, right: _kEntryRightInset),
+                  child: _MarkerText(
+                    entry: entry,
+                    title: title,
+                    text: text,
+                    showDate: showDate && i == 0,
+                    showMeta: i == 0,
                   ),
                 ),
-              ),
-            // The photos close the entry — on a day with several entries they
-            // are the only thing between one entry's topics and the next.
-            if (entry.images.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: _PhotoCarousel(images: entry.images),
-              ),
-          ],
+              if (entry.tags.isNotEmpty)
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(0, 6, _kEntryRightInset, 0),
+                  child: Text(
+                    entry.tags.join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tt.labelSmall?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              // The photos close the entry — on a day with several entries they
+              // are the only thing between one entry's topics and the next.
+              if (entry.images.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: _PhotoCarousel(images: entry.images),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -751,6 +707,8 @@ class _MarkerText extends StatelessWidget {
     required this.text,
     required this.showDate,
     required this.showMeta,
+    this.expanded = false,
+    this.metaPrefix,
   });
 
   final _EntryPreview entry;
@@ -759,41 +717,47 @@ class _MarkerText extends StatelessWidget {
   final bool showDate;
   // Time and mood belong to the entry, so only its first topic shows them.
   final bool showMeta;
+  // Detail sheet: the whole text instead of the overview's three-line preview.
+  final bool expanded;
+  // Leads the time/mood line — the detail sheet names month and year there,
+  // since it has no sticky month header above it.
+  final String? metaPrefix;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final moodColor = _moodColor(entry.mood);
+    final mood = moodColor(entry.mood.name);
 
     final titleStyle =
-        _serif(size: 21, height: 1.2, weight: 600, color: cs.onSurface);
-    final bodyStyle = _serif(size: 15.5, height: 1.36, color: cs.onSurface);
+        markerSerif(size: 21, height: 1.2, weight: 600, color: cs.onSurface);
+    final bodyStyle =
+        markerSerif(size: 15.5, height: 1.36, color: cs.onSurface);
 
     final head = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _HighlightedTitle(
+        MarkerHighlightedTitle(
           text: title,
           style: titleStyle,
-          color: moodColor.withValues(alpha: isDark ? 0.45 : 0.32),
+          color: moodHighlight(mood, theme.brightness),
         ),
         if (showMeta) const SizedBox(height: 2),
         if (showMeta)
           Text.rich(
             TextSpan(
               children: [
+                if (metaPrefix != null) TextSpan(text: '$metaPrefix · '),
                 if (entry.createdTime.isNotEmpty)
                   TextSpan(text: '${entry.createdTime} · '),
                 TextSpan(
                   text: moodLabel(context, entry.mood.name).toLowerCase(),
-                  style: _serif(
+                  style: markerSerif(
                     size: 14,
                     italic: true,
-                    color: _moodInk(moodColor, theme.brightness),
+                    color: moodInk(mood, theme.brightness),
                   ),
                 ),
               ],
@@ -814,35 +778,14 @@ class _MarkerText extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               text,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+              maxLines: expanded ? null : 3,
+              overflow: expanded ? null : TextOverflow.ellipsis,
               style: bodyStyle,
             ),
           ],
         ],
       );
     }
-
-    final today = _isToday(entry.date);
-    final locale = Localizations.localeOf(context).languageCode;
-    final day = entry.date.day.toString().padLeft(2, '0');
-    final dayLabel = today
-        ? context.l10n.historyToday
-        : DateFormat.E(locale)
-            .format(entry.date)
-            .replaceAll('.', '')
-            .toUpperCase();
-    final capStyle = _serif(
-      size: 54,
-      height: 0.9,
-      color: today ? cs.primary : cs.onSurface,
-    );
-    final dayLabelStyle = (tt.labelSmall ?? const TextStyle()).copyWith(
-      fontSize: 10,
-      letterSpacing: 1.2,
-      color: today ? cs.primary : cs.outline,
-      fontWeight: FontWeight.w600,
-    );
 
     final inherited = DefaultTextStyle.of(context).style;
     final scaler = MediaQuery.textScalerOf(context);
@@ -858,17 +801,12 @@ class _MarkerText extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final capPainter = measure(day, capStyle)..layout();
-        final labelPainter = measure(dayLabel, dayLabelStyle)..layout();
-        final capWidth = max(capPainter.width, labelPainter.width);
-        capPainter.dispose();
-        labelPainter.dispose();
         final narrowWidth =
-            max(0.0, constraints.maxWidth - capWidth - _kCapGap);
+            max(0.0, constraints.maxWidth - kMarkerLeafWidth - _kCapGap);
 
-        // Flutter has no float layout, so the wrap around the date is done by
+        // Flutter has no float layout, so the wrap around the leaf is done by
         // hand: a one-line title leaves room for exactly one line of prose
-        // beside the cap, and the rest continues at full width below it.
+        // beside it, and the rest continues at full width below it.
         final titlePainter = measure(title, titleStyle, maxLines: 2)
           ..layout(maxWidth: narrowWidth);
         final titleLines = titlePainter.computeLineMetrics().length;
@@ -894,13 +832,9 @@ class _MarkerText extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(day, style: capStyle),
-                    const SizedBox(height: 3),
-                    Text(dayLabel, style: dayLabelStyle),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 5),
+                  child: MarkerDateLeaf(date: entry.date),
                 ),
                 const SizedBox(width: _kCapGap),
                 Expanded(
@@ -926,8 +860,8 @@ class _MarkerText extends StatelessWidget {
             if (rest.isNotEmpty)
               Text(
                 rest,
-                maxLines: firstLine.isEmpty ? 3 : 2,
-                overflow: TextOverflow.ellipsis,
+                maxLines: expanded ? null : (firstLine.isEmpty ? 3 : 2),
+                overflow: expanded ? null : TextOverflow.ellipsis,
                 style: bodyStyle,
               ),
           ],
@@ -935,94 +869,6 @@ class _MarkerText extends StatelessWidget {
       },
     );
   }
-}
-
-// ─── Highlighted title (mood-colored marker stroke) ───────────────────────────
-
-class _HighlightedTitle extends StatelessWidget {
-  const _HighlightedTitle({
-    required this.text,
-    required this.style,
-    required this.color,
-  });
-
-  final String text;
-  final TextStyle style;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    // Full width, so the painter lays the text out against the same
-    // constraint as the Text widget and breaks lines identically.
-    return SizedBox(
-      width: double.infinity,
-      child: CustomPaint(
-        painter: _HighlightPainter(
-          text: text,
-          style: DefaultTextStyle.of(context).style.merge(style),
-          color: color,
-          textScaler: MediaQuery.textScalerOf(context),
-          textDirection: Directionality.of(context),
-        ),
-        child: Text(
-          text,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: style,
-        ),
-      ),
-    );
-  }
-}
-
-class _HighlightPainter extends CustomPainter {
-  _HighlightPainter({
-    required this.text,
-    required this.style,
-    required this.color,
-    required this.textScaler,
-    required this.textDirection,
-  });
-
-  final String text;
-  final TextStyle style;
-  final Color color;
-  final TextScaler textScaler;
-  final TextDirection textDirection;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: textDirection,
-      textScaler: textScaler,
-      maxLines: 2,
-      ellipsis: '…',
-    )..layout(maxWidth: size.width);
-    final paint = Paint()..color = color;
-    // The stroke covers the lower half of each line, like a marker pen
-    // dragged along the baseline.
-    for (final line in tp.computeLineMetrics()) {
-      canvas.drawRect(
-        Rect.fromLTRB(
-          line.left - 3,
-          line.baseline - line.ascent * 0.40,
-          line.left + line.width + 3,
-          line.baseline + line.descent * 0.5,
-        ),
-        paint,
-      );
-    }
-    tp.dispose();
-  }
-
-  @override
-  bool shouldRepaint(_HighlightPainter old) =>
-      old.text != text ||
-      old.style != style ||
-      old.color != color ||
-      old.textScaler != textScaler ||
-      old.textDirection != textDirection;
 }
 
 // ─── Photo carousel (auto-rotating, swipeable photos) ─────────────────────────
@@ -1155,7 +1001,7 @@ class _PhotoCarouselState extends State<_PhotoCarousel> {
             children: [
               Text(
                 context.l10n.historyPhotoPosition(index + 1, images.length),
-                style: _serif(size: 13, italic: true, color: cs.outline),
+                style: markerSerif(size: 13, italic: true, color: cs.outline),
               ),
               const SizedBox(width: 10),
               // Rail: the thumb is one photo wide and slides a step per photo.
@@ -1222,13 +1068,37 @@ class _EntryDetailSheet extends ConsumerWidget {
     }
   }
 
+  void _edit(BuildContext context) {
+    final e = entry.rawEntry!;
+    Navigator.of(context).pop();
+    context.push('/topics?entryId=${e.id}', extra: (
+      entryId: e.id,
+      date: _formatEntryDate(
+          entry.date, Localizations.localeOf(context).languageCode),
+      duration: entry.durationSeconds > 0
+          ? _formatDuration(entry.durationSeconds, context.l10n)
+          : '',
+      topics: entry.allTopics.map((t) => TopicDto.fromJson(t)).toList(),
+      normalizedTranscript: '',
+      bodyMarkdown: e.bodyMarkdown,
+      mood: e.mood,
+      moodScore: e.moodScore,
+      followUpQuestions: _parseTags(e.followUpQuestions),
+      transcriptReason: 'initial',
+      isEditMode: true,
+    ));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final entryId = entry.rawEntry?.id;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
+      // Opens nearly full height: the point of tapping an entry is to read
+      // all of it without another gesture.
+      initialChildSize: 0.92,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
@@ -1239,106 +1109,59 @@ class _EntryDetailSheet extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: Row(
-                children: [
-                  Text(moodEmoji(entry.mood.name),
-                      style: const TextStyle(fontSize: 28)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatEntryDate(entry.date,
-                              Localizations.localeOf(context).languageCode),
-                          style: tt.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        if (entry.createdTime.isNotEmpty)
-                          Text(
-                            entry.createdTime,
-                            style: tt.labelSmall?.copyWith(color: cs.outline),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(
-                height: 1,
-                indent: 20,
-                endIndent: 20,
-                color: cs.outlineVariant.withValues(alpha: 0.4)),
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                 children: [
-                  if (entry.preview.isNotEmpty) ...[
-                    Text(
-                      entry.preview,
-                      style: tt.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        height: 1.6,
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: cs.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  Text(
-                    context.l10n.historyTopicsLabel,
-                    style: tt.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.outline,
-                      letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  for (int i = 0; i < entry.allTopics.length; i++) ...[
-                    _DetailTopicCard(
-                      topic: entry.allTopics[i],
-                      paletteIndex:
-                          (entry.paletteIndex + i) % _tagPalette.length,
-                    ),
-                    if (i < entry.allTopics.length - 1)
-                      const SizedBox(height: 12),
-                  ],
-                  if (entry.images.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Text(
-                      context.l10n.historyPhotosLabel(entry.images.length),
-                      style: tt.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.outline,
-                        letterSpacing: 0.5,
+                  // Same shape as the overview, so opening an entry reads as
+                  // that entry unfolding: the first topic carries the date
+                  // cap, and every topic shows its whole text.
+                  for (final (i, (title, text)) in _topicBlocks(entry).indexed)
+                    Padding(
+                      padding: EdgeInsets.only(top: i == 0 ? 0 : 14),
+                      child: _MarkerText(
+                        entry: entry,
+                        title: title,
+                        text: text,
+                        showDate: i == 0,
+                        showMeta: i == 0,
+                        expanded: true,
+                        metaPrefix: i == 0
+                            ? DateFormat.yMMMM(Localizations.localeOf(context)
+                                    .languageCode)
+                                .format(entry.date)
+                            : null,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  if (entry.images.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
                       itemCount: entry.images.length,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                        childAspectRatio: 1.15,
                       ),
                       itemBuilder: (context, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(4),
                         child: GestureDetector(
                           onTap: () => FullscreenImageViewer.open(
                             context,
@@ -1346,72 +1169,54 @@ class _EntryDetailSheet extends ConsumerWidget {
                             initialIndex: i,
                           ),
                           child: StorageImage(
-                              objectPath: entry.images[i].fullPath),
+                              objectPath: entry.images[i].thumbPath),
                         ),
                       ),
                     ),
                   ],
                   if (entry.tags.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children:
-                          entry.tags.map((t) => _TagChip(tag: t)).toList(),
+                    const SizedBox(height: 14),
+                    Text(
+                      entry.tags.join(' · '),
+                      style: tt.labelMedium?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
-                  if (entry.entryDate.isNotEmpty) ...[
-                    const SizedBox(height: 28),
-                    Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
-                    const SizedBox(height: 8),
-                    if (entry.rawEntry != null) ...[
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () {
-                            final e = entry.rawEntry!;
-                            Navigator.of(context).pop();
-                            context.push('/topics?entryId=${e.id}', extra: (
-                              entryId: e.id,
-                              date: _formatEntryDate(entry.date,
-                                  Localizations.localeOf(context).languageCode),
-                              duration: entry.durationSeconds > 0
-                                  ? _formatDuration(
-                                      entry.durationSeconds, context.l10n)
-                                  : '',
-                              topics: entry.allTopics
-                                  .map((t) => TopicDto.fromJson(t))
-                                  .toList(),
-                              normalizedTranscript: '',
-                              bodyMarkdown: e.bodyMarkdown,
-                              mood: e.mood,
-                              moodScore: e.moodScore,
-                              followUpQuestions:
-                                  _parseTags(e.followUpQuestions),
-                              transcriptReason: 'initial',
-                              isEditMode: true,
-                            ));
-                          },
+                  if (entryId != null) _RecordingsSection(entryId: entryId),
+                ],
+              ),
+            ),
+            if (entry.entryDate.isNotEmpty)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (entry.rawEntry != null)
+                        TextButton.icon(
+                          onPressed: () => _edit(context),
                           icon: Icon(Icons.edit_outlined,
                               color: cs.primary, size: 18),
                           label: Text(context.l10n.historyEditEntry,
                               style: TextStyle(color: cs.primary)),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-                    Center(
-                      child: TextButton.icon(
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      TextButton.icon(
                         onPressed: () => _confirmDelete(context, ref),
                         icon: Icon(Icons.delete_outline_rounded,
                             color: cs.error, size: 18),
                         label: Text(context.l10n.historyDeleteEntry,
                             style: TextStyle(color: cs.error)),
                       ),
-                    ),
-                  ],
-                ],
+                    ],
+                  ),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1419,92 +1224,121 @@ class _EntryDetailSheet extends ConsumerWidget {
   }
 }
 
-// ─── Detail topic card ────────────────────────────────────────────────────────
+// ─── Recordings (what was actually said, collapsed by default) ────────────────
 
-class _DetailTopicCard extends StatelessWidget {
-  const _DetailTopicCard({required this.topic, required this.paletteIndex});
+String _provenanceLabel(String reason, AppLocalizations l10n) {
+  if (reason == 'initial') return l10n.topicsProvenanceInitial;
+  if (reason == 'continuation') return l10n.topicsProvenanceContinuation;
+  if (reason.startsWith('followUp:')) {
+    return l10n.topicsProvenanceFollowUp(reason.substring('followUp:'.length));
+  }
+  return l10n.topicsProvenanceDefault;
+}
 
-  final Map<String, dynamic> topic;
-  final int paletteIndex;
+class _RecordingsSection extends ConsumerStatefulWidget {
+  const _RecordingsSection({required this.entryId});
+
+  final String entryId;
+
+  @override
+  ConsumerState<_RecordingsSection> createState() => _RecordingsSectionState();
+}
+
+class _RecordingsSectionState extends ConsumerState<_RecordingsSection> {
+  // Memoized, so a rebuild (e.g. on expand) never re-queries the database.
+  late final Future<List<db.RawTranscript>> _transcripts =
+      ref.read(entryRepositoryProvider).getTranscriptsForEntry(widget.entryId);
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final (_, accent) = _tagPalette[paletteIndex % _tagPalette.length];
-    final title = topic['title'] as String? ?? '';
-    final text = topic['text'] as String? ?? '';
+    final l10n = context.l10n;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return FutureBuilder<List<db.RawTranscript>>(
+      future: _transcripts,
+      builder: (context, snap) {
+        final recordings = (snap.data ?? const <db.RawTranscript>[])
+            .where((t) => t.normalizedContent.trim().isNotEmpty)
+            .toList();
+        if (recordings.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(width: 4, color: accent),
-              Expanded(
+              Divider(
+                  height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
+              InkWell(
+                onTap: () => setState(() => _open = !_open),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
                     children: [
-                      Text(
-                        title.toUpperCase(),
-                        style: tt.labelSmall?.copyWith(
-                          color: accent,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                      Expanded(
+                        child: Text(
+                          l10n.topicsRecordingsCount(recordings.length),
+                          style: tt.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.outline,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        text,
-                        style: tt.bodyMedium?.copyWith(
-                          color: cs.onSurface,
-                          height: 1.55,
-                        ),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(Icons.expand_more_rounded,
+                            size: 20, color: cs.outline),
                       ),
                     ],
                   ),
                 ),
               ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: !_open
+                    ? const SizedBox(width: double.infinity)
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final t in recordings)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    [
+                                      _formatCreatedTime(t.createdAt, l10n),
+                                      _provenanceLabel(t.reason, l10n),
+                                    ].where((s) => s.isNotEmpty).join(' · '),
+                                    style: tt.labelSmall
+                                        ?.copyWith(color: cs.outline),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    t.normalizedContent.trim(),
+                                    style: markerSerif(
+                                      size: 15,
+                                      height: 1.45,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Tag chip ─────────────────────────────────────────────────────────────────
-
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.tag});
-
-  final String tag;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final (bg, fg) = isDark ? _accentTagDark : _accentTagLight;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        '#$tag',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
+        );
+      },
     );
   }
 }

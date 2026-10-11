@@ -179,7 +179,10 @@
 
     "topicsNoTopics": "No topics detected.",
     "topicsTopicsCount": "{count, plural, one{{count} topic detected.} other{{count} topics detected.}}",
-    "topicsWantToDeepen": "Would you like to explore something further?",
+    "topicsWantToDeepen": "Would you like to add some details to the topics?",
+    "topicsDetectedLabel": "{count, plural, one{{count} detected topic} other{{count} detected topics}}",
+    "topicsRecordingsHint": "Tap a text to correct it. The topics below are then rewritten from it.",
+    "topicsDetectedHint": "Written by My AI-Diary from your recordings.",
 
     "topicsRecordingsLabel": "Recordings",
     "topicsRecordingsCount": "{count, plural, one{{count} recording} other{{count} recordings}}",
@@ -189,11 +192,11 @@
 
     "topicsNearLimitWarning": "Your entry is already quite extensive today — please shorten existing text to add more.",
 
-    "topicsDeepenEntry": "Explore entry further",
+    "topicsDeepenEntry": "Add recording to the entry",
     "topicsFinishEntry": "Finish entry",
 
     "topicsAnswerRecording": "Record answer",
-    "topicsAddLabel": "Add",
+    "topicsAddLabel": "Add recording",
     "topicsWhatToAddHint": "What would you like to add?",
     "topicsAddPhoto": "Add"
 }

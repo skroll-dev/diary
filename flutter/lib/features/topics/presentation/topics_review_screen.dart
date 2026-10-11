@@ -25,6 +25,7 @@ import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/widgets/storage_image.dart';
 import '../../../shared/services/proxy_client.dart';
 import '../../../shared/widgets/history_sync_dialog.dart';
+import '../../../shared/widgets/marker_style.dart';
 import '../../../shared/widgets/recording_controls.dart';
 import '../../../shared/widgets/transcript_input_sheet.dart';
 import '../../../shared/constants/transcript_limits.dart';
@@ -43,13 +44,9 @@ class _TopicData {
   const _TopicData({
     required this.title,
     required this.text,
-    required this.cardColor,
-    required this.accentColor,
   });
   final String title;
   final String text;
-  final Color cardColor;
-  final Color accentColor;
 }
 
 class _RecordingRecord {
@@ -74,16 +71,6 @@ class _RecordingRecord {
     return l10n.topicsProvenanceDefault;
   }
 }
-
-// ── Color palette ─────────────────────────────────────────────────────────────
-
-const _topicPalette = [
-  (Color(0xFFEDE9FF), Color(0xFF5E35B1)),
-  (Color(0xFFE8F5E9), Color(0xFF2E7D32)),
-  (Color(0xFFFFF3E0), Color(0xFFBF360C)),
-  (Color(0xFFE3F2FD), Color(0xFF1565C0)),
-  (Color(0xFFFCE4EC), Color(0xFFC62828)),
-];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -131,11 +118,12 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   late List<String> _followUpQuestions;
   late String _bodyMarkdown;
   late String _mood;
-  late double _moodScore;
   late final String _entryId = widget.entryId;
   late final bool _isEditMode = widget.isEditMode;
 
-  bool _isRecordingsExpanded = false;
+  // Open by default: the recordings are the part the user can edit, and the
+  // topics below are derived from them.
+  bool _isRecordingsExpanded = true;
   bool _isRegenerating = false;
 
   // ── Photos ──────────────────────────────────────────────────────────────────
@@ -166,7 +154,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     super.initState();
     _bodyMarkdown = widget.bodyMarkdown;
     _mood = widget.mood;
-    _moodScore = widget.moodScore;
     _followUpQuestions = List.of(widget.followUpQuestions);
     _topics = _mapTopics(widget.topics);
     _recordings = [
@@ -225,7 +212,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       setState(() {
         _bodyMarkdown = entry.bodyMarkdown;
         _mood = entry.mood;
-        _moodScore = entry.moodScore;
         _followUpQuestions = questions;
         _topics = _mapTopics(topicDtos);
         _recordings = transcripts.map((t) => _RecordingRecord(
@@ -272,16 +258,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   }
 
   List<_TopicData> _mapTopics(List<TopicDto> dtos) =>
-      dtos.indexed.map((e) {
-        final (i, dto) = e;
-        final (card, accent) = _topicPalette[i % _topicPalette.length];
-        return _TopicData(
-          title: dto.title,
-          text: dto.text,
-          cardColor: card,
-          accentColor: accent,
-        );
-      }).toList();
+      dtos.map((dto) => _TopicData(title: dto.title, text: dto.text)).toList();
 
   @override
   void dispose() {
@@ -305,16 +282,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   void _completeRegenStep(double pct) {
     _regenTimer?.cancel();
     if (mounted) setState(() => _regenPercent = pct);
-  }
-
-  // ── Header helpers ───────────────────────────────────────────────────────────
-
-  String get _headerDateLine {
-    final d = widget.date;
-    final dur = widget.duration;
-    if (d.isEmpty && dur.isEmpty) return '';
-    if (dur.isEmpty) return d;
-    return '$d · $dur';
   }
 
   // ── Recording overlay ────────────────────────────────────────────────────────
@@ -376,7 +343,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         setState(() {
           _bodyMarkdown = entry.bodyMarkdown;
           _mood = entry.mood;
-          _moodScore = entry.moodScore;
           _followUpQuestions = List.of(entry.followUpQuestions);
           _topics = _mapTopics(entry.topics);
           _recordings.add(_RecordingRecord(
@@ -518,7 +484,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         setState(() {
           _bodyMarkdown = entry.bodyMarkdown;
           _mood = entry.mood;
-          _moodScore = entry.moodScore;
           _followUpQuestions = List.of(entry.followUpQuestions);
           _topics = _mapTopics(entry.topics);
           _entrance.forward(from: 0.0);
@@ -711,8 +676,8 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
     const gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: 3,
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
+      crossAxisSpacing: 6,
+      mainAxisSpacing: 6,
     );
 
     return Column(
@@ -720,8 +685,14 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
       children: [
         Row(
           children: [
-            Text(context.l10n.historyPhotosLabel(_images.length),
-                style: tt.labelMedium?.copyWith(color: cs.onSurface)),
+            Text(
+              context.l10n.historyPhotosLabel(_images.length),
+              style: tt.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.outline,
+                letterSpacing: 0.5,
+              ),
+            ),
             const Spacer(),
             // Also shown while _isEditingPhotos, even with zero images left —
             // deleting the last photo mid-edit must not strand the user in
@@ -958,7 +929,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
 
     return PopScope(
       canPop: false,
@@ -993,14 +963,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                                     size: 20, color: cs.onSurface),
                                 tooltip: context.l10n.topicsBackTooltip,
                               ),
-                            const SizedBox(width: 4),
-                            _MoodChip(mood: _mood, moodScore: _moodScore),
                           ],
                         ),
                       ),
-                      if (_headerDateLine.isNotEmpty)
-                        Text(_headerDateLine,
-                            style: tt.bodyMedium?.copyWith(color: cs.outline)),
                       Positioned(
                         right: 4,
                         child: Row(
@@ -1039,56 +1004,49 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(
                       20, 4, 20,
-                      160 + MediaQuery.of(context).padding.bottom,
+                      150 + MediaQuery.of(context).padding.bottom,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Headline
-                        _animated(
-                          0,
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _topics.isEmpty
-                                      ? context.l10n.topicsNoTopics
-                                      : context.l10n.topicsTopicsCount(_topics.length),
-                                  style: tt.headlineMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.25,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                                if (_topics.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    context.l10n.topicsWantToDeepen,
-                                    style: tt.bodyMedium?.copyWith(
-                                      color: cs.primary,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
+                        // Header: the same date leaf and highlighted
+                        // title the Diary overview uses.
+                        _animated(0, _buildHeader(context)),
 
                         // ── Aufnahmen section ──────────────────────────────
                         _animated(1, _buildRecordingsSection(context)),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 22),
+                        Divider(
+                            height: 1,
+                            color: cs.outlineVariant.withValues(alpha: 0.4)),
+                        const SizedBox(height: 18),
 
                         // ── Themen ─────────────────────────────────────────
+                        // Named as what they are: text derived from the
+                        // recordings above, not something to edit directly.
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: _animated(
+                            1,
+                            _sectionHeading(
+                              context,
+                              title: _topics.isEmpty
+                                  ? context.l10n.topicsNoTopics
+                                  : context.l10n
+                                      .topicsDetectedLabel(_topics.length),
+                              hint: context.l10n.topicsDetectedHint,
+                            ),
+                          ),
+                        ),
                         for (int i = 0; i < _topics.length; i++)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.only(bottom: 16),
                             child: _animated(
                               i + 2,
                               _TopicCard(
                                 key: ValueKey(_topics[i].title),
                                 topic: _topics[i],
+                                mood: _mood,
                               ),
                             ),
                           ),
@@ -1162,32 +1120,21 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: cs.onSurface,
                       side: BorderSide(color: cs.outlineVariant),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      textStyle: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: _kButtonRadius),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _topics.isNotEmpty
-                        ? () => _handleFinishEntry()
-                        : null,
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed:
+                        _topics.isNotEmpty ? () => _handleFinishEntry() : null,
                     icon: const Icon(Icons.check_rounded, size: 18),
                     label: Text(context.l10n.topicsFinishEntry),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: cs.onSurface,
-                      side: BorderSide(color: cs.outlineVariant),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      textStyle: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: _kButtonRadius),
                     ),
                   ),
                 ],
@@ -1244,56 +1191,135 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     );
   }
 
+  // ── Header ────────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final tt = theme.textTheme;
+    final locale = Localizations.localeOf(context).languageCode;
+    // A fresh recording has no stored date yet; it belongs to today.
+    final date = DateTime.tryParse(_resolvedDate ?? '') ?? DateTime.now();
+    final mood = moodColor(_mood);
+    // When the entry was made: its first recording's time. That is "now" for
+    // a fresh recording and the stored time once loaded from the database.
+    final at =
+        _recordings.isNotEmpty ? _recordings.first.timestamp : DateTime.now();
+    final time = '${at.hour.toString().padLeft(2, '0')}:'
+        '${at.minute.toString().padLeft(2, '0')}';
+
+    // The leaf names weekday and day, the title beside it month and year.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: MarkerDateLeaf(date: date),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MarkerHighlightedTitle(
+                  text: DateFormat.yMMMM(locale).format(date),
+                  style: markerSerif(
+                      size: 23, height: 1.2, weight: 600, color: cs.onSurface),
+                  color: moodHighlight(mood, theme.brightness),
+                ),
+                const SizedBox(height: 2),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: '${context.l10n.historyTimeSuffix(time)} · '),
+                      TextSpan(
+                        text: moodLabel(context, _mood).toLowerCase(),
+                        style: markerSerif(
+                          size: 14,
+                          italic: true,
+                          color: moodInk(mood, theme.brightness),
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: tt.labelSmall?.copyWith(color: cs.outline),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A section's headline with one line saying what the section is for.
+  Widget _sectionHeading(
+    BuildContext context, {
+    required String title,
+    required String hint,
+    Widget? trailing,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(hint, style: tt.bodySmall?.copyWith(color: cs.outline)),
+      ],
+    );
+  }
+
   // ── Aufnahmen section ────────────────────────────────────────────────────────
 
   Widget _buildRecordingsSection(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
+    final l10n = context.l10n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Toggle row
-        GestureDetector(
+        // Heading row doubles as the collapse toggle
+        InkWell(
           onTap: () => setState(
               () => _isRecordingsExpanded = !_isRecordingsExpanded),
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Icon(Icons.mic_none_rounded, size: 15, color: cs.outline),
-                const SizedBox(width: 6),
-                Text(context.l10n.topicsRecordingsLabel,
-                    style: tt.labelMedium?.copyWith(color: cs.onSurface)),
-                const SizedBox(width: 8),
-                Text(
-                  context.l10n.topicsRecordingsCount(_recordings.length),
-                  style: tt.labelSmall?.copyWith(color: cs.outline),
-                ),
-                const Spacer(),
-                AnimatedRotation(
-                  turns: _isRecordingsExpanded ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  child: Icon(Icons.keyboard_arrow_down_rounded,
-                      size: 20, color: cs.outline),
-                ),
-              ],
+          child: _sectionHeading(
+            context,
+            title: l10n.topicsRecordingsLabel,
+            hint: l10n.topicsRecordingsHint,
+            trailing: AnimatedRotation(
+              turns: _isRecordingsExpanded ? 0.5 : 0.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: Icon(Icons.expand_more_rounded,
+                  size: 22, color: cs.outline),
             ),
           ),
         ),
         AnimatedSize(
           duration: const Duration(milliseconds: 320),
           curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
           child: _isRecordingsExpanded
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 8),
                     for (int i = 0; i < _recordings.length; i++)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(top: 12),
                         child: _NormalizedTextBubble(
                           record: _recordings[i],
                           onEdit: () => _editRecording(i),
@@ -1302,7 +1328,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                       ),
                   ],
                 )
-              : const SizedBox.shrink(),
+              : const SizedBox(width: double.infinity),
         ),
       ],
     );
@@ -1317,35 +1343,13 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.auto_awesome_rounded,
-                    size: 16, color: cs.onPrimaryContainer),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.topicsAiAsks,
-                      style: tt.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  Text(
-                    context.l10n.topicsFollowUpCount(_followUpQuestions.length),
-                    style: tt.labelSmall?.copyWith(color: cs.outline),
-                  ),
-                ],
-              ),
-            ],
+          padding: const EdgeInsets.only(top: 18, bottom: 6),
+          child: _sectionHeading(
+            context,
+            title: context.l10n.topicsAiAsks,
+            hint: context.l10n.topicsWantToDeepen,
           ),
         ),
         if (_isNearTranscriptLimit)
@@ -1368,30 +1372,32 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                         followUpHint: _followUpQuestions[i],
                       ),
                     ),
-            borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Icon(Icons.chat_bubble_outline_rounded,
-                        size: 16,
-                        color: _isNearTranscriptLimit
-                            ? cs.outline
-                            : cs.primary),
-                  ),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _followUpQuestions[i],
-                      style: tt.bodyMedium?.copyWith(
+                      style: markerSerif(
+                        size: 16,
+                        height: 1.36,
+                        italic: true,
                         color: cs.onSurface.withValues(
-                            alpha: _isNearTranscriptLimit ? 0.4 : 0.75),
-                        fontStyle: FontStyle.italic,
+                            alpha: _isNearTranscriptLimit ? 0.4 : 0.85),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  // The mic says what a tap does: answer by voice.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(Icons.mic_none_rounded,
+                        size: 18,
+                        color: _isNearTranscriptLimit
+                            ? cs.outline
+                            : cs.primary),
                   ),
                 ],
               ),
@@ -1402,6 +1408,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     );
   }
 }
+
+const _kButtonRadius = BorderRadius.all(Radius.circular(6));
+const _kPhotoRadius = BorderRadius.all(Radius.circular(4));
 
 // ── Recording overlay sheet ───────────────────────────────────────────────────
 
@@ -1482,9 +1491,11 @@ class _RecordingOverlay extends StatelessWidget {
             Text(
               (recordingContext as ExtendingTopic).followUpHint ??
                   l10n.topicsWhatToAddHint,
-              style: tt.bodyMedium?.copyWith(
-                color: cs.onSurface.withValues(alpha: 0.6),
-                fontStyle: FontStyle.italic,
+              style: markerSerif(
+                size: 16,
+                height: 1.36,
+                italic: true,
+                color: cs.onSurface.withValues(alpha: 0.7),
               ),
               textAlign: TextAlign.center,
             ),
@@ -1532,62 +1543,66 @@ class _NormalizedTextBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Provenance + timestamp row
+        // Provenance + timestamp row, with the edit/delete actions
         Row(
           children: [
-            Icon(Icons.mic_rounded, size: 12, color: cs.outline),
-            const SizedBox(width: 4),
             Expanded(
               child: Text(
                 '${_formatTime(record.timestamp, Localizations.localeOf(context).languageCode)} · ${record.provenanceLabel(context.l10n)}',
                 style: tt.labelSmall?.copyWith(color: cs.outline),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        GestureDetector(
-          onTap: onEdit,
-          onLongPress: onDelete,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(14),
-                bottomLeft: Radius.circular(14),
-                bottomRight: Radius.circular(14),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  record.normalizedText,
-                  style:
-                      tt.bodyMedium?.copyWith(color: cs.onSurface, height: 1.55),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+            InkWell(
+              onTap: onEdit,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    GestureDetector(
-                      onTap: onEdit,
-                      child: Icon(Icons.edit_outlined,
-                          size: 14,
-                          color: cs.outline.withValues(alpha: 0.6)),
-                    ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: onDelete,
-                      child: Icon(Icons.delete_outline_rounded,
-                          size: 14,
-                          color: cs.outline.withValues(alpha: 0.6)),
+                    Icon(Icons.edit_outlined, size: 15, color: cs.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      context.l10n.edit,
+                      style: tt.labelMedium?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
-              ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            InkResponse(
+              onTap: onDelete,
+              radius: 18,
+              child: Icon(Icons.delete_outline_rounded,
+                  size: 16, color: cs.outline),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        // Framed like a text field, so it reads as something you can edit.
+        Material(
+          color: cs.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: _kPhotoRadius,
+            side: BorderSide(color: cs.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onEdit,
+            onLongPress: onDelete,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: SizedBox(
+                width: double.infinity,
+                child: Text(
+                  record.normalizedText,
+                  style: markerSerif(
+                      size: 15.5, height: 1.42, color: cs.onSurface),
+                ),
+              ),
             ),
           ),
         ),
@@ -1599,56 +1614,30 @@ class _NormalizedTextBubble extends StatelessWidget {
 // ── Topic card ────────────────────────────────────────────────────────────────
 
 class _TopicCard extends StatelessWidget {
-  const _TopicCard({super.key, required this.topic});
+  const _TopicCard({super.key, required this.topic, required this.mood});
   final _TopicData topic;
+  final String mood;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4, color: topic.accentColor),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        topic.title.toUpperCase(),
-                        style: tt.labelSmall?.copyWith(
-                          color: topic.accentColor,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        topic.text,
-                        style: tt.bodyMedium?.copyWith(
-                          color: cs.onSurface,
-                          height: 1.55,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MarkerHighlightedTitle(
+          text: topic.title,
+          style: markerSerif(
+              size: 21, height: 1.2, weight: 600, color: cs.onSurface),
+          color: moodHighlight(moodColor(mood), theme.brightness),
         ),
-      ),
+        const SizedBox(height: 3),
+        Text(
+          topic.text,
+          style: markerSerif(size: 15.5, height: 1.36, color: cs.onSurface),
+        ),
+      ],
     );
   }
 }
@@ -1675,7 +1664,7 @@ class _PhotoTile extends StatelessWidget {
       children: [
         Positioned.fill(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: _kPhotoRadius,
             // onTap is null while editing (see callers) — a GestureDetector
             // with no active callback registers no recognizer, so it never
             // competes with the drag detector the ancestor
@@ -1750,7 +1739,7 @@ class _UploadingTile extends StatelessWidget {
       children: [
         Positioned.fill(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: _kPhotoRadius,
             child: Image.memory(bytes, fit: BoxFit.cover),
           ),
         ),
@@ -1758,7 +1747,7 @@ class _UploadingTile extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: _kPhotoRadius,
             ),
             child: const Center(
               child: SizedBox(
@@ -1784,7 +1773,7 @@ class _AddPhotoTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: _kPhotoRadius,
       child: DottedBorderBox(
         color: cs.primary,
         child: Column(
@@ -1827,7 +1816,7 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rrect = RRect.fromRectAndRadius(
-        Offset.zero & size, const Radius.circular(14));
+        Offset.zero & size, const Radius.circular(4));
     final paint = Paint()
       ..color = color.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
@@ -1849,30 +1838,4 @@ class _DashedBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedBorderPainter old) => old.color != color;
-}
-
-// ── Mood chip ──────────────────────────────────────────────────────────────────
-
-class _MoodChip extends StatelessWidget {
-  const _MoodChip({required this.mood, required this.moodScore});
-  final String mood;
-  final double moodScore;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        moodEmoji(mood),
-        style: tt.labelSmall,
-      ),
-    );
-  }
 }

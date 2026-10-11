@@ -247,6 +247,14 @@
         }
     },
     "topicsWantToDeepen": "Möchtest du etwas vertiefen?",
+    "topicsDetectedLabel": "{count, plural, one{{count} erkanntes Thema} other{{count} erkannte Themen}}",
+    "@topicsDetectedLabel": {
+        "placeholders": {
+            "count": {"type": "num"}
+        }
+    },
+    "topicsRecordingsHint": "Tippe auf einen Text, um ihn zu korrigieren. Die Themen darunter werden daraus neu geschrieben.",
+    "topicsDetectedHint": "Von Mein KI-Tagebuch aus deinen Aufnahmen geschrieben.",
 
     "topicsRecordingsLabel": "Aufnahmen",
     "topicsRecordingsCount": "{count, plural, one{{count} Aufnahme} other{{count} Aufnahmen}}",
