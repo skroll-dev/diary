@@ -76,7 +76,10 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.3
 
 flutter_launcher_icons:
-  image_path: "assets/icon/icon2-blue-bg.png"
+  # icon2-foreground.png is icon2-blue-bg.png centred on a square canvas, scaled
+  # so the book just fills the adaptive-icon safe zone (the generator insets it 16%).
+  image_path_android: "assets/icon/icon2-foreground.png"
+  image_path_ios: "assets/icon/icon2-blue-bg-square.png"
   android: true
   adaptive_icon_background: "#3D40AB"
   adaptive_icon_foreground: "assets/icon/icon2-foreground.png"
@@ -84,7 +87,7 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   web:
     generate: true
-    image_path: "assets/icon/icon2-blue-bg.png"
+    image_path: "assets/icon/icon2-blue-bg-square.png"
     background_color: "#3D40AB"
     theme_color: "#4A90D9"
   windows:
