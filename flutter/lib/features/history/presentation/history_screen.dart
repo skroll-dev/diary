@@ -784,23 +784,7 @@ class _MediaCardBody extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              StorageImage(objectPath: entry.images.first.fullPath),
-              // Fades into the card body's own background color (not plain
-              // black) so the photo blends seamlessly into the panel below
-              // instead of ending in a hard-edged seam.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    stops: const [0.0, 0.55],
-                    colors: [
-                      cardColor,
-                      cardColor.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
+              _HeroCarousel(images: entry.images, cardColor: cardColor),
               if (entry.images.length > 1)
                 Positioned(
                   top: 12,
@@ -879,6 +863,138 @@ class _MediaCardBody extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+// ─── Hero carousel (auto-rotating, swipeable photos) ──────────────────────────
+
+class _HeroCarousel extends StatefulWidget {
+  const _HeroCarousel({required this.images, required this.cardColor});
+
+  final List<EntryImage> images;
+  final Color cardColor;
+
+  @override
+  State<_HeroCarousel> createState() => _HeroCarouselState();
+}
+
+class _HeroCarouselState extends State<_HeroCarousel> {
+  static const _interval = Duration(seconds: 5);
+  static const _slide = Duration(milliseconds: 900);
+
+  // Starts far from zero so the PageView can be swiped endlessly in both
+  // directions; the real image is always `page % images.length`.
+  late final PageController _controller =
+      PageController(initialPage: widget.images.length * 1000);
+  late int _page = _controller.initialPage;
+  Timer? _timer;
+
+  bool get _multiple => widget.images.length > 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _restartTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeroCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.images.length != widget.images.length) _restartTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // One-shot, re-armed after every page change — so a manual swipe always
+  // grants the new photo its full five seconds.
+  void _restartTimer() {
+    _timer?.cancel();
+    if (!_multiple || MediaQuery.disableAnimationsOf(context)) return;
+    _timer = Timer(_interval, () {
+      if (!mounted || !_controller.hasClients) return;
+      _controller.nextPage(duration: _slide, curve: Curves.easeInOutCubic);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.images;
+    final cardColor = widget.cardColor;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_multiple)
+          // Hold the rotation while a finger is down, so the photo never
+          // slides away mid-drag.
+          Listener(
+            onPointerDown: (_) => _timer?.cancel(),
+            onPointerUp: (_) => _restartTimer(),
+            onPointerCancel: (_) => _restartTimer(),
+            child: PageView.builder(
+              controller: _controller,
+              // Keeps the neighbouring photos built, so a slide never
+              // reveals an unloaded placeholder.
+              allowImplicitScrolling: true,
+              onPageChanged: (page) {
+                setState(() => _page = page);
+                _restartTimer();
+              },
+              itemBuilder: (_, i) =>
+                  StorageImage(objectPath: images[i % images.length].fullPath),
+            ),
+          )
+        else
+          StorageImage(objectPath: images.first.fullPath),
+        // Fades into the card body's own background color (not plain
+        // black) so the photo blends seamlessly into the panel below
+        // instead of ending in a hard-edged seam.
+        IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: const [0.0, 0.55],
+                colors: [cardColor, cardColor.withValues(alpha: 0.0)],
+              ),
+            ),
+          ),
+        ),
+        if (_multiple)
+          Positioned(
+            bottom: 18,
+            right: 14,
+            child: IgnorePointer(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < images.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      margin: const EdgeInsets.only(left: 4),
+                      width: i == _page % images.length ? 14 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(
+                            alpha: i == _page % images.length ? 0.95 : 0.55),
+                        borderRadius: BorderRadius.circular(3),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black26, blurRadius: 3),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
