@@ -77,13 +77,13 @@ Future<void> runHistorySyncWithProgress(BuildContext context, WidgetRef ref) asy
       if (!syncDone && context.mounted) showProgressDialog();
     }));
 
-    final inserted = await repo.syncAllEntriesFromFirestore(
+    final written = await repo.syncAllEntriesFromFirestore(
       onProgress: (loaded, total) => progress.value = (loaded, total),
     );
     syncDone = true;
 
     await repo.markHistorySynced(user.uid);
-    debugPrint('[HistorySync] synced $inserted new entries for ${user.uid}');
+    debugPrint('[HistorySync] mirrored $written entries for ${user.uid}');
   } catch (e, st) {
     debugPrint('[HistorySync] failed: $e\n$st');
   } finally {

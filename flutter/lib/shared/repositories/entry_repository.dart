@@ -524,48 +524,63 @@ class EntryRepository {
 
   // ── Firestore → Drift bulk sync (full history, e.g. on login) ───────────────
 
-  /// Fetches every entry doc under `users/{uid}/entries` and inserts any that
-  /// are missing locally. Docs are keyed by entry id. Never
-  /// overwrites an entry that already exists locally. Reports (loaded,
+  /// Makes the local entries for the current user an exact mirror of
+  /// `users/{uid}/entries` (docs are keyed by entry id): pending local
+  /// changes are pushed first, then every synced local row is dropped and
+  /// re-created from the server — so remote edits and deletions show up too.
+  /// Rows whose push failed (`synced == false`) are kept rather than lost.
+  /// Reads from the server only, so going offline throws before anything
+  /// local is touched instead of mirroring a stale cache. Reports (loaded,
   /// total) progress after each doc is processed — [onProgress] is called
-  /// once with (0, total) before the loop starts.
+  /// once with (0, total) before the loop starts. Returns the number of
+  /// entries written locally.
   Future<int> syncAllEntriesFromFirestore({
     void Function(int loaded, int total)? onProgress,
   }) async {
     final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
 
+    await flushPendingSyncs(uid: user.uid);
+
     final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .collection('entries')
-        .get();
+        .get(const GetOptions(source: Source.server));
 
     final total = snapshot.docs.length;
     onProgress?.call(0, total);
-    if (total == 0) return 0;
 
-    final localEntryIds = (await (_db.select(_db.entries)
-              ..where((e) => e.userId.equals(user.uid)))
-            .get())
-        .map((e) => e.id)
-        .toSet();
+    return _db.transaction(() async {
+      final localEntries = await (_db.select(_db.entries)
+            ..where((e) => e.userId.equals(user.uid)))
+          .get();
+      final syncedIds =
+          localEntries.where((e) => e.synced).map((e) => e.id).toList();
+      final pendingIds =
+          localEntries.where((e) => !e.synced).map((e) => e.id).toSet();
 
-    var inserted = 0;
-    var loaded = 0;
-    for (final doc in snapshot.docs) {
-      if (!localEntryIds.contains(doc.id)) {
-        try {
-          await _insertEntryFromFirestoreDoc(doc, user.uid);
-          inserted++;
-        } catch (e, st) {
-          // ignore: avoid_print
-          print('[EntryRepository] syncAllEntriesFromFirestore: failed for ${doc.id}: $e\n$st');
+      await (_db.delete(_db.rawTranscripts)
+            ..where((t) => t.entryId.isIn(syncedIds)))
+          .go();
+      await (_db.delete(_db.entries)..where((e) => e.id.isIn(syncedIds))).go();
+
+      var written = 0;
+      var loaded = 0;
+      for (final doc in snapshot.docs) {
+        if (!pendingIds.contains(doc.id)) {
+          try {
+            await _insertEntryFromFirestoreDoc(doc, user.uid);
+            written++;
+          } catch (e, st) {
+            // ignore: avoid_print
+            print('[EntryRepository] syncAllEntriesFromFirestore: failed for ${doc.id}: $e\n$st');
+          }
         }
+        loaded++;
+        onProgress?.call(loaded, total);
       }
-      loaded++;
-      onProgress?.call(loaded, total);
-    }
-    return inserted;
+      return written;
+    });
   }
 
   Future<bool> hasHistorySynced(String uid) async {
