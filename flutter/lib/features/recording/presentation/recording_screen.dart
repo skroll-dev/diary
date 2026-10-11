@@ -282,6 +282,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               moodScore: entry.moodScore,
               followUpQuestions: entry.followUpQuestions,
               topics: entry.topics,
+              languageCode: languageCode,
               tags: entry.tags,
               transcriptReason: 'continuation',
             );
@@ -312,6 +313,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               moodScore: moodScore,
               followUpQuestions: followUpQuestions,
               topics: topics,
+              languageCode: languageCode,
               tags: entry.tags,
               transcriptReason: reason,
             );
@@ -437,6 +439,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               moodScore: entry.moodScore,
               followUpQuestions: entry.followUpQuestions,
               topics: entry.topics,
+              languageCode: languageCode,
               tags: entry.tags,
               transcriptReason: 'continuation',
             );
@@ -485,6 +488,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             moodScore: moodScore,
             followUpQuestions: followUpQuestions,
             topics: topics,
+            languageCode: languageCode,
             tags: entry.tags,
             transcriptReason: reason,
           );

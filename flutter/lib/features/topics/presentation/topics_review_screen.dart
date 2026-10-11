@@ -397,6 +397,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             moodScore: entry.moodScore,
             followUpQuestions: entry.followUpQuestions,
             topics: entry.topics,
+            languageCode: languageCode,
             tags: entry.tags,
             transcriptReason: reason,
           ).then((_) => _loadTranscriptIds()).catchError((_) {}));
@@ -510,6 +511,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
             moodScore: entry.moodScore,
             followUpQuestions: entry.followUpQuestions,
             topics: entry.topics,
+            languageCode: languageCode,
             tags: entry.tags,
           );
       if (mounted) {
