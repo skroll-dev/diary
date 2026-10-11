@@ -39,5 +39,21 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Several pods (abseil, gRPC, BoringSSL, GTM*, Promises*, …) still declare
+    # iOS 9–11, below what current Xcode supports. Lift them to the app's minimum.
+    target.build_configurations.each do |config|
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
+    end
+
+    # These pod script phases declare no outputs, so Xcode warns that they run on
+    # every build. Running every build is intended — say so explicitly.
+    target.shell_script_build_phases.each do |phase|
+      if Array(phase.output_paths).empty? && Array(phase.output_file_list_paths).empty?
+        phase.always_out_of_date = '1'
+      end
+    end
   end
 end
