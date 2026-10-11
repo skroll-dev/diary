@@ -418,6 +418,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
     final scrollView = CustomScrollView(
       controller: _scrollController,
+      // Keeps pull-to-refresh reachable when the entries don't fill the screen.
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         for (final year in grouped.keys)
           SliverStickyHeader(
