@@ -185,33 +185,10 @@ class _ProfileBody extends ConsumerWidget {
 
   Future<void> _editName(
       BuildContext context, WidgetRef ref, String? current) async {
-    final l10n = context.l10n;
-    final ctrl = TextEditingController(text: current ?? '');
     final saved = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(l10n.profileNameLabel),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(hintText: l10n.profileNameHint),
-          onSubmitted: (_) => Navigator.of(ctx).pop(ctrl.text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: Text(l10n.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
-            child: Text(l10n.save),
-          ),
-        ],
-      ),
+      builder: (_) => _NameDialog(initial: current ?? ''),
     );
-    ctrl.dispose();
     if (saved == null || !context.mounted) return;
     await ref.read(authServiceProvider.notifier).updateDisplayName(saved);
   }
@@ -290,6 +267,56 @@ class _ProfileBody extends ConsumerWidget {
     }
   }
 
+}
+
+// ── Name dialog ───────────────────────────────────────────────────────────────
+
+// Owns its TextEditingController so it is disposed only after the dialog's
+// exit animation has finished — disposing it right after showDialog returns
+// leaves the still-animating TextField with a dead controller.
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(l10n.profileNameLabel),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: InputDecoration(hintText: l10n.profileNameHint),
+        onSubmitted: (_) => Navigator.of(context).pop(_ctrl.text),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_ctrl.text),
+          child: Text(l10n.save),
+        ),
+      ],
+    );
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
