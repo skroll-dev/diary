@@ -83,9 +83,10 @@
   }
   .screen {
     position: relative; overflow: hidden; border-radius: 96px;
-    width: 668px; height: calc(668px * 2680 / 1440);   /* status + nav bar cropped */
+    width: 668px; padding: 80px 0 36px;   /* keeps the rounded corners off the app UI */
     background: #f7f8fc;
   }
+  .crop { overflow: hidden; height: calc(668px * 2680 / 1440); }   /* status + nav bar cropped */
   .screen img { display: block; width: 100%; transform: translateY(-3.75%); }
   .phone.left  { left: 110px;  top: 360px; transform: rotate(-9deg); }
   .phone.right { right: 110px; top: 280px; transform: rotate(7deg); }
@@ -99,8 +100,8 @@
 </style>
 </head>
 <body>
-  <div class="phone left"><div class="screen"><img id="shotLeft" alt=""></div></div>
-  <div class="phone right"><div class="screen"><img id="shotRight" alt=""></div></div>
+  <div class="phone left"><div class="screen"><div class="crop"><img id="shotLeft" alt=""></div></div></div>
+  <div class="phone right"><div class="screen"><div class="crop"><img id="shotRight" alt=""></div></div></div>
 
   <div class="center">
     <div class="brand">
