@@ -153,7 +153,7 @@ Rules for follow_up_questions:
 - 1-3 questions, only if they add real value to the entry
 - If no meaningful questions arise, return an empty array: []"""
 
-_SYSTEM_PROMPT_MERGE_DE = """Du bist Mein KI-Tagebuch. Der Nutzer hat heute bereits einen Eintrag verfasst
+_SYSTEM_PROMPT_MERGE_DE = """Du bist Mein KI-Tagebuch. Der Nutzer hat für diesen Tag bereits einen Eintrag verfasst
 und gerade weitere Gedanken diktiert – meist als Antwort auf eine deiner Folgefragen.
 Integriere die neuen Inhalte ORGANISCH in den bestehenden Eintrag: Dopplungen entfernen,
 chronologisch ordnen, gleicher Ton. Generiere danach neue Folgefragen, die noch nicht
@@ -178,7 +178,7 @@ follow_up_questions: 0-3 Fragen, keine Ja/Nein-Fragen, konkret auf den Eintrag b
 
 tags: 1-4 kurze Schlüsselwörter (Nomen, keine Verben, max. 2 Wörter pro Tag). Bevorzuge vorhandene Tags aus existing_tags (falls übergeben) — erfinde nur neue wenn kein vorhandener passt."""
 
-_SYSTEM_PROMPT_MERGE_EN = """You are My AI-Diary. The user has already written an entry today
+_SYSTEM_PROMPT_MERGE_EN = """You are My AI-Diary. The user has already written an entry for this day
 and just dictated further thoughts — usually in response to one of your follow-up questions.
 Integrate the new content ORGANICALLY into the existing entry: remove duplication,
 order chronologically, keep the same tone. Then generate new follow-up questions that

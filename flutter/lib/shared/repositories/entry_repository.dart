@@ -459,6 +459,68 @@ class EntryRepository {
     }
   }
 
+  // ── Entry date ───────────────────────────────────────────────────────────────
+
+  /// Assigns a not-yet-confirmed entry to another (past) day. The Firestore
+  /// doc is keyed by entry id, so only its `date` field changes — a partial
+  /// merge like [_syncImagesToFirestore]. Images already uploaded keep their
+  /// Storage paths: those are stored verbatim and never rebuilt from `date`.
+  Future<void> updateEntryDate({
+    required String entryId,
+    required String date,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+
+    await (_db.update(_db.entries)..where((e) => e.id.equals(entryId)))
+        .write(EntriesCompanion(
+          date: Value(date),
+          updatedAt: Value(now),
+          synced: const Value(false),
+        ));
+
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    unawaited(_syncDateToFirestore(
+      uid: user.uid,
+      entryId: entryId,
+      date: date,
+      now: now,
+    ));
+  }
+
+  Future<void> _syncDateToFirestore({
+    required String uid,
+    required String entryId,
+    required String date,
+    required String now,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('entries')
+          .doc(entryId)
+          .set({'date': date, 'updatedAt': now}, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[EntryRepository] _syncDateToFirestore failed for $entryId: $e');
+      // Best-effort — remains unsynced locally until the next successful sync.
+    }
+  }
+
+  /// Number of the current user's entries per ISO date, for marking days in
+  /// the date picker. [excludeEntryId] leaves out the entry being re-dated.
+  Future<Map<String, int>> getEntryCountsByDate({String? excludeEntryId}) async {
+    final user = FirebaseAuth.instance.currentUser ?? await _auth.getUser();
+    final rows = await (_db.select(_db.entries)
+          ..where((e) => e.userId.equals(user.uid)))
+        .get();
+    final counts = <String, int>{};
+    for (final e in rows) {
+      if (e.id == excludeEntryId) continue;
+      counts[e.date] = (counts[e.date] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   /// Returns the 1-based ordinal of [entryId] among this user's entries
   /// created on [date] (ordered by createdAt ascending). Used ONLY to build
   /// a human-browsable Storage folder name (`{date}_entry{ordinal}`) — NEVER

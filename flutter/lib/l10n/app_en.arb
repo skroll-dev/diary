@@ -198,5 +198,34 @@
     "topicsAnswerRecording": "Record answer",
     "topicsAddLabel": "Add recording",
     "topicsWhatToAddHint": "What would you like to add?",
-    "topicsAddPhoto": "Add"
+    "topicsAddPhoto": "Add",
+
+    "entryDateToday": "Today",
+    "entryDateYesterday": "Yesterday",
+    "entryDateDayBeforeYesterday": "Day before yesterday",
+    "entryDateChangeLabel": "Change date",
+    "entryDateBackdatedOn": "Added on {date}",
+    "@entryDateBackdatedOn": {
+        "placeholders": {
+            "date": {"type": "String"}
+        }
+    },
+    "entryDateSheetTitle": "Which day is this entry for?",
+    "entryDateSheetHint": "Telling about a past day? Assign the entry to the right date.",
+    "entryDatePreviousMonth": "Previous month",
+    "entryDateNextMonth": "Next month",
+    "entryDateLegendHasEntry": "Day with an entry",
+    "entryDateExistingHint": "{count, plural, one{There is already an entry on {date}. This one will be added as another entry for that day.} other{There are already {count} entries on {date}. This one will be added as another entry for that day.}}",
+    "@entryDateExistingHint": {
+        "placeholders": {
+            "count": {"type": "num"},
+            "date": {"type": "String"}
+        }
+    },
+    "entryDateConfirm": "Set to {date}",
+    "@entryDateConfirm": {
+        "placeholders": {
+            "date": {"type": "String"}
+        }
+    }
 }

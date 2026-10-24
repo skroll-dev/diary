@@ -280,5 +280,34 @@
     "topicsAnswerRecording": "Antwort aufnehmen",
     "topicsAddLabel": "Ergänzen",
     "topicsWhatToAddHint": "Was möchtest du ergänzen?",
-    "topicsAddPhoto": "Hinzufügen"
+    "topicsAddPhoto": "Hinzufügen",
+
+    "entryDateToday": "Heute",
+    "entryDateYesterday": "Gestern",
+    "entryDateDayBeforeYesterday": "Vorgestern",
+    "entryDateChangeLabel": "Datum ändern",
+    "entryDateBackdatedOn": "Nachgetragen am {date}",
+    "@entryDateBackdatedOn": {
+        "placeholders": {
+            "date": {"type": "String"}
+        }
+    },
+    "entryDateSheetTitle": "Für welchen Tag ist dieser Eintrag?",
+    "entryDateSheetHint": "Erzählst du von einem vergangenen Tag? Ordne den Eintrag dem richtigen Datum zu.",
+    "entryDatePreviousMonth": "Vorheriger Monat",
+    "entryDateNextMonth": "Nächster Monat",
+    "entryDateLegendHasEntry": "Tag mit Eintrag",
+    "entryDateExistingHint": "{count, plural, one{Am {date} gibt es schon einen Eintrag. Dieser kommt als weiterer Eintrag des Tages dazu.} other{Am {date} gibt es schon {count} Einträge. Dieser kommt als weiterer Eintrag des Tages dazu.}}",
+    "@entryDateExistingHint": {
+        "placeholders": {
+            "count": {"type": "num"},
+            "date": {"type": "String"}
+        }
+    },
+    "entryDateConfirm": "Auf {date} setzen",
+    "@entryDateConfirm": {
+        "placeholders": {
+            "date": {"type": "String"}
+        }
+    }
 }

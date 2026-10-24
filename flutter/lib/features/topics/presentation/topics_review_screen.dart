@@ -12,6 +12,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../auth/presentation/auth_sheet.dart';
 import '../../recording/recording_context.dart';
+import 'entry_date_sheet.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/constants/image_limits.dart';
 import '../../../shared/extensions/localization_extensions.dart';
@@ -571,6 +572,42 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     for (final file in picked.take(remaining)) {
       await _uploadOne(file, date);
     }
+  }
+
+  // A fresh recording has no stored date yet; it belongs to today.
+  DateTime get _entryDate =>
+      DateTime.tryParse(_resolvedDate ?? '') ?? DateUtils.dateOnly(DateTime.now());
+
+  // Assigns this (fresh, not opened-from-Diary) entry to another day. UI
+  // updates first; the DB write is best-effort like every save here.
+  Future<void> _changeEntryDate() async {
+    if (_isEditMode || _entryId.isEmpty) return;
+    final repo = ref.read(entryRepositoryProvider);
+    Map<String, int> counts = const {};
+    try {
+      counts = await repo.getEntryCountsByDate(excludeEntryId: _entryId);
+    } catch (_) {}
+    if (!mounted) return;
+
+    final current = _entryDate;
+    final picked = await showEntryDateSheet(
+      context,
+      initialDate: current,
+      entryCounts: counts,
+    );
+    if (picked == null || !mounted || DateUtils.isSameDay(picked, current)) {
+      return;
+    }
+
+    final iso = DateFormat('yyyy-MM-dd').format(picked);
+    setState(() {
+      _resolvedDate = iso;
+      // The Storage folder ordinal is per date — recompute on next upload.
+      _cachedEntryOrdinal = null;
+    });
+    try {
+      await repo.updateEntryDate(entryId: _entryId, date: iso);
+    } catch (_) {}
   }
 
   Future<String?> _resolveDateForUpload() async {
@@ -1198,8 +1235,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final locale = Localizations.localeOf(context).languageCode;
-    // A fresh recording has no stored date yet; it belongs to today.
-    final date = DateTime.tryParse(_resolvedDate ?? '') ?? DateTime.now();
+    final date = _entryDate;
     final mood = moodColor(_mood);
     // When the entry was made: its first recording's time. That is "now" for
     // a fresh recording and the stored time once loaded from the database.
@@ -1207,6 +1243,12 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         _recordings.isNotEmpty ? _recordings.first.timestamp : DateTime.now();
     final time = '${at.hour.toString().padLeft(2, '0')}:'
         '${at.minute.toString().padLeft(2, '0')}';
+    // An entry dated to an earlier day than it was recorded on says so
+    // instead of showing a time that belongs to another day.
+    final backdated = !DateUtils.isSameDay(date, at);
+    final madeLabel = backdated
+        ? context.l10n.entryDateBackdatedOn(DateFormat.MMMd(locale).format(at))
+        : context.l10n.historyTimeSuffix(time);
 
     // The leaf names weekday and day, the title beside it month and year.
     return Padding(
@@ -1216,7 +1258,16 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: MarkerDateLeaf(date: date),
+            child: _isEditMode
+                ? MarkerDateLeaf(date: date)
+                : Semantics(
+                    button: true,
+                    label: context.l10n.entryDateChangeLabel,
+                    child: GestureDetector(
+                      onTap: _changeEntryDate,
+                      child: MarkerDateLeaf(date: date),
+                    ),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1233,7 +1284,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                 Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: '${context.l10n.historyTimeSuffix(time)} · '),
+                      TextSpan(text: '$madeLabel · '),
                       TextSpan(
                         text: moodLabel(context, _mood).toLowerCase(),
                         style: markerSerif(
@@ -1246,10 +1297,57 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   ),
                   style: tt.labelSmall?.copyWith(color: cs.outline),
                 ),
+                // Only a fresh entry can be dated to another day — one opened
+                // from the Diary keeps its date.
+                if (!_isEditMode) ...[
+                  const SizedBox(height: 8),
+                  _buildDateChip(context, date),
+                ],
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateChip(BuildContext context, DateTime date) {
+    final cs = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    final locale = Localizations.localeOf(context).languageCode;
+    final today = DateUtils.dateOnly(DateTime.now());
+    final String label;
+    if (DateUtils.isSameDay(date, today)) {
+      label = l10n.entryDateToday;
+    } else if (DateUtils.isSameDay(
+        date, today.subtract(const Duration(days: 1)))) {
+      label = l10n.entryDateYesterday;
+    } else {
+      label = DateFormat.MMMEd(locale).format(date);
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Tooltip(
+        message: l10n.entryDateChangeLabel,
+        child: ActionChip(
+          onPressed: _changeEntryDate,
+          avatar: Icon(Icons.calendar_today_outlined, size: 15, color: cs.primary),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label),
+              const SizedBox(width: 2),
+              Icon(Icons.expand_more_rounded, size: 16, color: cs.primary),
+            ],
+          ),
+          labelStyle: TextStyle(
+              color: cs.primary, fontWeight: FontWeight.w600, fontSize: 13),
+          backgroundColor: cs.primaryContainer.withValues(alpha: 0.35),
+          side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
+          shape: const StadiumBorder(),
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }

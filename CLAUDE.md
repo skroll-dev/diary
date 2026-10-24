@@ -216,7 +216,7 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 - Core: `id`, `entryId`, `content` (raw STT — never shown to user), `createdAt`
 - Added in v2: `normalizedContent` (user-editable, the primary display text), `reason` (`'initial'` | `'followUp:<hint>'` | `'continuation'`)
 
-`EntryRepository` methods: `saveEntry`, `mergeEntry`, `updateEntry`, `updateTranscript`, `deleteTranscript`, `getTranscriptsForDate`, `watchAllEntries`, `getOrphanedEntryForDate`, `syncEntryFromFirestoreIfMissing`, `syncAllEntriesFromFirestore`, `hasHistorySynced`/`markHistorySynced`.
+`EntryRepository` methods: `saveEntry`, `mergeEntry`, `updateEntry`, `updateEntryDate`, `getEntryCountsByDate`, `updateTranscript`, `deleteTranscript`, `getTranscriptsForDate`, `watchAllEntries`, `getOrphanedEntryForDate`, `syncEntryFromFirestoreIfMissing`, `syncAllEntriesFromFirestore`, `hasHistorySynced`/`markHistorySynced`.
 
 Always run `dart run build_runner build` after changing `app_database.dart`.
 
@@ -245,6 +245,7 @@ The screen is the **Tageseintrag** — the growing diary entry for the day. Key 
 - **General Ergänzen button**: records without topic context — AI decides placement.
 - **Recording overlay**: `ModalBottomSheet` with `RecordingControls` + context chip.
 - **Von vorne anfangen**: overflow menu `⋮` only — never in the main scroll area.
+- **Entry date**: a fresh entry (not `isEditMode`) shows a date chip under the header (the date leaf is tappable too) that opens `showEntryDateSheet` (`entry_date_sheet.dart`) to assign it to today or any past day — `updateEntryDate` changes only the `date` field. Entries opened from History keep their date. A day may hold several entries, so picking a day that already has one just adds another.
 - `bodyMarkdown` is cached for merge calls but NOT displayed here (belongs on EntryScreen).
 
 Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in order → `generateEntry` → `updateEntry`. UI updates before DB save (DB is best-effort).

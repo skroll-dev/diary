@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
+import '../extensions/localization_extensions.dart';
+
 /// Building blocks of the "Marker" look shared by the diary screens: serif
 /// prose, a mood-colored highlighter stroke behind titles, and the paper-leaf
 /// date marker.
@@ -147,7 +149,8 @@ class _HighlightPainter extends CustomPainter {
 }
 
 /// The date leaf: a small slip of paper. The weekday is the dark, bold part;
-/// the day number is deliberately paler. Both turn primary on today.
+/// the day number is deliberately paler. On today the weekday reads "Heute"
+/// and both turn primary.
 class MarkerDateLeaf extends StatelessWidget {
   const MarkerDateLeaf({super.key, required this.date});
 
@@ -182,9 +185,9 @@ class MarkerDateLeaf extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              DateFormat.E(locale)
-                  .format(date)
-                  .replaceAll('.', '')
+              (today
+                      ? context.l10n.entryDateToday
+                      : DateFormat.E(locale).format(date).replaceAll('.', ''))
                   .toUpperCase(),
               style: theme.textTheme.labelSmall?.copyWith(
                 fontSize: 11,
