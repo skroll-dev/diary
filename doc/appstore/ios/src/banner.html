@@ -1,13 +1,17 @@
 <!doctype html>
 <!--
-  App Store product page header (21:9, 3840x1646, no alpha).
-  Render:  doc/appstore/ios/src/render-header.sh [en|de]
-  Strings: STRINGS below — add/adjust a language there, the layout stays the same.
+  App Store creative assets (no alpha), one layout per format:
+    header — product page header, 21:9, 3840x1646
+    search — search results,       3:2, 3840x2560
+  Render:  doc/appstore/ios/src/render.sh                 (all formats × languages)
+           doc/appstore/ios/src/render.sh search de       (one format / language)
+  Preview: open banner.html?format=search&lang=de in Chrome
+  Strings: STRINGS below — add/adjust a language there, the layouts stay the same.
 -->
 <html>
 <head>
 <meta charset="utf-8">
-<title>App Store Header</title>
+<title>App Store Banner</title>
 <style>
   @font-face { font-family: "Newsreader"; src: url("../../../../flutter/assets/fonts/Newsreader.ttf"); font-weight: 200 800; }
   @font-face { font-family: "Newsreader"; src: url("../../../../flutter/assets/fonts/Newsreader-Italic.ttf"); font-style: italic; font-weight: 200 800; }
@@ -20,6 +24,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 3840px; height: 1646px; overflow: hidden; }
+  html[data-format=search], html[data-format=search] body { height: 2560px; }
   body {
     position: relative;
     font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
@@ -72,9 +77,15 @@
   }
   .chip svg { width: 58px; height: 58px; flex: none; }
 
+  /* German runs ~40% longer: smaller title, chips wrap to two rows */
+  :lang(de) .brand h1 { font-size: 190px; letter-spacing: -3px; }
+  :lang(de) .brand img { height: 160px; }
+  :lang(de) .chips { flex-wrap: wrap; row-gap: 30px; margin: 72px auto 0; max-width: 1900px; }
+
   /* ---------- Phones (decorative, may be cropped on narrow layouts) ---------- */
   .phone {
-    position: absolute; width: 720px; padding: 26px;
+    --pw: 720px;   /* phone width; screen + crop derive from it */
+    position: absolute; width: var(--pw); padding: 26px;
     background: #14151c; border-radius: 120px;
     box-shadow:
       0 0 0 4px #3a3d4a inset,
@@ -83,13 +94,28 @@
   }
   .screen {
     position: relative; overflow: hidden; border-radius: 96px;
-    width: 668px; padding: 46px 0 24px;   /* keeps the rounded corners off the app UI */
+    width: calc(var(--pw) - 52px); padding: 46px 0 24px;   /* keeps the rounded corners off the app UI */
     background: #f7f8fc;
   }
-  .crop { overflow: hidden; height: calc(668px * 2680 / 1440); }   /* status + nav bar cropped */
+  .crop { overflow: hidden; height: calc((var(--pw) - 52px) * 2680 / 1440); }   /* status + nav bar cropped */
   .screen img { display: block; width: 100%; transform: translateY(-3.75%); }
   .phone.left  { left: 110px;  top: 360px; transform: rotate(-9deg); }
   .phone.right { right: 110px; top: 280px; transform: rotate(7deg); }
+
+  /* ---------- Search results (3:2): text on top, interface front and center ---------- */
+  [data-format=search] .center { top: 150px; width: 3400px; }
+  [data-format=search] .tagline { margin-top: 60px; font-size: 150px; }
+  [data-format=search] .hl::before { height: 58px; }
+  [data-format=search] .chips { margin-top: 80px; flex-wrap: wrap; row-gap: 30px; }
+  [data-format=search] .chip { font-size: 66px; padding: 32px 58px; }
+  [data-format=search] .chip svg { width: 70px; height: 70px; }
+  [data-format=search] .phone { --pw: 790px; }
+  [data-format=search] .phone.left  { left: auto; right: calc(50% + 20px); top: 1150px; transform: rotate(-6deg); }
+  [data-format=search] .phone.right { right: auto; left: calc(50% + 20px); top: 1090px; transform: rotate(6deg); }
+  [data-format=search]:lang(de) .brand h1 { font-size: 210px; }
+  [data-format=search]:lang(de) .chips { max-width: 2900px; }
+  [data-format=search]:lang(de) .phone.left  { top: 1280px; }
+  [data-format=search]:lang(de) .phone.right { top: 1220px; }
 
   /* Calm band at the bottom: the App Store overlays icon/name/Get there */
   body::after {
@@ -134,10 +160,19 @@
       shotLeft: "../../screens/Screenshot_20261013_001510.png",
       shotRight: "../../screens/Screenshot_20261013_001738.png",
     },
-    // de: { name: "Mein KI-Tagebuch", tagline: "…", f1: "…", f2: "…", f3: "…", shotLeft: "…", shotRight: "…" },
+    de: {
+      name: "Mein KI-Tagebuch",
+      tagline: 'Frei reden.<br>Die KI formt einen <span class="hl">fertigen Eintrag</span>.',
+      f1: "Aufnahme per Fingertipp", f2: "KI-generierte Strukturierung", f3: "Automatische Stimmungserkennung",
+      shotLeft: "../../screens/Screenshot_20261013_001858.png",
+      shotRight: "../../screens/Screenshot_20261013_002803.png",
+    },
   };
-  const lang = new URLSearchParams(location.search).get("lang") || "en";
-  const s = STRINGS[lang] || STRINGS.en;
+  const params = new URLSearchParams(location.search);
+  const lang = params.get("lang") in STRINGS ? params.get("lang") : "en";
+  const s = STRINGS[lang];
+  document.documentElement.lang = lang;
+  document.documentElement.dataset.format = params.get("format") === "search" ? "search" : "header";
   for (const id of ["name", "tagline", "f1", "f2", "f3"]) document.getElementById(id).innerHTML = s[id];
   document.getElementById("shotLeft").src = s.shotLeft;
   document.getElementById("shotRight").src = s.shotRight;
