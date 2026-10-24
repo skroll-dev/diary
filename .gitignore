@@ -24,3 +24,5 @@ doc/certs/
 
 # Logs
 log/
+.claude/settings.local.json
+flutter/pubspec.lock
