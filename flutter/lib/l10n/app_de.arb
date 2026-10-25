@@ -286,12 +286,7 @@
     "entryDateYesterday": "Gestern",
     "entryDateDayBeforeYesterday": "Vorgestern",
     "entryDateChangeLabel": "Datum ändern",
-    "entryDateBackdatedOn": "Nachgetragen am {date}",
-    "@entryDateBackdatedOn": {
-        "placeholders": {
-            "date": {"type": "String"}
-        }
-    },
+    "entryDateBackdated": "nachgetragen",
     "entryDateSheetTitle": "Für welchen Tag ist dieser Eintrag?",
     "entryDateSheetHint": "Erzählst du von einem vergangenen Tag? Ordne den Eintrag dem richtigen Datum zu.",
     "entryDatePreviousMonth": "Vorheriger Monat",
@@ -309,5 +304,8 @@
         "placeholders": {
             "date": {"type": "String"}
         }
-    }
+    },
+
+    "hintEntryDatePencil": "Über den Stift kann das Datum geändert werden, um Einträge für die Vergangenheit zu erstellen.",
+    "hintDismiss": "Hinweis schließen"
 }

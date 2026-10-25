@@ -18,10 +18,12 @@ import '../../../shared/constants/image_limits.dart';
 import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/models/entry_image.dart';
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/app_preferences.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/image_proxy_client.dart';
 import '../../../shared/utils/mood_labels.dart';
 import '../../../shared/widgets/fullscreen_image_viewer.dart';
+import '../../../shared/widgets/hint_bubble.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/widgets/storage_image.dart';
 import '../../../shared/services/proxy_client.dart';
@@ -136,6 +138,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   String? _resolvedDate;
   int? _cachedEntryOrdinal;
 
+  // One-time hint pointing at the date leaf's pencil (fresh entries only).
+  bool _showDateHint = false;
+
   // Pipeline progress for the re-generating overlay
   double _regenPercent = 0.0;
   String _regenStep = '';
@@ -181,6 +186,25 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     // the mockup) — always resolve fresh from Drift, which also gives us the
     // canonical ISO date for Storage path-building.
     _loadImagesAndDate();
+
+    if (!_isEditMode) _maybeShowDateHint();
+  }
+
+  // Shown once per device, after the header's entrance animation. Counts as
+  // seen as soon as it appears, so it never comes back even if ignored.
+  Future<void> _maybeShowDateHint() async {
+    try {
+      final prefs = await ref.read(appPreferencesProvider.future);
+      if (prefs.isHintSeen(AppHint.entryDatePencil)) return;
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      setState(() => _showDateHint = true);
+      unawaited(prefs.markHintSeen(AppHint.entryDatePencil));
+    } catch (_) {}
+  }
+
+  void _dismissDateHint() {
+    if (_showDateHint) setState(() => _showDateHint = false);
   }
 
   Future<void> _loadImagesAndDate() async {
@@ -582,6 +606,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   // updates first; the DB write is best-effort like every save here.
   Future<void> _changeEntryDate() async {
     if (_isEditMode || _entryId.isEmpty) return;
+    _dismissDateHint();
     final repo = ref.read(entryRepositoryProvider);
     Map<String, int> counts = const {};
     try {
@@ -1247,8 +1272,9 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     // instead of showing a time that belongs to another day.
     final backdated = !DateUtils.isSameDay(date, at);
     final madeLabel = backdated
-        ? context.l10n.entryDateBackdatedOn(DateFormat.MMMd(locale).format(at))
+        ? context.l10n.entryDateBackdated
         : context.l10n.historyTimeSuffix(time);
+    final leaf = MarkerDateLeaf(date: date);
 
     // The leaf names weekday and day, the title beside it month and year.
     return Padding(
@@ -1258,18 +1284,10 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: _isEditMode
-                ? MarkerDateLeaf(date: date)
-                : Semantics(
-                    button: true,
-                    label: context.l10n.entryDateChangeLabel,
-                    child: GestureDetector(
-                      onTap: _changeEntryDate,
-                      child: MarkerDateLeaf(date: date),
-                    ),
-                  ),
+            child: _isEditMode ? leaf : _buildEditableLeaf(context, leaf),
           ),
-          const SizedBox(width: 12),
+          // The editable leaf carries the badge's overhang as padding.
+          SizedBox(width: _isEditMode ? 12 : 12 - _kBadgeOverhang),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1297,12 +1315,6 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
                   ),
                   style: tt.labelSmall?.copyWith(color: cs.outline),
                 ),
-                // Only a fresh entry can be dated to another day — one opened
-                // from the Diary keeps its date.
-                if (!_isEditMode) ...[
-                  const SizedBox(height: 8),
-                  _buildDateChip(context, date),
-                ],
               ],
             ),
           ),
@@ -1311,42 +1323,60 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
     );
   }
 
-  Widget _buildDateChip(BuildContext context, DateTime date) {
+  static const _kBadgeOverhang = 9.0;
+
+  // On a fresh entry the leaf is the date control: a small pencil badge on its
+  // corner says so. Entries opened from the Diary keep their date and get the
+  // plain leaf. The badge overhangs the leaf; padding keeps it tappable.
+  Widget _buildEditableLeaf(BuildContext context, Widget leaf) {
     final cs = Theme.of(context).colorScheme;
     final l10n = context.l10n;
-    final locale = Localizations.localeOf(context).languageCode;
-    final today = DateUtils.dateOnly(DateTime.now());
-    final String label;
-    if (DateUtils.isSameDay(date, today)) {
-      label = l10n.entryDateToday;
-    } else if (DateUtils.isSameDay(
-        date, today.subtract(const Duration(days: 1)))) {
-      label = l10n.entryDateYesterday;
-    } else {
-      label = DateFormat.MMMEd(locale).format(date);
-    }
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Tooltip(
-        message: l10n.entryDateChangeLabel,
-        child: ActionChip(
-          onPressed: _changeEntryDate,
-          avatar: Icon(Icons.calendar_today_outlined, size: 15, color: cs.primary),
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label),
-              const SizedBox(width: 2),
-              Icon(Icons.expand_more_rounded, size: 16, color: cs.primary),
-            ],
+    return HintAnchor(
+      visible: _showDateHint,
+      message: l10n.hintEntryDatePencil,
+      onDismiss: _dismissDateHint,
+      // Arrow points at the badge's center.
+      arrowOffset: kMarkerLeafWidth + _kBadgeOverhang - 12,
+      child: Semantics(
+        button: true,
+        label: l10n.entryDateChangeLabel,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _changeEntryDate,
+          child: Padding(
+            padding: const EdgeInsets.only(
+                right: _kBadgeOverhang, bottom: _kBadgeOverhang),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                leaf,
+                Positioned(
+                  right: -_kBadgeOverhang,
+                  bottom: -_kBadgeOverhang,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cs.primary,
+                      border: Border.all(color: cs.surface, width: 2),
+                      // Soft ring while the hint points at it.
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.primary
+                              .withValues(alpha: _showDateHint ? 0.25 : 0),
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Icon(Icons.edit_rounded, size: 12, color: cs.onPrimary),
+                  ),
+                ),
+              ],
+            ),
           ),
-          labelStyle: TextStyle(
-              color: cs.primary, fontWeight: FontWeight.w600, fontSize: 13),
-          backgroundColor: cs.primaryContainer.withValues(alpha: 0.35),
-          side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
-          shape: const StadiumBorder(),
-          visualDensity: VisualDensity.compact,
         ),
       ),
     );

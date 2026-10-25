@@ -245,7 +245,8 @@ The screen is the **Tageseintrag** — the growing diary entry for the day. Key 
 - **General Ergänzen button**: records without topic context — AI decides placement.
 - **Recording overlay**: `ModalBottomSheet` with `RecordingControls` + context chip.
 - **Von vorne anfangen**: overflow menu `⋮` only — never in the main scroll area.
-- **Entry date**: a fresh entry (not `isEditMode`) shows a date chip under the header (the date leaf is tappable too) that opens `showEntryDateSheet` (`entry_date_sheet.dart`) to assign it to today or any past day — `updateEntryDate` changes only the `date` field. Entries opened from History keep their date. A day may hold several entries, so picking a day that already has one just adds another.
+- **Entry date**: on a fresh entry (not `isEditMode`) the date leaf carries a pencil badge and opens `showEntryDateSheet` (`entry_date_sheet.dart`) to assign it to today or any past day — `updateEntryDate` changes only the `date` field. Entries opened from History keep their date. A day may hold several entries, so picking a day that already has one just adds another. The date is shown once (leaf + month title); a backdated entry's meta line says "nachgetragen" instead of a time.
+- **One-time hints**: `AppHint` enum + `AppPreferences.isHintSeen`/`markHintSeen` (per device), rendered with `HintAnchor` (`shared/widgets/hint_bubble.dart`, overlay bubble, any tap dismisses). Add future hints the same way; never rename an `AppHint` value (it is the storage key).
 - `bodyMarkdown` is cached for merge calls but NOT displayed here (belongs on EntryScreen).
 
 Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in order → `generateEntry` → `updateEntry`. UI updates before DB save (DB is best-effort).

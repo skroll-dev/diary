@@ -204,12 +204,7 @@
     "entryDateYesterday": "Yesterday",
     "entryDateDayBeforeYesterday": "Day before yesterday",
     "entryDateChangeLabel": "Change date",
-    "entryDateBackdatedOn": "Added on {date}",
-    "@entryDateBackdatedOn": {
-        "placeholders": {
-            "date": {"type": "String"}
-        }
-    },
+    "entryDateBackdated": "backdated",
     "entryDateSheetTitle": "Which day is this entry for?",
     "entryDateSheetHint": "Telling about a past day? Assign the entry to the right date.",
     "entryDatePreviousMonth": "Previous month",
@@ -227,5 +222,8 @@
         "placeholders": {
             "date": {"type": "String"}
         }
-    }
+    },
+
+    "hintEntryDatePencil": "Use the pencil to change the date and create entries for past days.",
+    "hintDismiss": "Dismiss hint"
 }
