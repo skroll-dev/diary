@@ -1,6 +1,8 @@
 """
 WebSocket endpoint for streaming audio transcription.
-Client sends binary PCM16 chunks (16 kHz mono), then the text "done".
+Client sends binary PCM16 mono chunks at the `sr` query rate, then the text "done".
+The connection lives as long as the recording, so Cloud Run's --timeout must
+exceed the longest supported recording.
 Server responds with:
   {"type": "interim",  "text": "..."}                    — partial result
   {"type": "segment",  "text": "..."}                    — confirmed segment

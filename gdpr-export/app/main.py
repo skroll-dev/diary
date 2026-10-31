@@ -96,11 +96,13 @@ async def request_export(authorization: str = Header(...)):
     # Alle Einträge des Nutzers aus Firestore laden
     entries_ref = db.collection("users").document(uid).collection("entries")
     entries = [doc.to_dict() for doc in entries_ref.stream()]
+    account = db.collection("users").document(uid).get().to_dict() or {}
 
     # ZIP im Speicher aufbauen
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("entries.json", json.dumps(entries, ensure_ascii=False, indent=2))
+        zf.writestr("account.json", json.dumps(account, ensure_ascii=False, indent=2, default=str))
 
         # Pro Eintrag eine lesbare Markdown-Datei
         for entry in entries:

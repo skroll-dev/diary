@@ -1,5 +1,5 @@
 """
-Gemini 2.0 Flash via Vertex AI
+Gemini 2.5 Flash via Vertex AI
 Region: europe-west3 (Frankfurt)
 Prompts A + B aus MVP-Konzept §9
 """
@@ -59,7 +59,8 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
-        log.error("gemini_json_parse_error", error=str(e), raw_response=text)
+        log.error("gemini_json_parse_error", error=str(e), response_chars=len(text))
+        log.debug("gemini_raw_response", raw_response=text)
         raise
 
 
@@ -216,7 +217,8 @@ def _tags_hint(existing_tags: list[str] | None, language: str) -> str:
 
 async def generate_entry(transcript: str, language: str = "de", existing_tags: list[str] | None = None) -> dict:
     tags_hint = _tags_hint(existing_tags, language)
-    log.info("gemini_call", fn="generate_entry", input=transcript)
+    log.info("gemini_call", fn="generate_entry", input_chars=len(transcript))
+    log.debug("gemini_input", fn="generate_entry", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_GENERATE_PROMPTS.get(language, _SYSTEM_PROMPT_GENERATE_DE))
     response = await model.generate_content_async(
         transcript + tags_hint,
@@ -229,7 +231,8 @@ async def generate_entry(transcript: str, language: str = "de", existing_tags: l
     log.info("gemini_response", fn="generate_entry", finish_reason=finish_reason,
              output_tokens=usage.candidates_token_count,
              total_tokens=usage.total_token_count,
-             output=text)
+             output_chars=len(text))
+    log.debug("gemini_output", fn="generate_entry", output=text)
     return _extract_json(text)
 
 
@@ -259,7 +262,8 @@ _NORMALIZE_PROMPTS = {"de": _SYSTEM_PROMPT_NORMALIZE_DE, "en": _SYSTEM_PROMPT_NO
 
 
 async def normalize_transcript(transcript: str, language: str = "de") -> str:
-    log.info("gemini_call", fn="normalize_transcript", input=transcript)
+    log.info("gemini_call", fn="normalize_transcript", input_chars=len(transcript))
+    log.debug("gemini_input", fn="normalize_transcript", input=transcript)
     model = GenerativeModel(MODEL, system_instruction=_NORMALIZE_PROMPTS.get(language, _SYSTEM_PROMPT_NORMALIZE_DE))
     config = GenerationConfig(temperature=0.2, max_output_tokens=8192)
     response = await model.generate_content_async(transcript, generation_config=config)
@@ -274,7 +278,8 @@ async def normalize_transcript(transcript: str, language: str = "de") -> str:
     log.info("gemini_response", fn="normalize_transcript", finish_reason=finish_reason,
              output_tokens=usage.candidates_token_count,
              total_tokens=usage.total_token_count,
-             output=text)
+             output_chars=len(text))
+    log.debug("gemini_output", fn="normalize_transcript", output=text)
     return text.strip()
 
 
@@ -285,7 +290,8 @@ async def merge_entry(
     language: str = "de",
     existing_tags: list[str] | None = None,
 ) -> dict:
-    log.info("gemini_call", fn="merge_entry", existing_len=len(existing_entry), new_transcript=new_transcript)
+    log.info("gemini_call", fn="merge_entry", existing_chars=len(existing_entry), input_chars=len(new_transcript))
+    log.debug("gemini_input", fn="merge_entry", input=new_transcript)
     model = GenerativeModel(MODEL, system_instruction=_MERGE_PROMPTS.get(language, _SYSTEM_PROMPT_MERGE_DE))
     tags_hint = _tags_hint(existing_tags, language)
     if language == "en":
@@ -314,7 +320,8 @@ BISHERIGE FOLGEFRAGEN (nicht wiederholen):
             generation_config=_GENERATION_CONFIG,
         )
         text = _require_text(response, "merge_entry")
-        log.info("gemini_response", fn="merge_entry", output=text)
+        log.info("gemini_response", fn="merge_entry", output_chars=len(text))
+        log.debug("gemini_output", fn="merge_entry", output=text)
         try:
             return _extract_json(text)
         except json.JSONDecodeError as exc:
