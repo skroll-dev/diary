@@ -1,4 +1,3 @@
 "CFBundleDisplayName" = "Mein KI-Tagebuch";
 "NSCameraUsageDescription" = "Mein KI-Tagebuch benötigt Zugriff auf die Kamera, um Fotos zu deinen Tagebucheinträgen hinzuzufügen.";
-"NSMicrophoneUsageDescription" = "Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen.";
-"NSUserTrackingUsageDescription" = "Mein KI-Tagebuch möchte dich geräteübergreifend verfolgen, um dir relevantere Inhalte zu zeigen und die App zu verbessern.";
+"NSMicrophoneUsageDescription" = "Mein KI-Tagebuch benötigt Zugriff auf das Mikrofon, um deine gesprochenen Tagebucheinträge aufzunehmen. Die Aufnahme wird von einer KI von Google in Text umgewandelt.";

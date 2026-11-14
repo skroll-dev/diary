@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/constants/legal_urls.dart';
 import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/providers/locale_provider.dart';
 import '../../../shared/repositories/entry_repository.dart';
+import '../../../shared/services/ai_consent_service.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/gdpr_export_client.dart';
+import '../../../shared/widgets/ai_consent_sheet.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -60,6 +63,31 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 36),
 
+          // ── Privacy ──────────────────────────────────────────────────────
+          Text(
+            l10n.settingsPrivacySection.toUpperCase(),
+            style: tt.labelSmall?.copyWith(
+              color: cs.outline,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _AiConsentTile(),
+          const SizedBox(height: 8),
+          _SettingsLink(
+            label: l10n.legalPrivacyPolicy,
+            onTap: () => openLegalUrl(
+              privacyPolicyUrl(Localizations.localeOf(context).languageCode),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _SettingsLink(
+            label: l10n.legalTerms,
+            onTap: () => openLegalUrl(kTermsUrl),
+          ),
+          const SizedBox(height: 36),
+
           // ── Danger zone ──────────────────────────────────────────────────
           Text(
             l10n.sectionDangerZone.toUpperCase(),
@@ -100,6 +128,18 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
+    // Apple's prompt has to appear before the blocking progress dialog, and
+    // revoking needs the account to still exist.
+    try {
+      await ref.read(authServiceProvider.notifier).revokeAppleTokenIfNeeded();
+    } on AppleCancelledException {
+      return;
+    } catch (e) {
+      if (context.mounted) _showDeleteFailed(context, e);
+      return;
+    }
+    if (!context.mounted) return;
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -139,22 +179,105 @@ class SettingsScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-        showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text(l10n.profileDeleteFailedTitle),
-            content: Text(l10n.profileDeleteFailedBody('$e')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(l10n.ok),
-              ),
-            ],
-          ),
-        );
+        _showDeleteFailed(context, e);
       }
     }
+  }
+
+  void _showDeleteFailed(BuildContext context, Object error) {
+    final l10n = context.l10n;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(l10n.profileDeleteFailedTitle),
+        content: Text(l10n.profileDeleteFailedBody('$error')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.ok),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiConsentTile extends ConsumerWidget {
+  const _AiConsentTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final l10n = context.l10n;
+    final granted = ref.watch(aiConsentProvider).value ?? false;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.settingsAiConsentTitle, style: tt.bodyMedium),
+                Text(
+                  granted
+                      ? l10n.settingsAiConsentGranted
+                      : l10n.settingsAiConsentNotGranted,
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => granted
+                ? ref.read(aiConsentProvider.notifier).withdraw()
+                : ensureAiConsent(context, ref),
+            child: Text(
+              granted ? l10n.settingsAiConsentWithdraw : l10n.settingsAiConsentAllow,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsLink extends StatelessWidget {
+  const _SettingsLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(label, style: tt.bodyMedium),
+            ),
+            Icon(Icons.open_in_new_rounded, color: cs.outline, size: 18),
+          ],
+        ),
+      ),
+    );
   }
 }
 

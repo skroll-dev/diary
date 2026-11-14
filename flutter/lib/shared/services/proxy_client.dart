@@ -8,7 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'app_preferences.dart';
 import 'auth_service.dart';
-import 'recording_service.dart' show AudioData, RecordingService;
+import 'recording_service.dart' show RecordingService;
 
 part 'proxy_client.g.dart';
 
@@ -115,35 +115,22 @@ class ProxyClient {
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 120),
     ));
-    dio.interceptors.add(LogInterceptor(
-      requestHeader: false,
-      requestBody: true,
-      responseBody: true,
-      responseHeader: false,
-      error: true,
-      logPrint: (o) => debugPrint('[ProxyClient] $o'),
-    ));
+    // Bodies are diary content: debugPrint also reaches the device log in
+    // release builds.
+    if (kDebugMode) {
+      dio.interceptors.add(LogInterceptor(
+        requestHeader: false,
+        requestBody: true,
+        responseBody: true,
+        responseHeader: false,
+        error: true,
+        logPrint: (o) => debugPrint('[ProxyClient] $o'),
+      ));
+    }
     return dio;
   }
 
-  Future<String> transcribe(AudioData audio, {required String languageCode}) async {
-    final prefs = await _ref.read(appPreferencesProvider.future);
-    final dio = await _dio();
-    final parts = audio.contentType.split('/');
-    final form = FormData.fromMap({
-      'audio': MultipartFile.fromBytes(
-        audio.bytes,
-        filename: 'recording.${parts.last}',
-        contentType: DioMediaType(parts.first, parts.last),
-      ),
-      'denoise': prefs.denoiseAudio ? '1' : '0',
-      'language': languageCode,
-    });
-    final resp = await dio.post('/transcribe/', data: form);
-    return resp.data['transcript'] as String;
-  }
-
-  /// Web streaming path: pipes [audioStream] chunks over WebSocket.
+  /// Pipes [audioStream] chunks over WebSocket (all platforms).
   /// Calls [onInterim] with each partial result and [onSegment] when a
   /// segment is confirmed. Returns the full transcript when the stream ends.
   Future<String> transcribeWebSocket(
@@ -152,6 +139,15 @@ class ProxyClient {
     void Function(String text)? onInterim,
     void Function(String text)? onSegment,
   }) async {
+    // Subscribe before the first await: the recorder is already running, and
+    // audio emitted while the token and socket are set up must not be lost.
+    final audio = StreamController<Uint8List>();
+    final audioSub = audioStream.listen(
+      audio.add,
+      onError: audio.addError,
+      onDone: audio.close,
+    );
+
     final wsBase = _baseUrl
         .replaceFirst('https://', 'wss://')
         .replaceFirst('http://', 'ws://');
@@ -165,7 +161,7 @@ class ProxyClient {
     final params = <String>[
       if (token.isNotEmpty) 'token=${Uri.encodeQueryComponent(token)}',
       if (!prefs.denoiseAudio) 'denoise=0',
-      'sr=${RecordingService.webSampleRate}',
+      'sr=${RecordingService.sampleRate}',
       'language=$languageCode',
     ];
     final uri = Uri.parse(
@@ -184,15 +180,12 @@ class ProxyClient {
           }
         } else if (data['type'] == 'interim') {
           final text = data['text'] as String? ?? '';
-          debugPrint('[WS] interim: $text');
           onInterim?.call(text);
         } else if (data['type'] == 'segment') {
           final text = data['text'] as String? ?? '';
-          debugPrint('[WS] segment: $text');
           onSegment?.call(text);
         } else if (data['type'] == 'final' || data['transcript'] != null) {
           final text = data['transcript'] as String? ?? '';
-          debugPrint('[WS] final: $text');
           if (!completer.isCompleted) {
             completer.complete(text);
           }
@@ -208,9 +201,9 @@ class ProxyClient {
       },
     );
 
-    // Batch small AudioWorklet buffers into ~2 s chunks before sending.
-    // 44100 Hz * 2 bytes * 1 ch * 2 s = 176400 bytes
-    const batchTarget = 176400;
+    // Batch small recorder buffers into ~2 s chunks before sending.
+    // Sample rate * 2 bytes * 1 ch * 2 s
+    final batchTarget = RecordingService.sampleRate * 2 * 2;
 
     var chunkIndex = 0;
     final pending = <Uint8List>[];
@@ -231,18 +224,22 @@ class ProxyClient {
       debugPrint('[WS] chunk $chunkIndex — ${batch.lengthInBytes} bytes');
     }
 
-    await for (final chunk in audioStream) {
-      pending.add(chunk);
-      pendingBytes += chunk.lengthInBytes;
-      if (pendingBytes >= batchTarget) await flush();
-    }
-    await flush(); // send any remaining bytes
-    debugPrint('[WS] sent done after $chunkIndex chunks');
-    channel.sink.add('done');
+    try {
+      await for (final chunk in audio.stream) {
+        pending.add(chunk);
+        pendingBytes += chunk.lengthInBytes;
+        if (pendingBytes >= batchTarget) await flush();
+      }
+      await flush(); // send any remaining bytes
+      debugPrint('[WS] sent done after $chunkIndex chunks');
+      channel.sink.add('done');
 
-    final transcript = await completer.future;
-    await channel.sink.close();
-    return transcript;
+      // A socket that dies silently never reports back; don't wait forever.
+      return await completer.future.timeout(const Duration(seconds: 60));
+    } finally {
+      await audioSub.cancel();
+      await channel.sink.close();
+    }
   }
 
   Future<String> normalize(String transcript, {required String languageCode}) async {

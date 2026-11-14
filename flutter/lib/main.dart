@@ -13,12 +13,10 @@ import 'shared/providers/locale_provider.dart';
 import 'shared/services/auth_error_provider.dart';
 import 'shared/services/auth_service.dart'
     show AuthLinkError, EmailNotFoundForLinkException, authServiceProvider;
-import 'shared/services/tracking_consent_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await resyncAnalyticsWithTrackingPermission();
   runApp(const ProviderScope(child: AiTagebuchApp()));
 }
 

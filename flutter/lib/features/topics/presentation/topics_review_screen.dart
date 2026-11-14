@@ -22,6 +22,7 @@ import '../../../shared/services/app_preferences.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/image_proxy_client.dart';
 import '../../../shared/utils/mood_labels.dart';
+import '../../../shared/widgets/ai_consent_sheet.dart';
 import '../../../shared/widgets/fullscreen_image_viewer.dart';
 import '../../../shared/widgets/hint_bubble.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
@@ -331,6 +332,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
 
   Future<void> _runMergePipeline(
       String rawTranscript, RecordingContext ctx) async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     setState(() => _isRegenerating = true);
     try {
       final reason = switch (ctx) {
@@ -479,6 +481,7 @@ class _TopicsReviewScreenState extends ConsumerState<TopicsReviewScreen>
   }
 
   Future<void> _rederiveFromTranscripts([String? overrideText]) async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     setState(() => _isRegenerating = true);
     final l10n = context.l10n;
     final languageCode = Localizations.localeOf(context).languageCode;

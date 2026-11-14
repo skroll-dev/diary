@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'ai_consent_sheet.dart';
 import 'transcript_input_sheet.dart';
 import 'live_transcript_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../constants/transcript_limits.dart';
 import '../extensions/localization_extensions.dart';
 import '../services/proxy_client.dart';
 import '../services/recording_service.dart';
@@ -17,8 +18,8 @@ export 'recording_controls.dart' show WaveformPainter;
 enum RecordingPhase { idle, recording, processing }
 
 /// Reusable recording UI: waveform, timer, mic/stop button, processing state.
-/// Handles audio capture + transcription for both web (WebSocket) and native
-/// (HTTP). Calls [onComplete] with the raw transcript string when done.
+/// Handles audio capture + transcription over WebSocket on all platforms.
+/// Calls [onComplete] with the raw transcript string when done.
 class RecordingControls extends ConsumerStatefulWidget {
   const RecordingControls({
     super.key,
@@ -106,6 +107,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
   }
 
   Future<void> _start() async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     final languageCode = Localizations.localeOf(context).languageCode;
     final svc = ref.read(recordingServiceProvider);
     try {
@@ -120,25 +122,23 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
       }
       return;
     }
-    if (kIsWeb) {
-      _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
-        svc.webAudioStream,
-        languageCode: languageCode,
-        onInterim: (text) {
-          if (mounted) setState(() => _interimText = text);
-        },
-        onSegment: (text) {
-          if (mounted) {
-            setState(() {
-              _confirmedTranscript = _confirmedTranscript.isEmpty
-                  ? text
-                  : '$_confirmedTranscript $text';
-              _interimText = '';
-            });
-          }
-        },
-      );
-    }
+    _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
+      svc.audioStream,
+      languageCode: languageCode,
+      onInterim: (text) {
+        if (mounted) setState(() => _interimText = text);
+      },
+      onSegment: (text) {
+        if (mounted) {
+          setState(() {
+            _confirmedTranscript = _confirmedTranscript.isEmpty
+                ? text
+                : '$_confirmedTranscript $text';
+            _interimText = '';
+          });
+        }
+      },
+    )..ignore(); // awaited in _stop; a cancelled recording never reads it
     setState(() {
       _phase = RecordingPhase.recording;
       _seconds = 0;
@@ -150,7 +150,15 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     });
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> _showTypeDialog() async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     final text = await showTranscriptInputSheet(
       context,
       title: context.l10n.transcriptInputTitleAlt,
@@ -170,23 +178,38 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     _pulseController.reset();
     setState(() => _phase = RecordingPhase.processing);
 
-    final languageCode = Localizations.localeOf(context).languageCode;
+    final l10n = context.l10n;
+    String? rawTranscript;
     try {
       final sw = Stopwatch()..start();
-      _setStep(context.l10n.pipelineListening, 0.0, 0.35);
-      final String rawTranscript;
-      if (kIsWeb) {
-        await ref.read(recordingServiceProvider).stopStream();
-        rawTranscript = await _wsTranscriptFuture!;
-      } else {
-        final audio = await ref.read(recordingServiceProvider).stopAndRead();
-        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio, languageCode: languageCode);
-      }
+      _setStep(l10n.pipelineListening, 0.0, 0.35);
+      await ref.read(recordingServiceProvider).stop();
+      rawTranscript = await _wsTranscriptFuture!;
       _completeStep(0.40);
       debugPrint('[Pipeline] transcribe (controls): ${sw.elapsedMilliseconds}ms');
-      await widget.onComplete(rawTranscript);
     } catch (e) {
+      _progressTimer?.cancel();
       debugPrint('[RecordingControls] error: $e');
+      // The audio is gone, but segments confirmed before the failure can
+      // still be saved.
+      if (mounted && _confirmedTranscript.isNotEmpty) {
+        rawTranscript = await showTranscriptInputSheet(
+          context,
+          title: l10n.recordingPartialTitle,
+          hint: l10n.transcriptInputHintRaw,
+          initialValue: _confirmedTranscript,
+        );
+      } else {
+        _showMessage(l10n.recordingTranscribeFailed);
+      }
+    }
+
+    if (rawTranscript != null) {
+      if (isUsableTranscript(rawTranscript)) {
+        await widget.onComplete(rawTranscript);
+      } else {
+        _showMessage(l10n.recordingTooShort);
+      }
     }
 
     if (mounted) {
@@ -206,11 +229,7 @@ class _RecordingControlsState extends ConsumerState<RecordingControls>
     _pulseController.stop();
     _pulseController.reset();
     try {
-      if (kIsWeb) {
-        await ref.read(recordingServiceProvider).stopStream();
-      } else {
-        await ref.read(recordingServiceProvider).stopAndRead(); // discard
-      }
+      await ref.read(recordingServiceProvider).stop();
     } catch (_) {}
     if (mounted) {
       setState(() {

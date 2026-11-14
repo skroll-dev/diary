@@ -10,6 +10,10 @@ class GoogleCancelledException implements Exception {
   const GoogleCancelledException();
 }
 
+class AppleCancelledException implements Exception {
+  const AppleCancelledException();
+}
+
 class UidChangedNotice implements Exception {
   const UidChangedNotice();
 }
@@ -19,6 +23,10 @@ class EmailNotFoundForLinkException implements Exception {
 }
 
 enum AuthLinkError { expiredLink, emailNotFound }
+
+/// Android and web would need Apple's browser flow, which isn't set up yet.
+bool get isAppleSignInSupported =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
 @Riverpod(keepAlive: true)
 class AuthService extends _$AuthService {
@@ -160,6 +168,59 @@ class AuthService extends _$AuthService {
     } else {
       final result = await auth.signInWithCredential(credential);
       _updateState(result.user!);
+    }
+  }
+
+  AppleAuthProvider _appleProvider() => AppleAuthProvider()
+    ..addScope('email')
+    ..addScope('name');
+
+  Future<void> linkWithApple() async {
+    final auth = FirebaseAuth.instance;
+    final currentUser = await getUser();
+    try {
+      final result = currentUser.isAnonymous
+          ? await currentUser.linkWithProvider(_appleProvider())
+          : await auth.signInWithProvider(_appleProvider());
+      _updateState(result.user!);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'canceled') throw const AppleCancelledException();
+      // This Apple ID already has an account. The error carries a usable
+      // credential, so the user isn't prompted a second time.
+      if ((e.code == 'credential-already-in-use' ||
+              e.code == 'federated-user-id-already-linked') &&
+          e.credential != null) {
+        final result = await auth.signInWithCredential(e.credential!);
+        _updateState(result.user!);
+        throw const UidChangedNotice();
+      }
+      rethrow;
+    }
+  }
+
+  /// Apple requires its token to be revoked when an account is deleted. Call
+  /// before deleting the account: revoking needs a fresh authorization code
+  /// and a user who still exists. Throws [AppleCancelledException] if the user
+  /// dismisses Apple's prompt, in which case nothing may be deleted.
+  Future<void> revokeAppleTokenIfNeeded() async {
+    final auth = FirebaseAuth.instance;
+    final user = auth.currentUser;
+    if (!isAppleSignInSupported ||
+        user == null ||
+        !user.providerData.any((p) => p.providerId == 'apple.com')) {
+      return;
+    }
+    try {
+      final result = await user.reauthenticateWithProvider(_appleProvider());
+      final code = result.additionalUserInfo?.authorizationCode;
+      if (code == null) {
+        debugPrint('[Auth] Apple reauthentication returned no authorization code');
+        return;
+      }
+      await auth.revokeTokenWithAuthorizationCode(code);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'canceled') throw const AppleCancelledException();
+      rethrow;
     }
   }
 

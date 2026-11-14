@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/repositories/entry_repository.dart';
 import '../../../shared/services/auth_service.dart';
-import '../../../shared/services/tracking_consent_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -105,10 +104,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       Future.delayed(const Duration(milliseconds: 1200)),
       _syncFullHistoryIfNeeded(),
     ]);
-
-    // Show Apple's native ATT dialog (iOS, first time only — a no-op once
-    // decided) while splash content is still visible, before fading out.
-    await requestTrackingPermissionAndSyncAnalytics();
 
     // Exit
     _pulseController.stop();

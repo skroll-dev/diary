@@ -26,6 +26,8 @@ Future<bool> showAuthSheet(
 
 // ── Sheet ─────────────────────────────────────────────────────────────────────
 
+enum _SignInMethod { google, apple, email }
+
 class _AuthSheet extends ConsumerStatefulWidget {
   const _AuthSheet({this.isDismissible = false});
 
@@ -37,11 +39,13 @@ class _AuthSheet extends ConsumerStatefulWidget {
 
 class _AuthSheetState extends ConsumerState<_AuthSheet> {
   final _emailCtrl = TextEditingController();
-  bool _isLoading = false;
+  _SignInMethod? _activeMethod;
   bool _emailSent = false;
   String? _errorMessage;
   StreamSubscription<User?>? _authSub;
   bool _popped = false;
+
+  bool get _isLoading => _activeMethod != null;
 
   @override
   void initState() {
@@ -77,7 +81,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
 
   Future<void> _onGoogleTap() async {
     setState(() {
-      _isLoading = true;
+      _activeMethod = _SignInMethod.google;
       _errorMessage = null;
     });
     try {
@@ -90,7 +94,26 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _localizeError(e));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _activeMethod = null);
+    }
+  }
+
+  Future<void> _onAppleTap() async {
+    setState(() {
+      _activeMethod = _SignInMethod.apple;
+      _errorMessage = null;
+    });
+    try {
+      await ref.read(authServiceProvider.notifier).linkWithApple();
+      _closeSheet(true);
+    } on UidChangedNotice {
+      _closeSheet(true);
+    } on AppleCancelledException {
+      // user cancelled — silent
+    } on FirebaseAuthException catch (e) {
+      setState(() => _errorMessage = _localizeError(e));
+    } finally {
+      if (mounted) setState(() => _activeMethod = null);
     }
   }
 
@@ -101,7 +124,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
       return;
     }
     setState(() {
-      _isLoading = true;
+      _activeMethod = _SignInMethod.email;
       _errorMessage = null;
     });
     try {
@@ -119,7 +142,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _localizeError(e));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _activeMethod = null);
     }
   }
 
@@ -129,6 +152,9 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
       'invalid-email' => l10n.authErrorInvalidEmail,
       'too-many-requests' => l10n.authErrorTooManyRequests,
       'network-request-failed' => l10n.authErrorNoConnection,
+      'email-already-in-use' ||
+      'account-exists-with-different-credential' =>
+        l10n.authErrorAccountExists,
       _ => l10n.authErrorGeneric(e.message ?? e.code),
     };
   }
@@ -151,10 +177,12 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
         24,
         MediaQuery.of(context).viewInsets.bottom + 32,
       ),
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        child: _emailSent ? _buildConfirmation(cs, tt) : _buildInput(cs, tt),
+      child: SingleChildScrollView(
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: _emailSent ? _buildConfirmation(cs, tt) : _buildInput(cs, tt),
+        ),
       ),
     );
   }
@@ -219,8 +247,15 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
         // Google button (primary CTA)
         _GoogleSignInButton(
           onPressed: _isLoading ? null : _onGoogleTap,
-          isLoading: _isLoading,
+          isLoading: _activeMethod == _SignInMethod.google,
         ),
+        if (isAppleSignInSupported) ...[
+          const SizedBox(height: 12),
+          _AppleSignInButton(
+            onPressed: _isLoading ? null : _onAppleTap,
+            isLoading: _activeMethod == _SignInMethod.apple,
+          ),
+        ],
         const SizedBox(height: 20),
 
         // Divider
@@ -284,7 +319,7 @@ class _AuthSheetState extends ConsumerState<_AuthSheet> {
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
-          child: _isLoading
+          child: _activeMethod == _SignInMethod.email
               ? SizedBox(
                   width: 18,
                   height: 18,
@@ -412,6 +447,65 @@ class _GoogleSignInButton extends StatelessWidget {
                   const SizedBox(width: 12),
                   Text(
                     context.l10n.authGoogleButton,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+// ── Apple Sign-In button (Apple's black/white button styles) ──────────────────
+
+class _AppleSignInButton extends StatelessWidget {
+  const _AppleSignInButton({required this.onPressed, required this.isLoading});
+
+  final VoidCallback? onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bg = isDark ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
+    final textColor = isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
+
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          backgroundColor: bg,
+          foregroundColor: textColor,
+          disabledBackgroundColor: bg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+        ),
+        child: isLoading
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: textColor,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.apple, size: 22, color: textColor),
+                  const SizedBox(width: 10),
+                  Text(
+                    context.l10n.authAppleButton,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,

@@ -374,6 +374,7 @@ class _ProviderChip extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final (IconData icon, String label) = switch (providerId) {
       'google.com' => (Icons.g_mobiledata_rounded, 'Google'),
+      'apple.com' => (Icons.apple, 'Apple'),
       'emailLink' || 'password' => (Icons.mail_outline_rounded, context.l10n.providerEmailLink),
       _ => (Icons.person_outline_rounded, context.l10n.sectionAccount),
     };

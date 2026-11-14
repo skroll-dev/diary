@@ -6,6 +6,7 @@ import '../extensions/localization_extensions.dart';
 /// to "Anmeldung"/"Sign-in" on the profile and entry screens.
 String providerLabel(BuildContext context, String providerId) => switch (providerId) {
       'google.com' => 'Google',
+      'apple.com' => 'Apple',
       'password' || 'emailLink' => context.l10n.providerEmailLink,
       _ => providerId,
     };

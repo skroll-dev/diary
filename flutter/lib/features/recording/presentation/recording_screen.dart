@@ -4,13 +4,13 @@ import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/constants/transcript_limits.dart';
 import '../../../shared/extensions/localization_extensions.dart';
 import '../../../shared/providers/dev_settings.dart';
 import '../../../shared/repositories/entry_repository.dart';
@@ -18,6 +18,7 @@ import '../../../shared/services/auth_error_provider.dart';
 import '../../../shared/services/auth_service.dart'
     show AuthLinkError, authServiceProvider;
 import '../../../shared/services/proxy_client.dart';
+import '../../../shared/widgets/ai_consent_sheet.dart';
 import '../../../shared/widgets/profile_avatar_button.dart';
 import '../../../shared/services/recording_service.dart';
 import '../../auth/presentation/auth_sheet.dart';
@@ -144,6 +145,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
   }
 
   Future<void> _startRecording() async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     final languageCode = Localizations.localeOf(context).languageCode;
     final svc = ref.read(recordingServiceProvider);
     try {
@@ -162,27 +164,25 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     // stale text after a cancel.
     _confirmedTranscript = '';
     _interimText = '';
-    if (kIsWeb) {
-      _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
-        svc.webAudioStream,
-        languageCode: languageCode,
-        onInterim: (text) {
-          if (mounted && _state == _RecordingState.recording) {
-            setState(() => _interimText = text);
-          }
-        },
-        onSegment: (text) {
-          if (mounted && _state == _RecordingState.recording) {
-            setState(() {
-              _confirmedTranscript = _confirmedTranscript.isEmpty
-                  ? text
-                  : '$_confirmedTranscript $text';
-              _interimText = '';
-            });
-          }
-        },
-      );
-    }
+    _wsTranscriptFuture = ref.read(proxyClientProvider).transcribeWebSocket(
+      svc.audioStream,
+      languageCode: languageCode,
+      onInterim: (text) {
+        if (mounted && _state == _RecordingState.recording) {
+          setState(() => _interimText = text);
+        }
+      },
+      onSegment: (text) {
+        if (mounted && _state == _RecordingState.recording) {
+          setState(() {
+            _confirmedTranscript = _confirmedTranscript.isEmpty
+                ? text
+                : '$_confirmedTranscript $text';
+            _interimText = '';
+          });
+        }
+      },
+    )..ignore(); // awaited in _stopRecording; a cancelled recording never reads it
     setState(() {
       _state = _RecordingState.recording;
       _seconds = 0;
@@ -210,65 +210,104 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     setState(() => _state = _RecordingState.processing);
 
     final l10n = context.l10n;
-    final languageCode = Localizations.localeOf(context).languageCode;
-    final date = _dateLabel;
     final duration = _timerLabel;
     final durationSec = _seconds;
+
+    final String rawTranscript;
+    try {
+      final sw = Stopwatch()..start();
+      _setStep(l10n.pipelineListening, 0.0, 0.35);
+      await ref.read(recordingServiceProvider).stop();
+      rawTranscript = await _wsTranscriptFuture!;
+      _completeStep(0.35);
+      debugPrint('[Pipeline] transcribe: ${sw.elapsedMilliseconds}ms');
+    } catch (e) {
+      debugPrint('[RecordingScreen] transcription error: $e');
+      // The audio is gone, but segments confirmed before the failure can
+      // still become an entry.
+      final partial = _confirmedTranscript;
+      _returnToIdle();
+      if (partial.isEmpty) {
+        _showMessage(l10n.recordingTranscribeFailed);
+      } else {
+        await _editAndProcess(
+          partial,
+          title: l10n.recordingPartialTitle,
+          duration: duration,
+          durationSec: durationSec,
+        );
+      }
+      return;
+    }
+
+    await _processTranscript(
+      rawTranscript,
+      duration: duration,
+      durationSec: durationSec,
+      readingStart: 0.36,
+      readingEnd: 0.55,
+    );
+  }
+
+  /// Turns a transcript into a saved entry and opens it. Only a saved entry
+  /// opens `/topics`; on failure the transcript stays available for a retry,
+  /// because the audio it came from no longer exists.
+  Future<void> _processTranscript(
+    String rawTranscript, {
+    required String duration,
+    required int durationSec,
+    double readingStart = 0.0,
+    double readingEnd = 0.30,
+  }) async {
+    final l10n = context.l10n;
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final date = _dateLabel;
     final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final reason = _transcriptReason;
     final targetEntryId = _targetEntryId;
 
-    var topics = <TopicDto>[];
-    var normalizedText = '';
-    var bodyMarkdown = '';
-    var mood = 'neutral';
-    var moodScore = 0.0;
-    var followUpQuestions = <String>[];
-    var entryId = '';
+    if (!isUsableTranscript(rawTranscript)) {
+      _returnToIdle();
+      _showMessage(l10n.recordingTooShort);
+      return;
+    }
 
+    setState(() => _state = _RecordingState.processing);
+
+    final String normalizedText;
+    final EntryDto entry;
+    final String entryId;
     try {
       final sw = Stopwatch()..start();
 
-      _setStep(l10n.pipelineListening, 0.0, 0.35);
-      final String rawTranscript;
-      if (kIsWeb) {
-        await ref.read(recordingServiceProvider).stopStream();
-        rawTranscript = await _wsTranscriptFuture!;
-      } else {
-        final audio = await ref.read(recordingServiceProvider).stopAndRead();
-        rawTranscript = await ref.read(proxyClientProvider).transcribe(audio, languageCode: languageCode);
-      }
-      _completeStep(0.35);
-      debugPrint('[Pipeline] transcribe: ${sw.elapsedMilliseconds}ms');
-      sw.reset(); sw.start();
-
-      _setStep(l10n.pipelineReadingText, 0.36, 0.55);
+      _setStep(l10n.pipelineReadingText, readingStart, readingEnd);
       normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript, languageCode: languageCode);
-      _completeStep(0.55);
+      _completeStep(readingEnd);
       debugPrint('[Pipeline] normalize: ${sw.elapsedMilliseconds}ms');
       sw.reset(); sw.start();
+
+      if (!isUsableTranscript(normalizedText)) {
+        _returnToIdle();
+        _showMessage(l10n.recordingTooShort);
+        return;
+      }
 
       final existingTags = await ref.read(entryRepositoryProvider).getAllTags();
 
       if (targetEntryId != null) {
         final existingEntry =
             await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
-        _setStep(l10n.pipelineMerging, 0.56, 1.0);
+        _setStep(l10n.pipelineMerging, readingEnd + 0.01, 1.0);
         final previousQuestions = existingEntry != null
             ? (jsonDecode(existingEntry.followUpQuestions) as List).cast<String>()
             : <String>[];
-        final entry = await ref.read(proxyClientProvider).mergeEntry(
+        entry = await ref.read(proxyClientProvider).mergeEntry(
               existingBody: existingEntry?.bodyMarkdown ?? '',
               newTranscript: normalizedText,
               previousQuestions: previousQuestions,
               languageCode: languageCode,
               existingTags: existingTags,
             );
-        topics = entry.topics;
-        bodyMarkdown = entry.bodyMarkdown;
-        mood = entry.mood;
-        moodScore = entry.moodScore;
-        followUpQuestions = entry.followUpQuestions;
         _completeStep(1.0);
         debugPrint('[Pipeline] merge: ${sw.elapsedMilliseconds}ms');
         sw.reset(); sw.start();
@@ -288,17 +327,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
             );
         debugPrint('[Pipeline] save (merged): ${sw.elapsedMilliseconds}ms');
       } else {
-        _setStep(l10n.pipelineThinking, 0.56, 1.0);
-        final entry = await ref.read(proxyClientProvider).generateEntry(
+        _setStep(l10n.pipelineThinking, readingEnd + 0.01, 1.0);
+        entry = await ref.read(proxyClientProvider).generateEntry(
           normalizedText,
           languageCode: languageCode,
           existingTags: existingTags,
         );
-        topics = entry.topics;
-        bodyMarkdown = entry.bodyMarkdown;
-        mood = entry.mood;
-        moodScore = entry.moodScore;
-        followUpQuestions = entry.followUpQuestions;
         _completeStep(1.0);
         debugPrint('[Pipeline] generate: ${sw.elapsedMilliseconds}ms');
         sw.reset(); sw.start();
@@ -308,43 +342,120 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
               rawTranscript: rawTranscript,
               normalizedText: normalizedText,
               durationSeconds: durationSec,
-              bodyMarkdown: bodyMarkdown,
-              mood: mood,
-              moodScore: moodScore,
-              followUpQuestions: followUpQuestions,
-              topics: topics,
+              bodyMarkdown: entry.bodyMarkdown,
+              mood: entry.mood,
+              moodScore: entry.moodScore,
+              followUpQuestions: entry.followUpQuestions,
+              topics: entry.topics,
               languageCode: languageCode,
               tags: entry.tags,
               transcriptReason: reason,
             );
         debugPrint('[Pipeline] save: ${sw.elapsedMilliseconds}ms');
       }
+    } on ProxyValidationException catch (e) {
+      debugPrint('[RecordingScreen] pipeline validation error: $e');
+      _returnToIdle();
+      await _editAndProcess(
+        rawTranscript,
+        title: l10n.recordingPartialTitle,
+        duration: duration,
+        durationSec: durationSec,
+      );
+      return;
     } catch (e) {
       debugPrint('[RecordingScreen] pipeline error: $e');
+      _returnToIdle();
+      if (await _confirmRetry()) {
+        await _processTranscript(
+          rawTranscript,
+          duration: duration,
+          durationSec: durationSec,
+        );
+      }
+      return;
     }
 
     if (mounted) {
-      setState(() {
-        _state = _RecordingState.idle;
-        _seconds = 0;
-        _wsTranscriptFuture = null;
-        _confirmedTranscript = '';
-        _interimText = '';
-      });
+      _returnToIdle();
       context.push('/topics?entryId=$entryId', extra: (
         entryId: entryId,
         date: date,
         duration: duration,
-        topics: topics,
+        topics: entry.topics,
         normalizedTranscript: normalizedText,
-        bodyMarkdown: bodyMarkdown,
-        mood: mood,
-        moodScore: moodScore,
-        followUpQuestions: followUpQuestions,
+        bodyMarkdown: entry.bodyMarkdown,
+        mood: entry.mood,
+        moodScore: entry.moodScore,
+        followUpQuestions: entry.followUpQuestions,
         transcriptReason: reason,
         isEditMode: false,
       ));
     }
+  }
+
+  Future<void> _editAndProcess(
+    String text, {
+    required String title,
+    required String duration,
+    required int durationSec,
+  }) async {
+    if (!mounted) return;
+    final edited = await showTranscriptInputSheet(
+      context,
+      title: title,
+      hint: context.l10n.transcriptInputHintRaw,
+      initialValue: text,
+    );
+    if (edited == null || edited.isEmpty || !mounted) return;
+    await _processTranscript(
+      edited,
+      duration: duration,
+      durationSec: durationSec,
+    );
+  }
+
+  Future<bool> _confirmRetry() async {
+    if (!mounted) return false;
+    final l10n = context.l10n;
+    final retry = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.pipelineFailedTitle),
+        content: Text(l10n.pipelineFailedBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.pipelineDiscard),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.pipelineRetry),
+          ),
+        ],
+      ),
+    );
+    return retry == true && mounted;
+  }
+
+  void _returnToIdle() {
+    _progressTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _state = _RecordingState.idle;
+      _seconds = 0;
+      _wsTranscriptFuture = null;
+      _confirmedTranscript = '';
+      _interimText = '';
+    });
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _cancelRecording() async {
@@ -353,166 +464,23 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen>
     _pulseController.stop();
     _pulseController.reset();
     try {
-      if (kIsWeb) {
-        await ref.read(recordingServiceProvider).stopStream();
-      } else {
-        await ref.read(recordingServiceProvider).stopAndRead(); // discard bytes
-      }
+      await ref.read(recordingServiceProvider).stop();
     } catch (_) {}
-    if (mounted) {
-      setState(() {
-        _state = _RecordingState.idle;
-        _seconds = 0;
-        _wsTranscriptFuture = null;
-        _confirmedTranscript = '';
-        _interimText = '';
-      });
-    }
+    _returnToIdle();
   }
 
   // Long-press mic: type a transcript instead of speaking (works in all builds)
   Future<void> _showTranscriptDialog() async {
+    if (!await ensureAiConsent(context, ref) || !mounted) return;
     final l10n = context.l10n;
-    final languageCode = Localizations.localeOf(context).languageCode;
     final rawTranscript = await showTranscriptInputSheet(
       context,
       title: l10n.transcriptInputTitleAlt,
       hint: l10n.transcriptInputHintRaw,
     );
-    if (rawTranscript == null || rawTranscript.isEmpty) return;
+    if (rawTranscript == null || rawTranscript.isEmpty || !mounted) return;
 
-    setState(() => _state = _RecordingState.processing);
-    final date = _dateLabel;
-    final isoDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final reason = _transcriptReason;
-    final targetEntryId = _targetEntryId;
-
-    var topics = <TopicDto>[];
-    var normalizedText = '';
-    var bodyMarkdown = '';
-    var mood = 'neutral';
-    var moodScore = 0.0;
-    var followUpQuestions = <String>[];
-    var entryId = '';
-
-    try {
-      final sw = Stopwatch()..start();
-
-      _setStep(l10n.pipelineReadingText, 0.0, 0.30);
-      normalizedText = await ref.read(proxyClientProvider).normalize(rawTranscript, languageCode: languageCode);
-      _completeStep(0.30);
-      debugPrint('[Pipeline] normalize (typed): ${sw.elapsedMilliseconds}ms');
-      sw.reset(); sw.start();
-
-      final existingTagsTyped = await ref.read(entryRepositoryProvider).getAllTags();
-
-      if (targetEntryId != null) {
-        final existingEntryTyped =
-            await ref.read(entryRepositoryProvider).getEntryById(targetEntryId);
-        _setStep(l10n.pipelineMerging, 0.31, 1.0);
-        final previousQuestionsTyped = existingEntryTyped != null
-            ? (jsonDecode(existingEntryTyped.followUpQuestions) as List)
-                .cast<String>()
-            : <String>[];
-        final entry = await ref.read(proxyClientProvider).mergeEntry(
-              existingBody: existingEntryTyped?.bodyMarkdown ?? '',
-              newTranscript: normalizedText,
-              previousQuestions: previousQuestionsTyped,
-              languageCode: languageCode,
-              existingTags: existingTagsTyped,
-            );
-        topics = entry.topics;
-        bodyMarkdown = entry.bodyMarkdown;
-        mood = entry.mood;
-        moodScore = entry.moodScore;
-        followUpQuestions = entry.followUpQuestions;
-        _completeStep(1.0);
-        debugPrint('[Pipeline] merge (typed): ${sw.elapsedMilliseconds}ms');
-        sw.reset(); sw.start();
-
-        entryId = await ref.read(entryRepositoryProvider).mergeEntry(
-              entryId: targetEntryId,
-              rawTranscript: rawTranscript,
-              normalizedText: normalizedText,
-              bodyMarkdown: entry.bodyMarkdown,
-              mood: entry.mood,
-              moodScore: entry.moodScore,
-              followUpQuestions: entry.followUpQuestions,
-              topics: entry.topics,
-              languageCode: languageCode,
-              tags: entry.tags,
-              transcriptReason: 'continuation',
-            );
-        debugPrint('[Pipeline] save (typed, merged): ${sw.elapsedMilliseconds}ms');
-        if (mounted) {
-          setState(() => _state = _RecordingState.idle);
-          context.push('/topics?entryId=$entryId', extra: (
-            entryId: entryId,
-            date: date,
-            duration: '00:00',
-            topics: topics,
-            normalizedTranscript: normalizedText,
-            bodyMarkdown: bodyMarkdown,
-            mood: mood,
-            moodScore: moodScore,
-            followUpQuestions: followUpQuestions,
-            transcriptReason: 'continuation',
-            isEditMode: false,
-          ));
-        }
-        return;
-      }
-
-      _setStep(l10n.pipelineThinking, 0.31, 1.0);
-      final entry = await ref.read(proxyClientProvider).generateEntry(
-        normalizedText,
-        languageCode: languageCode,
-        existingTags: existingTagsTyped,
-      );
-      topics = entry.topics;
-      bodyMarkdown = entry.bodyMarkdown;
-      mood = entry.mood;
-      moodScore = entry.moodScore;
-      followUpQuestions = entry.followUpQuestions;
-      _completeStep(1.0);
-      debugPrint('[Pipeline] generate (typed): ${sw.elapsedMilliseconds}ms');
-      sw.reset(); sw.start();
-
-      entryId = await ref.read(entryRepositoryProvider).saveEntry(
-            date: isoDate,
-            rawTranscript: rawTranscript,
-            normalizedText: normalizedText,
-            durationSeconds: 0,
-            bodyMarkdown: bodyMarkdown,
-            mood: mood,
-            moodScore: moodScore,
-            followUpQuestions: followUpQuestions,
-            topics: topics,
-            languageCode: languageCode,
-            tags: entry.tags,
-            transcriptReason: reason,
-          );
-      debugPrint('[Pipeline] save (typed): ${sw.elapsedMilliseconds}ms');
-    } catch (e) {
-      debugPrint('[RecordingScreen] pipeline error: $e');
-    }
-
-    if (mounted) {
-      setState(() => _state = _RecordingState.idle);
-      context.push('/topics?entryId=$entryId', extra: (
-        entryId: entryId,
-        date: date,
-        duration: '00:00',
-        topics: topics,
-        normalizedTranscript: normalizedText,
-        bodyMarkdown: bodyMarkdown,
-        mood: mood,
-        moodScore: moodScore,
-        followUpQuestions: followUpQuestions,
-        transcriptReason: reason,
-        isEditMode: false,
-      ));
-    }
+    await _processTranscript(rawTranscript, duration: '00:00', durationSec: 0);
   }
 
   void _showDevMenu() {
