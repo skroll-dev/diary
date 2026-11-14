@@ -38,10 +38,25 @@ class AuthService extends _$AuthService {
     return cred.user!;
   }
 
-  Future<User> getUser() => future;
+  /// The signed-in user, checked against the live session. Firebase can end a
+  /// session on its own, e.g. when gdpr-export's nightly cleanup deleted an
+  /// anonymous account older than 5 days; the cached [User] then fails every
+  /// call ("No user currently signed in."), so start a fresh anonymous session.
+  Future<User> getUser() async {
+    final cached = await future;
+    final auth = FirebaseAuth.instance;
+    final live = auth.currentUser;
+    if (live != null) {
+      if (live.uid != cached.uid) _updateState(live);
+      return live;
+    }
+    final cred = await auth.signInAnonymously();
+    _updateState(cred.user!);
+    return cred.user!;
+  }
 
   Future<String> getIdToken() async {
-    final user = await future;
+    final user = await getUser();
     return await user.getIdToken() ?? '';
   }
 
