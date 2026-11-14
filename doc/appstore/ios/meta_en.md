@@ -38,7 +38,7 @@ No AI coach interrupting you mid-thought, and no empty journal that demands disc
 
 PRIVACY FIRST
 
-• Hosted in the EU: your data is processed and stored on servers in the European Union.
+• Processed in the EU: your diary content is processed and stored on Google Cloud servers in the European Union. Transcription and writing use Google Speech-to-Text and Gemini, and only after you agree in the app.
 • Audio is never stored: recordings are processed in memory only and discarded right after transcription.
 • Encrypted: your entries are encrypted in transit and at rest.
 • You stay in control: export all your data or delete your account and everything in it – right from the app.

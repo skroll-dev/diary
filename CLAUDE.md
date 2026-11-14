@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cd flutter
 flutter pub get
-dart run build_runner build          # regenerate .g.dart files after schema/provider changes
+dart run build_runner build          # regenerate .g.dart files after schema/provider changes (add --force-jit if macOS refuses to load the AOT snapshot)
 flutter gen-l10n                     # regenerate lib/l10n/app_localizations*.dart after editing .arb files (also runs automatically on `flutter pub get`/`run`/`build`)
 flutter run                          # iOS/Android on connected device
 flutter run -d chrome                # Web
@@ -118,13 +118,13 @@ cd flutter && flutterfire configure --project=diary-6fa61 --platforms=android,io
 Flutter App (iOS/Android/Web)
   └─► Firebase Auth (anonymous, user identity)
   └─► ai-proxy (Cloud Run, europe-west3)
-  │     POST /transcribe/        (native) audio blob → Chirp 3
-  │     WS   /transcribe/ws      (web) PCM16 stream → WAV chunks → Chirp 3
+  │     WS   /transcribe/ws      (all platforms) PCM16 stream → Chirp 3
+  │     POST /transcribe/        (legacy) audio blob → Chirp 3, only for installed builds up to 39
   │     POST /entries/normalize  → Vertex AI Gemini 2.5 Flash
   │     POST /entries/generate   → Vertex AI Gemini 2.5 Flash (Prompt A)
   │     POST /entries/merge      → Vertex AI Gemini 2.5 Flash (Prompt B)
   │     audio bytes processed in RAM, never persisted
-  └─► Cloud Firestore (eu-eur3, entries per user)
+  └─► Cloud Firestore (`(default)`, europe-west3, entries per user)
   └─► Drift (SQLite, local source of truth)
   └─► image-proxy (Cloud Run, europe-west3)
   │     POST /images/upload  → resize + strip EXIF/GPS → Cloud Storage (full + thumb)
@@ -182,21 +182,22 @@ The primary user journey is `/` → `/topics` → `/entry/:date`.
 
 **Recording pipeline** (`_stopRecording` in `recording_screen.dart`):
 
-*Web path:*
-1. `RecordingService.start()` → starts PCM16 stream
-2. `ProxyClient.transcribeWebSocket(stream)` → WebSocket to `/transcribe/ws`
-3. `RecordingService.stopStream()` → signals `"done"` to server
+Every recording or typed entry first passes `ensureAiConsent` (see **AI consent** below).
+
+1. `RecordingService.start()` → starts PCM16 stream (16 kHz on native, 44.1 kHz on web); audio never touches disk
+2. `ProxyClient.transcribeWebSocket(stream)` → WebSocket to `/transcribe/ws`; subscribes in the same tick the recorder starts so early audio isn't lost
+3. `RecordingService.stop()` → closes the stream, client sends `"done"`
 4. WebSocket future resolves with raw transcript
 
-*Native path:*
-1. `RecordingService.stopAndRead()` → audio file bytes
-2. `ProxyClient.transcribe(audio)` → HTTP POST `/transcribe/`
+`_processTranscript` then runs (typed entries start here):
 
-*Both paths continue:*
-3. `ProxyClient.normalize(transcript)` → cleaned text
-4. `ProxyClient.generateEntry(normalized)` → `EntryDto` (bodyMarkdown, mood, moodScore, followUpQuestions, topics)
-5. `EntryRepository.saveEntry(...)` → Drift + Firestore sync (best-effort, unawaited)
-6. `context.push('/topics', extra: TopicsArgs(...))`
+5. `isUsableTranscript` (`kMinTranscriptChars`) rejects silence with a message — no entry, no `/topics`
+6. `ProxyClient.normalize(transcript)` → cleaned text
+7. `ProxyClient.generateEntry(normalized)` → `EntryDto` (bodyMarkdown, mood, moodScore, followUpQuestions, topics)
+8. `EntryRepository.saveEntry(...)` → Drift + Firestore sync (best-effort, unawaited)
+9. `context.push('/topics', extra: TopicsArgs(...))` — only with a saved entry
+
+Failures never open `/topics`. Audio isn't kept, so the transcript is the only copy: a failed pipeline offers Retry from the transcript, a 422 reopens `showTranscriptInputSheet` pre-filled, and a failed transcription offers the segments confirmed so far.
 
 **Continuation pipeline** (inside `TopicsReviewScreen._runMergePipeline`):
 1. `ProxyClient.normalize(rawTranscript)` → normalized
@@ -259,6 +260,8 @@ Re-derivation (transcript edit/delete): concatenates all `normalizedContent` in 
 - `record` package web path: `AudioEncoder.pcm16bits` only — all other encoders throw at runtime
 - `TopicDto.text` is complete chapter prose — never truncated or summarized
 - Transcript length is capped at `kMaxTranscriptChars` (`shared/constants/transcript_limits.dart`, 20,000) — must stay in sync with `MAX_TRANSCRIPT_CHARS` in `ai-proxy/app/routes/entries.py`, which applies the same value to all of `normalize`/`generate`/`merge`'s string fields. `TopicsReviewScreen` disables new recordings at 90% of the cap and, on the rare 422 that slips through anyway (`ProxyValidationException` in `proxy_client.dart`), reopens `showTranscriptInputSheet` pre-filled with the offending text for an edit-and-resend.
+- **AI consent:** no user content may reach `ProxyClient` before `ensureAiConsent(context, ref)` (`shared/widgets/ai_consent_sheet.dart`) returns true. State lives in `aiConsentProvider` (`shared/services/ai_consent_service.dart`), backed by `AppPreferences`, with proof of consent written best-effort to `users/{uid}.aiConsent`. Bump `kAiConsentVersion` when what the sheet discloses changes materially. Withdrawal is in Settings → Privacy.
+- **Sign-in order is Google, Apple, email.** Apple (`AuthService.linkWithApple`, `isAppleSignInSupported`) is iOS-only for now. Apple users must have their token revoked before account deletion (`revokeAppleTokenIfNeeded`, called from `SettingsScreen`); cancelling Apple's prompt aborts the deletion.
 - `_AuthSheetState` (`features/auth/presentation/auth_sheet.dart`) can dismiss itself from two independent places — the `authStateChanges` listener (deep-link email sign-in) and the sign-in button handlers (`UidChangedNotice` after an anonymous→existing-account uid swap). Both must route through `_closeSheet()`, which is guarded by a `_popped` flag: a second `Navigator.pop()` on an already-closed sheet (with `useRootNavigator: true`) falls through and pops a real page off the GoRouter stack instead.
 - **Localization (German + English):** UI strings live in `lib/l10n/app_de.arb` (template/source of truth) and `app_en.arb`, compiled by `flutter gen-l10n` (config: `l10n.yaml`) into `lib/l10n/app_localizations.dart`. Access via the `context.l10n` extension (`shared/extensions/localization_extensions.dart`), not `AppLocalizations.of(context)!` directly. The active locale is `LocaleController` (`shared/providers/locale_provider.dart`, Riverpod, backed by `AppPreferences.localeCode`) — `null` means "follow device", resolved in `main.dart`'s `localeResolutionCallback` (any `de_*` device locale → German, else → English). Shared mood/provider-label helpers live in `shared/utils/mood_labels.dart` and `shared/utils/provider_labels.dart` — reuse them rather than re-adding per-screen mood/provider switch statements. Backend calls (`ProxyClient`) also send the resolved language code (see `ai-proxy` below) so transcription and Gemini generation match the UI language.
 
@@ -280,8 +283,8 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 | Route | Description |
 |---|---|
-| `POST /transcribe/` | Audio (m4a/aac/wav, max 10 MB) + `language` form field (`de`\|`en`, default `de`) → raw transcript via Chirp 3 |
-| `WS /transcribe/ws` | PCM16 stream + `"done"` sentinel + `language` query param (`de`\|`en`) → WAV-wrapped chunks → Chirp 3 |
+| `WS /transcribe/ws` | PCM16 stream + `"done"` sentinel + `sr` and `language` (`de`\|`en`) query params → Chirp 3 `StreamingRecognize`. Used by all current clients |
+| `POST /transcribe/` | Legacy, for installed builds up to 39. Audio (m4a/aac/wav, max 10 MB) + `language` form field → raw transcript via Chirp 3. Google rejects audio over 60 seconds here |
 | `POST /entries/normalize` | Raw transcript + `language` → cleaned text via Gemini |
 | `POST /entries/generate` | Transcript + `language` → entry JSON: `body_markdown`, `mood`, `mood_score`, `follow_up_questions`, `topics[{title, text, follow_up_hint}]` |
 | `POST /entries/merge` | Existing entry body + new transcript + `language` → updated entry JSON (same schema) |
@@ -291,7 +294,9 @@ FastAPI service. All routes require `X-Firebase-AppCheck` header (verified by `s
 
 **Gemini model:** `gemini-2.5-flash`, `temperature=0.7`, `max_output_tokens=8192`, JSON output mode. The AI persona is named **Mein KI-Tagebuch** (German) / **My AI-Diary** (English). Topic `text` fields must be complete chapter prose — never truncated. Bilingual: `app/services/gemini.py` holds separate `_DE`/`_EN` system prompt variants for `normalize`/`generate`/`merge` (selected by the request's `language` field, defaulting to German) — the `mood` enum values and JSON key names are language-neutral and unchanged between variants.
 
-**Logging:** All Gemini calls logged at `info` level: `gemini_call` (fn, input) and `gemini_response` (fn, finish_reason, output_tokens, output). JSON parse errors log the full raw response via `gemini_json_parse_error`.
+**Streaming limits:** Google closes a recognize stream after 5 minutes of audio, so `stream_transcribe_audio` rotates to a new stream at `_MAX_STREAM_SECONDS`, keeping queued audio. The WebSocket lives as long as the recording, so Cloud Run's `--timeout` in `deploy-ai-proxy.yml` caps recording length.
+
+**Logging:** Diary content must never be logged above `debug` (production runs at `info`, and stdout goes to Cloud Logging). `gemini_call` and `gemini_response` log sizes, `fn`, `finish_reason` and token counts; content is only in the `debug` events `gemini_input`/`gemini_output`/`gemini_raw_response`. `ai-proxy/tests/test_gemini_logging.py` enforces this. On the client, `debugPrint` also reaches the device log in release builds, so don't print content either.
 
 ### gdpr-export (`gdpr-export/app/`)
 
@@ -313,7 +318,9 @@ Two separate skill directories exist — check both before writing code for a re
 
 ## Key Constraints
 
+- **Privacy claims:** the app and store text say diary content is processed in the EU, and the consent sheet names Google. Keep both true: adding an SDK, provider or region means revisiting them, the privacy policy and App Privacy in App Store Connect.
 - **GDPR / DSGVO:** Speech-to-Text uses Chirp 3 at `eu-speech.googleapis.com` (EU multi-region). All other GCP resources must stay in `europe-west3` or `eu-eur3`. Audio is processed in RAM only — never written to disk or object storage. Photos uploaded via `image-proxy` have all EXIF metadata (including GPS) stripped server-side before being written to Storage.
+- **Firestore location:** `(default)` is in `europe-west3`. It was recreated there on 2026-11-14 because the original was in `nam5` (USA); a database's location can't be changed. Clients only know the name `(default)`, so moving it needed no app update. `diary-eu` is a leftover copy with deny-all rules, not used by anything.
 - **Firebase App Check** is required on all ai-proxy routes in production. Anonymous auth must be enabled in the Firebase console (`diary-6fa61` → Authentication → Sign-in method).
 - **Web audio:** `kIsWeb` must gate any `local_auth` usage. The `record` package works on web, but only `AudioEncoder.pcm16bits` is supported for streaming.
 - **`firebase_options.dart`** is gitignored (contains API keys). Regenerate with `flutterfire configure` after cloning.

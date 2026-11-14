@@ -38,7 +38,7 @@ Kein KI-Coach, der dich mitten im Gedanken unterbricht, und kein leeres Journal,
 
 DATENSCHUTZ AN ERSTER STELLE
 
-• Hosting in der EU: Deine Daten werden auf Servern in der Europäischen Union verarbeitet und gespeichert – DSGVO-konform.
+• Verarbeitung in der EU: Deine Tagebuchinhalte werden auf Google-Cloud-Servern in der Europäischen Union verarbeitet und gespeichert. Für Transkription und Text nutzen wir Google Speech-to-Text und Gemini – erst nachdem du in der App zugestimmt hast.
 • Audio wird nie gespeichert: Aufnahmen werden ausschließlich im Arbeitsspeicher verarbeitet und direkt nach der Transkription verworfen.
 • Verschlüsselt: Deine Einträge werden verschlüsselt übertragen und gespeichert.
 • Du behältst die Kontrolle: Exportiere alle deine Daten oder lösche dein Konto samt Inhalt – direkt in der App.

@@ -140,7 +140,7 @@
   <header class="doc-header">
     <h1>Datenschutzerklärung</h1>
     <p class="subtitle">Mein KI-Tagebuch – &bdquo;Sprich, die KI schreibt.&ldquo;</p>
-    <p class="meta">Stand: Juni 2026 · Version 1.0</p>
+    <p class="meta">Stand: November 2026 · Version 1.1</p>
   </header>
 
   <div class="card">
@@ -166,11 +166,12 @@
     <section>
       <h2><span class="num">3.</span> Welche Daten wir verarbeiten</h2>
       <ul>
-        <li><strong>Konto- und Stammdaten:</strong> Konto-Kennung (User-ID), Authentifizierungsdaten</li>
+        <li><strong>Konto- und Stammdaten:</strong> Konto-Kennung (User-ID), Authentifizierungsdaten sowie, je nach Anmeldeart, E-Mail-Adresse und Name</li>
         <li><strong>Spracheingaben (Audio):</strong> deine gesprochenen Aufnahmen während der Erstellung eines Eintrags</li>
         <li><strong>Tagebuchinhalte:</strong> transkribierter Text, generierter Eintrag, Stimmungs-Tags und -Scores</li>
         <li><strong>Nutzungs- und Gerätedaten:</strong> App-Version, Geräte-/Betriebssystemtyp, Fehler-/Absturzberichte, Zeitstempel</li>
-        <li><strong>Abonnementdaten:</strong> Status des Abonnements (aktiv/inaktiv) – die Zahlung selbst erfolgt über App Store / Google Play</li>
+        <li><strong>Fotos:</strong> Fotos, die du einem Eintrag hinzufügst. Metadaten wie der Aufnahmeort werden vor dem Speichern entfernt.</li>
+        <li><strong>Einwilligungsnachweis:</strong> Version, Zeitpunkt und Sprache deiner Einwilligung in die KI-Verarbeitung</li>
       </ul>
     </section>
 
@@ -183,7 +184,7 @@
     <section>
       <h2><span class="num">5.</span> Besondere Kategorien personenbezogener Daten (Art. 9 DSGVO)</h2>
       <p>Tagebucheinträge können ihrer Natur nach sehr persönliche Informationen enthalten – etwa Angaben zu Gesundheit, religiösen oder weltanschaulichen Überzeugungen, politischen Meinungen oder zum Sexualleben. Solche Daten gelten als besondere Kategorien personenbezogener Daten im Sinne des Art. 9 DSGVO und genießen besonderen Schutz.</p>
-      <p>Die Verarbeitung dieser Inhalte erfolgt ausschließlich auf Grundlage deiner ausdrücklichen Einwilligung gemäß Art. 9 Abs. 2 lit. a DSGVO. Diese Einwilligung holen wir vor der ersten Nutzung des KI-Funktionsumfangs gesondert in der App ein. Du kannst sie jederzeit mit Wirkung für die Zukunft widerrufen.</p>
+      <p>Die Verarbeitung dieser Inhalte erfolgt ausschließlich auf Grundlage deiner ausdrücklichen Einwilligung gemäß Art. 9 Abs. 2 lit. a DSGVO. Diese Einwilligung holen wir vor der ersten Nutzung des KI-Funktionsumfangs gesondert in der App ein. Du kannst sie jederzeit mit Wirkung für die Zukunft widerrufen, in der App unter Einstellungen → Datenschutz.</p>
     </section>
 
     <section>
@@ -201,18 +202,20 @@
       <p>Zur Bereitstellung der App nutzen wir sorgfältig ausgewählte Dienstleister, mit denen Auftragsverarbeitungsverträge (Art. 28 DSGVO) bestehen:</p>
       <ul>
         <li>Google Cloud Run – Backend-Verarbeitung (In-Memory) · Google · europe-west3</li>
-        <li>Firebase – Authentifizierung, Datenbank, Synchronisation · Google · europe-west3</li>
+        <li>Cloud Firestore – Datenbank, Synchronisation · Google · europe-west3</li>
+        <li>Cloud Storage for Firebase – Speicherung von Fotos · Google · europe-west3</li>
+        <li>Firebase Authentication – Anmeldung · Google · USA</li>
+        <li>Firebase Crashlytics – Absturzberichte zur Fehleranalyse · Google</li>
         <li>Speech-to-Text (Chirp) – Audio-Transkription · Google · EU</li>
         <li>Gemini 2.5 Flash (Vertex AI) – Textstrukturierung &amp; Analyse · Google · EU</li>
-        <li>Apple App Store / Google Play – Abwicklung von Abonnements &amp; Zahlungen · Apple / Google</li>
       </ul>
-      <p>Anbieter ist jeweils die Google Ireland Limited bzw. ggf. die Google LLC. Soweit eine Übermittlung in Drittländer erfolgt, ist diese durch geeignete Garantien (insbesondere EU-Standardvertragsklauseln) abgesichert.</p>
+      <p>Anbieter ist jeweils die Google Ireland Limited bzw. ggf. die Google LLC. Soweit eine Übermittlung in Drittländer erfolgt, ist diese durch geeignete Garantien (insbesondere EU-Standardvertragsklauseln) abgesichert. Firebase Authentication verarbeitet deine Anmeldedaten (z. B. E-Mail-Adresse und IP-Adresse) in den USA. Absturzberichte (Firebase Crashlytics) enthalten keine Tagebuchinhalte und können ebenfalls außerhalb der EU verarbeitet werden.</p>
     </section>
 
     <section>
       <h2><span class="num">8.</span> Rechtsgrundlagen</h2>
       <ul>
-        <li>Art. 6 Abs. 1 lit. b DSGVO – Erfüllung des Nutzungsvertrags (Bereitstellung der App-Funktionen, Konto, Abonnement).</li>
+        <li>Art. 6 Abs. 1 lit. b DSGVO – Erfüllung des Nutzungsvertrags (Bereitstellung der App-Funktionen, Konto).</li>
         <li>Art. 9 Abs. 2 lit. a DSGVO – ausdrückliche Einwilligung für Tagebuchinhalte mit besonderem Schutzbedarf.</li>
         <li>Art. 6 Abs. 1 lit. f DSGVO – berechtigtes Interesse (z. B. Stabilität, Fehleranalyse, Sicherheit).</li>
         <li>Art. 6 Abs. 1 lit. c DSGVO – Erfüllung rechtlicher Verpflichtungen.</li>
@@ -221,7 +224,7 @@
 
     <section>
       <h2><span class="num">9.</span> Speicherort und Speicherdauer</h2>
-      <p>Deine Tagebucheinträge und Kontodaten werden in der EU (Frankfurt, europe-west3) gespeichert. Zusätzlich werden Einträge lokal auf deinem Gerät gespeichert (SQLite-Datenbank); diese Daten verlassen dein Gerät nur zur Synchronisation mit der Cloud. Wir speichern deine Daten so lange, wie dein Konto besteht. Löschst du einzelne Einträge oder dein gesamtes Konto, werden die zugehörigen Daten gelöscht. Audioaufnahmen werden gemäß der Zero-Disk-Policy gar nicht erst dauerhaft gespeichert.</p>
+      <p>Deine Tagebucheinträge und Fotos werden in der EU (Frankfurt, europe-west3) gespeichert. Anmeldedaten werden in den USA verarbeitet (siehe Abschnitt 7). Zusätzlich werden Einträge lokal auf deinem Gerät gespeichert (SQLite-Datenbank); diese Daten verlassen dein Gerät nur zur Synchronisation mit der Cloud. Wir speichern deine Daten so lange, wie dein Konto besteht. Löschst du einzelne Einträge oder dein gesamtes Konto, werden die zugehörigen Daten gelöscht. Audioaufnahmen werden gemäß der Zero-Disk-Policy gar nicht erst dauerhaft gespeichert.</p>
     </section>
 
     <section>
@@ -246,17 +249,17 @@
 
     <section>
       <h2><span class="num">12.</span> Authentifizierung</h2>
-      <p>Für die Anmeldung und Kontoverwaltung nutzen wir Firebase Authentication. Dabei werden deine Konto-Kennung und Authentifizierungsdaten verarbeitet, um dir einen sicheren Zugang zu deinen Einträgen zu ermöglichen.</p>
+      <p>Für die Anmeldung und Kontoverwaltung nutzen wir Firebase Authentication. Du kannst die App zunächst ohne Anmeldung nutzen; dafür legen wir ein anonymes Konto an. Für die dauerhafte Sicherung deiner Einträge kannst du dich mit Google, mit Apple oder per E-Mail-Link anmelden. Dabei verarbeiten wir deine Konto-Kennung und, je nach Anmeldeart, deine E-Mail-Adresse und deinen Namen. Bei „Mit Apple anmelden“ kannst du deine E-Mail-Adresse verbergen; wir erhalten dann nur eine von Apple erzeugte Weiterleitungsadresse. Wir nutzen diese Daten nicht für Werbung.</p>
     </section>
 
     <section>
       <h2><span class="num">13.</span> Abonnements und Zahlungen</h2>
-      <p>Kostenpflichtige Funktionen werden als Abonnement angeboten. Der Kauf und die Abrechnung erfolgen ausschließlich über den Apple App Store bzw. Google Play. Wir erhalten keine vollständigen Zahlungsdaten (z. B. Kreditkartennummern), sondern lediglich Informationen über den Status deines Abonnements. Es gelten ergänzend die Datenschutzbestimmungen von Apple und Google.</p>
+      <p>Die App enthält derzeit keine kostenpflichtigen Funktionen. Wir verarbeiten keine Zahlungsdaten.</p>
     </section>
 
     <section>
       <h2><span class="num">14.</span> Minderjährige</h2>
-      <p>Die App richtet sich nicht an Kinder. Personen unter 16 Jahren dürfen die App nur mit Einwilligung der Erziehungsberechtigten nutzen.</p>
+      <p>Die App richtet sich ausschließlich an Personen ab 18 Jahren. Personen unter 18 Jahren dürfen die App nicht nutzen.</p>
     </section>
 
     <section>
@@ -276,7 +279,7 @@
   </div>
 
   <footer>
-    © 2026 Mathias Blaich · Mein KI-Tagebuch · Zuletzt aktualisiert im Juni 2026
+    © 2026 Mathias Blaich · Mein KI-Tagebuch · Zuletzt aktualisiert im November 2026
   </footer>
 </main>
 

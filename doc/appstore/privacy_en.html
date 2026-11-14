@@ -140,7 +140,7 @@
   <header class="doc-header">
     <h1>Privacy Policy</h1>
     <p class="subtitle">Mein KI-Tagebuch – &ldquo;Speak, the AI writes.&rdquo;</p>
-    <p class="meta">As of: June 2026 · Version 1.0</p>
+    <p class="meta">As of: November 2026 · Version 1.1</p>
   </header>
 
   <div class="card">
@@ -166,11 +166,12 @@
     <section>
       <h2><span class="num">3.</span> What data we process</h2>
       <ul>
-        <li><strong>Account and master data:</strong> account identifier (User ID), authentication data</li>
+        <li><strong>Account and master data:</strong> account identifier (User ID), authentication data and, depending on how you sign in, your email address and name</li>
         <li><strong>Voice input (audio):</strong> your spoken recordings made while creating an entry</li>
         <li><strong>Diary content:</strong> transcribed text, generated entry, mood tags and scores</li>
         <li><strong>Usage and device data:</strong> app version, device/operating system type, error/crash reports, timestamps</li>
-        <li><strong>Subscription data:</strong> subscription status (active/inactive) – payment itself is processed via the App Store / Google Play</li>
+        <li><strong>Photos:</strong> photos you add to an entry. Metadata such as the location is removed before storage.</li>
+        <li><strong>Proof of consent:</strong> version, time and language of your consent to AI processing</li>
       </ul>
     </section>
 
@@ -183,7 +184,7 @@
     <section>
       <h2><span class="num">5.</span> Special Categories of Personal Data (Art. 9 GDPR)</h2>
       <p>By their nature, diary entries may contain very personal information – such as details about health, religious or philosophical beliefs, political opinions, or sex life. Such data is considered a special category of personal data within the meaning of Art. 9 GDPR and enjoys special protection.</p>
-      <p>The processing of this content takes place exclusively on the basis of your explicit consent pursuant to Art. 9(2)(a) GDPR. We obtain this consent separately within the App before the first use of the AI functionality. You may withdraw it at any time with effect for the future.</p>
+      <p>The processing of this content takes place exclusively on the basis of your explicit consent pursuant to Art. 9(2)(a) GDPR. We obtain this consent separately within the App before the first use of the AI functionality. You may withdraw it at any time with effect for the future, in the App under Settings → Privacy.</p>
     </section>
 
     <section>
@@ -201,18 +202,20 @@
       <p>To provide the App, we use carefully selected service providers with whom data processing agreements (Art. 28 GDPR) are in place:</p>
       <ul>
         <li>Google Cloud Run – backend processing (in-memory) · Google · europe-west3</li>
-        <li>Firebase – authentication, database, synchronization · Google · europe-west3</li>
+        <li>Cloud Firestore – database, synchronization · Google · europe-west3</li>
+        <li>Cloud Storage for Firebase – photo storage · Google · europe-west3</li>
+        <li>Firebase Authentication – sign-in · Google · USA</li>
+        <li>Firebase Crashlytics – crash reports for error analysis · Google</li>
         <li>Speech-to-Text (Chirp) – audio transcription · Google · EU</li>
         <li>Gemini 2.5 Flash (Vertex AI) – text structuring &amp; analysis · Google · EU</li>
-        <li>Apple App Store / Google Play – subscription and payment processing · Apple / Google</li>
       </ul>
-      <p>The provider in each case is Google Ireland Limited or, where applicable, Google LLC. Where a transfer to third countries occurs, it is safeguarded by appropriate guarantees (in particular EU Standard Contractual Clauses).</p>
+      <p>The provider in each case is Google Ireland Limited or, where applicable, Google LLC. Where a transfer to third countries occurs, it is safeguarded by appropriate guarantees (in particular EU Standard Contractual Clauses). Firebase Authentication processes your sign-in data (such as your email address and IP address) in the USA. Crash reports (Firebase Crashlytics) contain no diary content and may also be processed outside the EU.</p>
     </section>
 
     <section>
       <h2><span class="num">8.</span> Legal Bases</h2>
       <ul>
-        <li>Art. 6(1)(b) GDPR – performance of the usage contract (provision of App functions, account, subscription).</li>
+        <li>Art. 6(1)(b) GDPR – performance of the usage contract (provision of App functions, account).</li>
         <li>Art. 9(2)(a) GDPR – explicit consent for diary content requiring special protection.</li>
         <li>Art. 6(1)(f) GDPR – legitimate interest (e.g. stability, error analysis, security).</li>
         <li>Art. 6(1)(c) GDPR – compliance with legal obligations.</li>
@@ -221,7 +224,7 @@
 
     <section>
       <h2><span class="num">9.</span> Storage Location and Retention Period</h2>
-      <p>Your diary entries and account data are stored in the EU (Frankfurt, europe-west3). In addition, entries are stored locally on your device (SQLite database); this data leaves your device only for synchronization with the cloud. We store your data for as long as your account exists. If you delete individual entries or your entire account, the associated data is deleted. In line with the Zero-Disk Policy, audio recordings are never permanently stored in the first place.</p>
+      <p>Your diary entries and photos are stored in the EU (Frankfurt, europe-west3). Sign-in data is processed in the USA (see section 7). In addition, entries are stored locally on your device (SQLite database); this data leaves your device only for synchronization with the cloud. We store your data for as long as your account exists. If you delete individual entries or your entire account, the associated data is deleted. In line with the Zero-Disk Policy, audio recordings are never permanently stored in the first place.</p>
     </section>
 
     <section>
@@ -246,17 +249,17 @@
 
     <section>
       <h2><span class="num">12.</span> Authentication</h2>
-      <p>For sign-in and account management, we use Firebase Authentication. In doing so, your account identifier and authentication data are processed in order to give you secure access to your entries.</p>
+      <p>We use Firebase Authentication for sign-in and account management. You can start using the App without signing in; we create an anonymous account for this. To keep your entries permanently, you can sign in with Google, with Apple or with an email link. We process your account identifier and, depending on how you sign in, your email address and name. With Sign in with Apple you can hide your email address; we then receive only a relay address generated by Apple. We do not use this data for advertising.</p>
     </section>
 
     <section>
       <h2><span class="num">13.</span> Subscriptions and Payments</h2>
-      <p>Paid features are offered as a subscription. Purchase and billing are handled exclusively via the Apple App Store or Google Play. We do not receive complete payment data (e.g. credit card numbers), only information about the status of your subscription. The privacy policies of Apple and Google apply in addition.</p>
+      <p>The App currently has no paid features. We do not process payment data.</p>
     </section>
 
     <section>
       <h2><span class="num">14.</span> Minors</h2>
-      <p>The App is not directed at children. Persons under 16 years of age may only use the App with the consent of a parent or legal guardian.</p>
+      <p>The App is intended only for people aged 18 and over. Persons under 18 may not use the App.</p>
     </section>
 
     <section>
@@ -276,7 +279,7 @@
   </div>
 
   <footer>
-    © 2026 Mathias Blaich · Mein KI-Tagebuch · Last updated June 2026
+    © 2026 Mathias Blaich · Mein KI-Tagebuch · Last updated November 2026
   </footer>
 </main>
 
