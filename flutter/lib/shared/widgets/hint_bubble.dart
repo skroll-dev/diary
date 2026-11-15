@@ -38,7 +38,6 @@ class HintAnchor extends StatefulWidget {
 
 class _HintAnchorState extends State<HintAnchor> {
   final _controller = OverlayPortalController();
-  final _link = LayerLink();
 
   static const _arrowSize = 8.0;
   static const _bubbleInset = 6.0; // bubble starts this far left of the anchor
@@ -60,22 +59,28 @@ class _HintAnchorState extends State<HintAnchor> {
     });
   }
 
+  // Positioned via overlayChildLayoutBuilder rather than a
+  // CompositedTransformFollower: Flutter asserts when an OverlayPortal that
+  // uses overlayChildLayoutBuilder (e.g. the ✕ button's Tooltip) sits inside
+  // a follower. The layout info is re-checked every frame, so the bubble
+  // still tracks the anchor while scrolling.
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _controller,
-        overlayChildBuilder: _buildOverlay,
-        child: widget.child,
-      ),
+    return OverlayPortal.overlayChildLayoutBuilder(
+      controller: _controller,
+      overlayChildBuilder: _buildOverlay,
+      child: widget.child,
     );
   }
 
-  Widget _buildOverlay(BuildContext context) {
+  Widget _buildOverlay(BuildContext context, OverlayChildLayoutInfo info) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final background = cs.inverseSurface;
+    final anchorBottomLeft = MatrixUtils.transformPoint(
+      info.childPaintTransform,
+      Offset(0, info.childSize.height),
+    );
 
     return Stack(
       children: [
@@ -87,10 +92,9 @@ class _HintAnchorState extends State<HintAnchor> {
             onPointerDown: (_) => widget.onDismiss(),
           ),
         ),
-        CompositedTransformFollower(
-          link: _link,
-          targetAnchor: Alignment.bottomLeft,
-          offset: const Offset(-_bubbleInset, 6),
+        Positioned(
+          left: anchorBottomLeft.dx - _bubbleInset,
+          top: anchorBottomLeft.dy + 6,
           child: Align(
             alignment: Alignment.topLeft,
             child: TweenAnimationBuilder<double>(
